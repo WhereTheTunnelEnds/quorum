@@ -67,7 +67,7 @@ verify_one() {
 
   # Probe files declare: probe_consult, probe_broken, EXPECT_BROKEN_DESC.
   unset -f probe_consult probe_broken 2>/dev/null || true
-  EXPECT_BROKEN_DESC=""; BROKEN_MATCH=""
+  EXPECT_BROKEN_DESC=""; BROKEN_MATCH=""; PROBE_BINARY=""
   # shellcheck disable=SC1090
   . "$file"
 
@@ -90,7 +90,27 @@ verify_one() {
   # guide promises an incomplete provider set is "a normal, working state". Reporting a
   # wall of red for subscriptions someone deliberately does not own trains them to ignore
   # this tool, and 127 must certainly never PASS a liveness check.
+  #
+  # But "not installed" is only a valid conclusion when the probe DECLARES a binary and that
+  # binary is genuinely absent. This test used to fire on any "command not found" anywhere in
+  # stderr, so a missing `jq` — a dependency of the curl-based probes, not a provider — was
+  # reported as "not installed, this is normal", skipped, exit 0. It also let GLM report "not
+  # installed" despite shipping no binary at all, which is never a possible truth for it.
+  #
+  # A broken probe must FAIL. Downgrading it to an optional-provider skip is the same shape
+  # as every other bug in this repo: a failure rendered as a normal state.
   if [ "$GOOD_RC" = "127" ] || grep -qi 'command not found' "$ERR" 2>/dev/null; then
+    if [ -z "${PROBE_BINARY:-}" ] || command -v "${PROBE_BINARY:-}" >/dev/null 2>&1; then
+      F "probe is broken — a command it depends on is missing"
+      I "$(tail -c 160 "$ERR" | tr '\n' ' ')"
+      if [ -n "${PROBE_BINARY:-}" ]; then
+        I "$PROBE_BINARY IS present, so this is not an absent provider — the fault is in the probe or a dependency (jq, curl)."
+      else
+        I "this probe declares no binary, so it can never be 'not installed' — the fault is in the probe or a dependency (jq, curl)."
+      fi
+      rm -f "$PROMPT" "$OUT" "$ERR"
+      return 1
+    fi
     W "not installed — skipped (this is normal; providers are optional)"
     I "$(tail -c 120 "$ERR" | tr '\n' ' ')"
     skipped=$((skipped+1)); warned=$((warned-1))

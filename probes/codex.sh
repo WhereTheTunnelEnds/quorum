@@ -1,5 +1,10 @@
 # Codex — OpenAI, on a ChatGPT subscription.
 
+# The binary this probe wraps. quorum-verify uses it to tell "you do not own this
+# subscription" (fine, skip) apart from "the probe itself is broken" (a failure). A probe
+# with no PROBE_BINARY can never be reported as "not installed".
+PROBE_BINARY=codex
+
 probe_consult() {
   qt codex exec --sandbox read-only --skip-git-repo-check - < "$1"
 }

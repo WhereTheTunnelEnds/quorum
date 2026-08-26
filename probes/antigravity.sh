@@ -6,6 +6,11 @@
 # --add-dir is what sets the workspace; cwd is ignored entirely (measured — without it,
 # agy works inside ~/.gemini/antigravity-cli/scratch/). A throwaway dir keeps verification
 # side-effect free while still exercising the flag the adapter depends on.
+# The binary this probe wraps. quorum-verify uses it to tell "you do not own this
+# subscription" (fine, skip) apart from "the probe itself is broken" (a failure). A probe
+# with no PROBE_BINARY can never be reported as "not installed".
+PROBE_BINARY=agy
+
 probe_consult() {   # $1 = file containing the prompt
   d=$(mktemp -d)
   qt agy --add-dir "$d" --disable-slash-commands -p "$(cat "$1")"

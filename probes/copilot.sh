@@ -1,5 +1,10 @@
 # Copilot — GitHub, on a Copilot subscription.
 
+# The binary this probe wraps. quorum-verify uses it to tell "you do not own this
+# subscription" (fine, skip) apart from "the probe itself is broken" (a failure). A probe
+# with no PROBE_BINARY can never be reported as "not installed".
+PROBE_BINARY=copilot
+
 probe_consult() {
   qt copilot -p "$(cat "$1")" --plan -s --no-ask-user --allow-tool "read"
 }
