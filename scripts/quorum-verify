@@ -136,6 +136,22 @@ verify_one() {
   rm -f "$PROMPT" "$OUT" "$ERR" "$BOUT" "$BERR"
 }
 
+case "${1:-}" in
+  -h|--help)
+    cat <<'USAGE'
+quorum-verify — re-run the mechanical adapter contract against live providers.
+
+  quorum-verify <provider>...   check these
+  quorum-verify --all           check every provider with a probe file
+
+Checks reachability, non-interactive exit, failure shape, and whether a broken call
+is distinguishable from a good one. Costs a little quota per provider.
+
+Exits non-zero if anything failed OR if nothing was verified at all.
+USAGE
+    exit 0 ;;
+esac
+
 if [ $# -eq 0 ]; then
   echo "usage: quorum-verify <provider> | --all" >&2
   echo "available probes:" >&2

@@ -8,7 +8,24 @@
 
 set -uo pipefail
 
-ok()   { printf '  \033[32m%s\033[0m  %s\n' "OK" "$1"; }
+case "${1:-}" in
+  -h|--help)
+    cat <<'USAGE'
+quorum-status — which providers are reachable right now.
+
+  quorum-status         live-check every provider and print a table
+
+This makes REAL calls; it does not test for binaries. Not every provider ships a
+command named after itself, so `command -v` proves nothing. See docs/field-notes.md.
+
+Related:  quorum-auth (fix what is unauthenticated) · quorum-verify (does it work?)
+USAGE
+    exit 0 ;;
+esac
+
+
+avail=0
+ok()   { printf '  \033[32m%s\033[0m  %s\n' "OK" "$1"; avail=$((avail+1)); }
 bad()  { printf '  \033[31m%s\033[0m  %s\n' "--" "$1"; }
 warn() { printf '  \033[33m%s\033[0m  %s\n' "??" "$1"; }
 
@@ -106,3 +123,17 @@ if [ -d "$ENDPOINT_DIR" ]; then
   done
   [ "$found" -eq 0 ] && printf '      (none)\n'
 fi
+
+# Exit code, because the script previously ended on `[ "$found" -eq 0 ]` and returned
+# whatever that happened to be — reporting every provider OK while exiting 1, which breaks
+# `quorum-status && …` and any CI use.
+#
+# Semantics: 0 if at least one provider is reachable, 1 if none are. Providers are optional,
+# so a missing one is a normal state and must not fail the command; having NONE means Quorum
+# cannot do anything, which is the only condition worth failing on.
+if [ "$avail" -eq 0 ]; then
+  echo
+  echo "No providers are reachable. Run: quorum-auth" >&2
+  exit 1
+fi
+exit 0

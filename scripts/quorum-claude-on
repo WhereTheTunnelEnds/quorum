@@ -40,7 +40,7 @@ usage: quorum-claude-on <preset> [claude args...]
 
 Presets live in $ENDPOINT_DIR/<preset>.env
 USAGE
-  exit 1
+  exit "${1:-1}"
 }
 
 [ $# -ge 1 ] || usage
@@ -68,7 +68,11 @@ TEMPLATE
     chmod 600 "$target"
     printf 'wrote %s — edit it, then: quorum-claude-on %s -p "hello"\n' "$target" "$2"
     exit 0 ;;
-  -h|--help) usage ;;
+  -h|--help) usage 0 ;;
+esac
+
+case "$1" in
+  -*) die "unknown option '$1' (a preset name cannot start with '-'; try --help)" ;;
 esac
 
 PRESET="$1"; shift
