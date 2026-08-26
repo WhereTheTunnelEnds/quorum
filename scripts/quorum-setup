@@ -21,7 +21,19 @@ while [ -L "$_src" ]; do
   case "$_src" in /*) ;; *) _src="$_d/$_src" ;; esac
 done
 ROOT=$(cd -P "$(dirname "$_src")/.." && pwd)
-ENVFILE="${ZDOTDIR:-$HOME}/.zshenv"
+# Resolve through symlinks so the shared lib is findable when installed the documented
+# way: install.sh links this onto PATH, and `dirname "$0"` would give ~/.local/bin, not the
+# repo. macOS has no `readlink -f`.
+_qsrc="$0"
+while [ -L "$_qsrc" ]; do
+  _qdir=$(cd -P "$(dirname "$_qsrc")" && pwd)
+  _qsrc=$(readlink "$_qsrc")
+  case "$_qsrc" in /*) ;; *) _qsrc="$_qdir/$_qsrc" ;; esac
+done
+# shellcheck source=/dev/null
+. "$(cd -P "$(dirname "$_qsrc")" && pwd)/quorum-lib.sh"
+
+ENVFILE="$QUORUM_ENVFILE"
 CHECK=0; ALL=0
 
 for a in "$@"; do
@@ -77,9 +89,9 @@ if command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; th
   ok "timeout"
 else
   hm "timeout(1) missing — hang detection disabled"
-  run "brew install coreutils"
+  run "$QUORUM_PKG_TIMEOUT"
 fi
-[ "$missing" -gt 0 ] && { echo; no "install the missing prerequisites first"; run "brew install git curl jq"; exit 1; }
+[ "$missing" -gt 0 ] && { echo; no "install the missing prerequisites first"; run "$QUORUM_PKG_INSTALL git curl jq"; exit 1; }
 
 # ── 2. PATH ─────────────────────────────────────────────────────────────────────
 b "2. Helper scripts on PATH"

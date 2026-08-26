@@ -37,6 +37,42 @@ measurement command itself was piped through `tail`. Re-measured unpiped: exit 1
 > If you record only one thing from this document, record this one. It corrupts every
 > other measurement you take.
 
+### The install worked perfectly, on the only machine it was ever run on
+
+**Symptom.** A clean Debian container, following the documented install literally, ends up
+with a PATH entry nothing reads and an API key stored in a file no shell on the machine loads.
+
+**Cause.** Fifteen `~/.zshenv` references and five `brew install` references, hardcoded. zsh
+was not installed in that container; `$SHELL` was `/bin/bash`. The advice was not wrong on
+macOS — it was measured and correct there — it just could not be true anywhere else.
+
+The worst instance was functional rather than cosmetic: `quorum-auth glm --set-key` **wrote
+the key to `~/.zshenv`** and reported success. On bash that file is never read, so the key
+was stored and invisible, and the failure surfaces later as "the key is set but the agent
+says it is not" — the single hardest symptom in this repo to diagnose.
+
+**Fix.** `scripts/quorum-lib.sh`, sourced by `install.sh`, `quorum-setup` and `quorum-auth`,
+resolving three facts once:
+
+- **Env file by shell.** zsh → `~/.zshenv` (read on every invocation, `.zshrc` skipped when
+  non-interactive). bash → `~/.profile` (non-interactive bash reads *neither* `.bashrc` nor
+  `.profile`, only `$BASH_ENV`, unset by default — but `.profile` is exported at login so
+  children inherit it). Note this is not a filename swap; the mechanism differs.
+- **Package manager by what is installed**, not by `uname`: a Mac can lack Homebrew and a
+  container can be any distro.
+- **`sudo` only when it applies.** The first version of this fix hardcoded `sudo apt-get`
+  and failed in the very container that motivated it: `id -u` is 0 and no `sudo` binary
+  exists, so the advice died with *"sudo: command not found"* — an error that sends the
+  reader hunting for the wrong problem.
+
+**Fix that came with it.** The test suite skips itself when `jq` or `python3` is absent, and
+a skip exits 0. Correct on a contributor's laptop; wrong in CI, where every suite skipping
+would have produced a green run that tested nothing. CI now fails on any `SKIP`.
+
+**The general lesson.** "Works on my machine" hides inside *advice*, not just code. Every
+default in this repo was measured — on one operating system, with one shell, by one person.
+Ask which of your measurements were actually measurements of your own laptop.
+
 ### The `timeout` status that could never happen
 
 **Symptom.** Three of five adapters documented a `timeout` status that no run could ever

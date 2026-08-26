@@ -38,6 +38,29 @@ exec zsh
 **`~/.zshenv`, not `~/.zshrc`.** See the next entry — it's the same root cause and it
 accounts for most first-day failures.
 
+### I'm on Linux and the docs keep saying `~/.zshenv`
+
+**Use `~/.profile` instead.** This repo was written on macOS, where zsh is the default shell,
+and the file names throughout reflect that. The *reason* generalises; the filename does not.
+
+| Shell | File | Why that one |
+|---|---|---|
+| **zsh** (macOS default) | `~/.zshenv` | zsh reads it on **every** invocation, and skips `~/.zshrc` when non-interactive — which is what agents get. On macOS this matters doubly: GUI-launched apps never go through a login shell at all. |
+| **bash** (most Linux) | `~/.profile` | Non-interactive bash reads **neither** `.bashrc` nor `.profile` per-invocation — it reads only `$BASH_ENV`, which is unset by default. But `.profile` is read at login and *exported*, so child processes and agents inherit it. |
+
+`~/.bashrc` is the common guess and it is the wrong one: non-interactive bash skips it, which
+is precisely the failure the next entry describes.
+
+**The scripts already handle this** — `install.sh`, `quorum-setup` and `quorum-auth` detect
+your `$SHELL` and name the right file, so `quorum-auth glm --set-key` writes where your
+shells will actually read it. Only the prose in these docs is zsh-flavoured. This was found
+by running the documented install in a clean Debian container, where `zsh` was not installed
+at all and the advice silently did nothing.
+
+Package manager commands are detected the same way: you will be told `apt-get`, `dnf`,
+`pacman`, `zypper` or `apk` as appropriate rather than `brew`, and `sudo` is omitted when you
+are already root or it is not installed.
+
 ### It works when I type it, but not when Claude runs it
 
 The number-one Quorum setup failure, in every form it takes:

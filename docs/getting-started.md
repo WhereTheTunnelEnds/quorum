@@ -20,6 +20,13 @@ cd quorum && ./scripts/install.sh && quorum-setup
 Use `quorum-setup --check` any time for a non-interactive readiness report. The rest of this
 page is the long form — read it if the wizard stalls, or if you'd rather do it by hand.
 
+> **On Linux?** This guide says `~/.zshenv` throughout, because it was written on macOS
+> where zsh is the default. On bash, use **`~/.profile`** — non-interactive bash reads
+> neither `.bashrc` nor `.profile` per-invocation, but `.profile` is exported at login so
+> agents inherit it. The scripts detect your shell and tell you the right file; only the
+> prose here is zsh-flavoured. Full explanation:
+> [troubleshooting.md](troubleshooting.md).
+
 ## 0. Decide what you're actually setting up
 
 **Every provider is optional.** Quorum works with one; it gets more useful with three.

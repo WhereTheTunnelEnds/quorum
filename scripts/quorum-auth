@@ -32,7 +32,19 @@ for a in "$@"; do
 done
 wants() { [ -z "$WANT" ] && return 0; case " $WANT " in *" $1 "*) return 0;; *) return 1;; esac; }
 
-ENVFILE="${ZDOTDIR:-$HOME}/.zshenv"
+# Resolve through symlinks so the shared lib is findable when installed the documented
+# way: install.sh links this onto PATH, and `dirname "$0"` would give ~/.local/bin, not the
+# repo. macOS has no `readlink -f`.
+_qsrc="$0"
+while [ -L "$_qsrc" ]; do
+  _qdir=$(cd -P "$(dirname "$_qsrc")" && pwd)
+  _qsrc=$(readlink "$_qsrc")
+  case "$_qsrc" in /*) ;; *) _qsrc="$_qdir/$_qsrc" ;; esac
+done
+# shellcheck source=/dev/null
+. "$(cd -P "$(dirname "$_qsrc")" && pwd)/quorum-lib.sh"
+
+ENVFILE="$QUORUM_ENVFILE"
 need=0
 
 # macOS ships no timeout(1). Degrade instead of emitting `timeout: command not found`,

@@ -12,6 +12,18 @@
 
 set -euo pipefail
 
+# Resolve through symlinks so the shared lib is findable when installed the documented
+# way: install.sh links this onto PATH, and `dirname "$0"` would give ~/.local/bin, not the
+# repo. macOS has no `readlink -f`.
+_qsrc="$0"
+while [ -L "$_qsrc" ]; do
+  _qdir=$(cd -P "$(dirname "$_qsrc")" && pwd)
+  _qsrc=$(readlink "$_qsrc")
+  case "$_qsrc" in /*) ;; *) _qsrc="$_qdir/$_qsrc" ;; esac
+done
+# shellcheck source=/dev/null
+. "$(cd -P "$(dirname "$_qsrc")" && pwd)/quorum-lib.sh"
+
 SRC=$(cd "$(dirname "$0")" && pwd)
 DEST="${1:-$HOME/.local/bin}"
 TOOLS="quorum-setup quorum-status quorum-auth quorum-flags quorum-claude-on quorum-verify prep-image make-probe-image"
@@ -38,10 +50,11 @@ echo
 case ":$PATH:" in
   *":$DEST:"*) echo "$DEST is already on PATH." ;;
   *) cat <<EOM
-$DEST is NOT on PATH. Add it in ~/.zshenv (not ~/.zshrc — non-interactive shells,
-which is what agents get, do not read ~/.zshrc):
+$DEST is NOT on PATH. Add it in $QUORUM_ENVFILE_SHORT:
 
-  export PATH="$DEST:\$PATH"
+  echo 'export PATH="$DEST:\$PATH"' >> $QUORUM_ENVFILE
+
+$QUORUM_ENVFILE_WHY.
 EOM
   ;;
 esac

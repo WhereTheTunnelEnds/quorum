@@ -44,11 +44,24 @@ jobs:
           # That is the whole point — a suite that only runs on the author's machine is not
           # a suite, and this repo's install path has already broken twice on machines that
           # were not the author's.
+          # A SKIP must fail the build. The suites skip themselves when jq or python3 is
+          # absent, which is right on a contributor's laptop and WRONG here: if this image
+          # ever loses one, every suite would skip, the step would exit 0, and CI would go
+          # green having tested nothing. That is the same object as a canary that passes at
+          # any setting, and this repo has already shipped two of those.
+          ran=0
           for t in tests/*.sh; do
             [ -e "$t" ] || continue
             echo "--- $t"
-            bash "$t"
+            out=$(bash "$t" 2>&1) || { echo "$out"; exit 1; }
+            echo "$out"
+            case "$out" in
+              *SKIP*) echo "ERROR: $t skipped in CI — a dependency is missing from the runner"; exit 1 ;;
+            esac
+            ran=$((ran+1))
           done
+          [ "$ran" -gt 0 ] || { echo "ERROR: no test suite ran"; exit 1; }
+          echo "$ran suite(s) ran, none skipped"
 
       - name: Agents and skills have valid frontmatter
         run: |
