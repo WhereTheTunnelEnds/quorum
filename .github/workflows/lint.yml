@@ -1,0 +1,76 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON manifests
+        run: |
+          for f in .claude-plugin/*.json; do
+            echo "checking $f"
+            jq empty "$f"
+          done
+
+      - name: Shell syntax
+        run: |
+          for f in scripts/* probes/*.sh; do
+            case "$f" in *.md) continue;; esac
+            echo "checking $f"
+            bash -n "$f"
+          done
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          # Probe files are sourced, not executed; `qt` is provided by quorum-verify.
+          shellcheck -e SC2154,SC1091 -S warning scripts/* || true
+          shellcheck -e SC2154,SC1091,SC2148 -S warning probes/*.sh || true
+
+      - name: Agents and skills have valid frontmatter
+        run: |
+          fail=0
+          for f in agents/*.md skills/*/SKILL.md; do
+            echo "checking $f"
+            head -1 "$f" | grep -q '^---$' || { echo "  ERROR: no frontmatter"; fail=1; continue; }
+            awk 'NR>1 && /^---$/{exit} NR>1{print}' "$f" > /tmp/fm
+            grep -q '^name:' /tmp/fm        || { echo "  ERROR: no name:"; fail=1; }
+            grep -q '^description:' /tmp/fm || { echo "  ERROR: no description:"; fail=1; }
+          done
+          exit $fail
+
+      - name: Adapters must not hold write tools
+        run: |
+          # An adapter relays text from other vendors' models, which may have read
+          # attacker-influenced content. Granting it Write/Edit makes it a confused deputy.
+          fail=0
+          for f in agents/*.md; do
+            if awk 'NR>1 && /^---$/{exit} {print}' "$f" | grep -E '^tools:.*(Write|Edit)' ; then
+              echo "ERROR: $f grants a write tool"; fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Links to local files resolve
+        run: |
+          python3 - <<'PY'
+          import re, pathlib, sys
+          bad = 0
+          for f in pathlib.Path('.').rglob('*.md'):
+              if '.git/' in str(f):
+                  continue
+              for m in re.finditer(r'\]\(([^)\s]+\.md[^)\s]*)\)', f.read_text()):
+                  link = m.group(1).split('#')[0]
+                  if link.startswith(('http', 'mailto')):
+                      continue
+                  if not (f.parent / link).resolve().exists():
+                      print(f"BROKEN {f} -> {link}")
+                      bad += 1
+          sys.exit(1 if bad else 0)
+          PY

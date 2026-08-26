@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# quorum-verify — re-run the mechanical parts of the adapter contract against a live
+# provider, so "verified" is a measurement rather than a claim.
+#
+#   quorum-verify codex
+#   quorum-verify --all
+#
+# Checks (see docs/adapter-contract.md):
+#   1 reachability        the documented invocation returns the canary token
+#   2 non-interactive     it exits without a TTY instead of hanging
+#   3 failure shape       a deliberately broken call fails the way the adapter says it does
+#   4 exit-code fidelity  good and broken calls are actually distinguishable
+#
+# Probes 3 (is read-only harness-enforced?) and 6 (images) need judgement and live in the
+# add-provider skill instead.
+#
+# Costs a small amount of quota on each provider tested. Two short calls per provider.
+
+set -uo pipefail
+
+# Resolve through symlinks: install.sh links this onto PATH, and `dirname "$0"` would
+# otherwise give the LINK's directory (~/.local/bin), not the repo — so probes/ would be
+# unfindable for anyone who installed the documented way. macOS has no `readlink -f`.
+_src="$0"
+while [ -L "$_src" ]; do
+  _dir=$(cd -P "$(dirname "$_src")" && pwd)
+  _src=$(readlink "$_src")
+  case "$_src" in /*) ;; *) _src="$_dir/$_src" ;; esac
+done
+HERE=$(cd -P "$(dirname "$_src")/.." && pwd)
+PROBE_DIR="${QUORUM_PROBE_DIR:-$HERE/probes}"
+CANARY="QUORUM_CANARY_OK"
+QUORUM_TIMEOUT="${QUORUM_VERIFY_TIMEOUT:-180}"
+export QUORUM_TIMEOUT
+
+pass=0; fail=0; warned=0
+P() { printf '  \033[32mPASS\033[0m  %s\n' "$1"; pass=$((pass+1)); }
+F() { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; fail=$((fail+1)); }
+W() { printf '  \033[33mWARN\033[0m  %s\n' "$1"; warned=$((warned+1)); }
+I() { printf '        %s\n' "$1"; }
+
+# Probe files call $TIMEOUT_BIN internally so a hang surfaces as exit 124 rather than
+# blocking forever. macOS has no timeout(1) unless coreutils is installed.
+TIMEOUT_BIN=$(command -v timeout || command -v gtimeout || true)
+export TIMEOUT_BIN
+if [ -z "$TIMEOUT_BIN" ]; then
+  printf '  \033[33mWARN\033[0m  no timeout(1) on PATH — hang detection disabled (brew install coreutils)\n'
+fi
+
+# Available to sourced probe files: run with the shared deadline when timeout(1) exists.
+qt() {
+  if [ -n "${TIMEOUT_BIN:-}" ]; then "$TIMEOUT_BIN" "${QUORUM_TIMEOUT:-180}" "$@"; else "$@"; fi
+}
+
+verify_one() {
+  provider="$1"
+  file="$PROBE_DIR/$provider.sh"
+  if [ ! -f "$file" ]; then
+    echo "quorum-verify: no probe file at $file" >&2
+    echo "               write one (see probes/README.md) or run: /quorum:add-provider $provider" >&2
+    return 2
+  fi
+
+  # Probe files declare: probe_consult, probe_broken, EXPECT_BROKEN_DESC.
+  unset -f probe_consult probe_broken 2>/dev/null || true
+  EXPECT_BROKEN_DESC=""; BROKEN_MATCH=""
+  # shellcheck disable=SC1090
+  . "$file"
+
+  printf '\n\033[1m%s\033[0m\n' "$provider"
+
+  PROMPT=$(mktemp); OUT=$(mktemp); ERR=$(mktemp)
+  printf 'Reply with exactly this token and nothing else: %s\n' "$CANARY" > "$PROMPT"
+
+  # --- 1 & 2: reachability and non-interactive exit -----------------------------
+  # Never pipe here. A pipeline reports the LAST command's status, which is exactly how a
+  # broken invocation gets recorded as working. See docs/field-notes.md.
+  #
+  # The deadline lives inside probe_consult (each provider knows its own reasonable one);
+  # `timeout` cannot wrap a sourced shell function.
+  probe_consult "$PROMPT" >"$OUT" 2>"$ERR"
+  GOOD_RC=$?
+  GOOD_BYTES=$(wc -c < "$OUT" | tr -d ' ')
+
+  if [ "$GOOD_RC" = "124" ]; then
+    F "non-interactive exit — hung until ${QUORUM_TIMEOUT}s (exit 124)"
+    I "the invocation is missing a 'do not ask the user' flag"
+  else
+    P "non-interactive exit (rc=$GOOD_RC)"
+  fi
+
+  if grep -q "$CANARY" "$OUT" 2>/dev/null; then
+    P "reachability — canary returned (${GOOD_BYTES} bytes)"
+  elif [ "$GOOD_BYTES" -gt 0 ]; then
+    W "reachability — answered ${GOOD_BYTES} bytes but no canary token"
+    I "provider may be reachable but ignoring instructions; inspect manually"
+    I "head: $(head -c 160 "$OUT" | tr '\n' ' ')"
+  else
+    F "reachability — zero bytes returned (rc=$GOOD_RC)"
+    I "stderr: $(tail -c 200 "$ERR" | tr '\n' ' ')"
+  fi
+
+  # --- 3: failure shape ----------------------------------------------------------
+  BOUT=$(mktemp); BERR=$(mktemp)
+  if ! declare -f probe_broken >/dev/null 2>&1; then
+    W "failure shape — probe file declares no probe_broken()"
+    I "the adapter cannot claim to know what a misconfigured call looks like"
+  else
+    probe_broken "$PROMPT" >"$BOUT" 2>"$BERR"; BAD_RC=$?
+    BAD_BYTES=$(wc -c < "$BOUT" | tr -d ' ')
+    P "failure shape recorded — rc=$BAD_RC, ${BAD_BYTES} bytes on stdout"
+    [ -n "$EXPECT_BROKEN_DESC" ] && I "documented: $EXPECT_BROKEN_DESC"
+
+    # --- 4: is a broken call distinguishable from a good one, by ANY means? --------
+    # Three legitimate discriminators, in descending order of robustness. A provider that
+    # offers none of them cannot be adapted safely: its failures are unreportable.
+    if [ "$BAD_RC" != "$GOOD_RC" ]; then
+      P "discriminator: exit code (good=$GOOD_RC broken=$BAD_RC)"
+    elif [ "$BAD_BYTES" -eq 0 ] && [ "$GOOD_BYTES" -gt 0 ]; then
+      P "discriminator: empty output (both exit $GOOD_RC)"
+      I "adapter MUST classify on emptiness — exit code alone is not enough here"
+    elif [ -n "$BROKEN_MATCH" ] \
+         && grep -qE "$BROKEN_MATCH" "$BOUT" 2>/dev/null \
+         && ! grep -qE "$BROKEN_MATCH" "$OUT" 2>/dev/null; then
+      P "discriminator: error text /$BROKEN_MATCH/ (both exit $GOOD_RC, both non-empty)"
+      I "adapter MUST text-match — this provider reports failures inside a success"
+    else
+      F "no discriminator — broken and good calls are indistinguishable"
+      I "both rc=$GOOD_RC, ${GOOD_BYTES}/${BAD_BYTES} bytes"
+      [ -n "$BROKEN_MATCH" ] && I "declared BROKEN_MATCH /$BROKEN_MATCH/ did not fire"
+      I "broken head: $(head -c 160 "$BOUT" | tr '\n' ' ')"
+    fi
+  fi
+
+  rm -f "$PROMPT" "$OUT" "$ERR" "$BOUT" "$BERR"
+}
+
+if [ $# -eq 0 ]; then
+  echo "usage: quorum-verify <provider> | --all" >&2
+  echo "available probes:" >&2
+  ls -1 "$PROBE_DIR"/*.sh 2>/dev/null | sed 's|.*/|  |; s|\.sh$||' >&2 || echo "  (none)" >&2
+  exit 1
+fi
+
+if [ "$1" = "--all" ]; then
+  for f in "$PROBE_DIR"/*.sh; do [ -e "$f" ] || continue; verify_one "$(basename "$f" .sh)"; done
+else
+  for p in "$@"; do verify_one "$p"; done
+fi
+
+printf '\n%d passed, %d failed, %d warned\n' "$pass" "$fail" "$warned"
+[ "$fail" -eq 0 ]

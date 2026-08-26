@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# quorum-claude-on — run Claude Code itself against a non-Anthropic, Anthropic-compatible
+# endpoint. Keeps the harness you like; changes the economics.
+#
+#   quorum-claude-on <preset> [claude args...]
+#   quorum-claude-on zai -p "explain this repo" --allowedTools "Read,Glob,Grep"
+#
+# Presets are plain env files at ~/.config/quorum/endpoints/<preset>.env, e.g.:
+#
+#   ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+#   ANTHROPIC_AUTH_TOKEN="$Z_AI_API_KEY"       # read from your environment; never hardcode
+#   ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5.3"
+#   ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5.3"
+#   ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-5-turbo"
+#   CLAUDE_CODE_AUTO_COMPACT_WINDOW="1048576"  # if the endpoint has a bigger window
+#
+# `quorum-claude-on --init <preset>` writes a starter file you can edit.
+#
+# IMPORTANT: the endpoint must speak the *Anthropic* Messages API. Providers that serve an
+# OpenAI-compatible API (MLX, Ollama, vLLM, LM Studio) need a translating proxy in front.
+# See docs/porting/openai-compatible.md.
+
+set -euo pipefail
+
+ENDPOINT_DIR="${QUORUM_ENDPOINT_DIR:-$HOME/.config/quorum/endpoints}"
+
+die() { printf 'quorum-claude-on: %s\n' "$1" >&2; exit 1; }
+
+usage() {
+  cat >&2 <<USAGE
+usage: quorum-claude-on <preset> [claude args...]
+       quorum-claude-on --init <preset>
+       quorum-claude-on --list
+
+Presets live in $ENDPOINT_DIR/<preset>.env
+USAGE
+  exit 1
+}
+
+[ $# -ge 1 ] || usage
+
+case "$1" in
+  --list)
+    ls -1 "$ENDPOINT_DIR"/*.env 2>/dev/null | sed 's|.*/||; s|\.env$||' || echo "(no presets)"
+    exit 0 ;;
+  --init)
+    [ $# -ge 2 ] || die "--init needs a preset name"
+    mkdir -p "$ENDPOINT_DIR"
+    target="$ENDPOINT_DIR/$2.env"
+    [ -e "$target" ] && die "$target already exists"
+    cat > "$target" <<'TEMPLATE'
+# Anthropic-compatible endpoint for `quorum-claude-on`.
+# Reference secrets from the environment. Do not paste key material into this file.
+ANTHROPIC_BASE_URL="https://example.invalid/anthropic"
+ANTHROPIC_AUTH_TOKEN="${MY_PROVIDER_KEY:?set MY_PROVIDER_KEY in ~/.zshenv}"
+ANTHROPIC_DEFAULT_OPUS_MODEL="your-large-model"
+ANTHROPIC_DEFAULT_SONNET_MODEL="your-large-model"
+ANTHROPIC_DEFAULT_HAIKU_MODEL="your-small-model"
+TEMPLATE
+    chmod 600 "$target"
+    printf 'wrote %s — edit it, then: quorum-claude-on %s -p "hello"\n' "$target" "$2"
+    exit 0 ;;
+  -h|--help) usage ;;
+esac
+
+PRESET="$1"; shift
+ENV_FILE="$ENDPOINT_DIR/$PRESET.env"
+
+[ -f "$ENV_FILE" ] || die "no preset '$PRESET' at $ENV_FILE (try: quorum-claude-on --init $PRESET)"
+command -v claude >/dev/null 2>&1 || die "claude is not on PATH"
+
+# shellcheck disable=SC1090
+set -a; . "$ENV_FILE"; set +a
+
+[ -n "${ANTHROPIC_BASE_URL:-}" ]   || die "$ENV_FILE does not set ANTHROPIC_BASE_URL"
+[ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || die "$ENV_FILE resolved ANTHROPIC_AUTH_TOKEN to empty — is the source variable exported from ~/.zshenv?"
+
+exec claude "$@"

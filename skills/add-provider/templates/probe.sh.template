@@ -1,0 +1,23 @@
+# <PROVIDER> — <one line: what it is and how it is paid for>.
+#
+# Sourced by scripts/quorum-verify. See probes/README.md.
+# Use `qt` instead of `timeout` so a hang surfaces as exit 124 under the shared deadline.
+
+probe_consult() {   # $1 = file containing the prompt
+  qt <the exact working invocation, reading the prompt from "$1">
+}
+
+# Probe 4: a DELIBERATELY misconfigured call. This is the point of the file — any wrapper
+# can demonstrate a working call; an adapter is trustworthy only if it knows precisely what
+# a failing one looks like, so it can report a failure instead of relaying it as an answer.
+probe_broken() {    # $1 = same
+  qt <the same invocation, broken in a realistic way: bad flag value, bad model id,
+      wrong directory, missing grant>
+}
+
+EXPECT_BROKEN_DESC="<measured: exit code, stdout bytes, where the message goes, CLI version>"
+
+# Only when neither the exit code nor emptiness can discriminate — i.e. the provider
+# reports failures inside a successful-looking response. Must match the broken output and
+# NOT the good one.
+# BROKEN_MATCH="<regex>"

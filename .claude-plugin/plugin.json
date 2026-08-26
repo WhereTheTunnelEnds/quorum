@@ -1,0 +1,17 @@
+{
+  "name": "quorum",
+  "version": "0.1.0",
+  "description": "Pool several AI subscriptions inside Claude Code by delegating to vendor CLIs as subprocesses. Ships field-tested adapters for GLM (Z.AI), Codex (ChatGPT), and Copilot, a multi-model consultation panel, task delegation with worktree isolation, and a probe-driven generator that builds and verifies an adapter for any provider you already have.",
+  "author": {
+    "name": "Kourosh Mobl",
+    "url": "https://github.com/kourosh-forti-hands"
+  },
+  "homepage": "https://github.com/kourosh-forti-hands/quorum",
+  "repository": "https://github.com/kourosh-forti-hands/quorum",
+  "license": "MIT",
+  "keywords": [
+    "claude-code", "subagents", "agent-skills", "multi-model", "multi-provider",
+    "codex", "copilot", "glm", "zai", "mlx", "ollama", "local-llm",
+    "delegation", "code-review", "second-opinion", "sandbox", "worktree"
+  ]
+}

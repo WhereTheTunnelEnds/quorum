@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "quorum",
+  "description": "Multi-model agents for Claude Code: field-tested adapters for other vendors' coding CLIs, plus a generator that builds verified adapters for providers you already have.",
+  "owner": {
+    "name": "kourosh-forti-hands",
+    "url": "https://github.com/kourosh-forti-hands"
+  },
+  "plugins": [
+    {
+      "name": "quorum",
+      "source": "./",
+      "description": "Consult and delegate to GLM, Codex, Copilot, and any provider you add yourself — under three enforced safety tiers.",
+      "version": "0.1.0",
+      "category": "augmentation"
+    }
+  ]
+}

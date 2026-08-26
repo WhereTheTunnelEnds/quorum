@@ -1,0 +1,63 @@
+name: New provider
+description: Report a provider you want adapted, or share probe results for one
+labels: ["provider"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If you can run the provider, `/quorum:add-provider <name>` will build the adapter
+        and you can open a PR instead. This template is for providers you cannot run, or
+        for partial probe results that would help someone else finish the job.
+
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+      placeholder: "MLX / Ollama / Gemini CLI / vLLM / …"
+    validations: { required: true }
+
+  - type: dropdown
+    id: shape
+    attributes:
+      label: What shape is it?
+      options:
+        - Agentic CLI (has its own tool loop and sandbox)
+        - HTTP endpoint, no CLI
+        - Local model server (MLX, Ollama, llama.cpp, vLLM, LM Studio)
+        - Not sure
+    validations: { required: true }
+
+  - type: textarea
+    id: invocation
+    attributes:
+      label: Working invocation, if you have one
+      description: The exact command that returns an answer. Say if it is untested.
+      render: shell
+
+  - type: textarea
+    id: probes
+    attributes:
+      label: Probe results
+      description: |
+        Any of the six you managed to run. Measurements please — exit code, byte counts,
+        actual text — taken unpiped. See the probe checklist.
+      render: text
+      placeholder: |
+        probe 1 reachability     PASS  rc=0, 17 bytes, canary returned
+        probe 2 non-interactive  PASS  rc=0 (hangs without --no-ask-user)
+        probe 3 read-only        FAIL  the file was created — mode is advisory
+        probe 4 failure shape    rc=1, 0 bytes stdout, 73 bytes stderr
+
+  - type: input
+    id: version
+    attributes:
+      label: CLI / server version
+      placeholder: "ollama 0.18.2"
+
+  - type: checkboxes
+    id: honesty
+    attributes:
+      label: Confirm
+      options:
+        - label: Anything I did not personally run is marked as untested or inferred.
+          required: true

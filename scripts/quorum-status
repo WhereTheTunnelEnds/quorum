@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# quorum-status — which providers are usable right now.
+#
+# An executable rather than a shell function, on purpose: agents and scripts run in
+# non-interactive shells, where functions and aliases do not exist. See docs/field-notes.md.
+#
+# Prints no credentials, no email addresses, and no key material.
+
+set -uo pipefail
+
+ok()   { printf '  \033[32m%s\033[0m  %s\n' "OK" "$1"; }
+bad()  { printf '  \033[31m%s\033[0m  %s\n' "--" "$1"; }
+warn() { printf '  \033[33m%s\033[0m  %s\n' "??" "$1"; }
+
+echo "quorum providers"
+echo
+
+# --- Claude Code ----------------------------------------------------------------
+if [ -f "$HOME/.claude.json" ] && command -v jq >/dev/null 2>&1; then
+  if jq -e 'has("oauthAccount")' "$HOME/.claude.json" >/dev/null 2>&1; then
+    ok "claude    logged in"
+  else
+    bad "claude    not logged in  ->  run: claude"
+  fi
+else
+  warn "claude    cannot determine (no ~/.claude.json or jq)"
+fi
+
+# --- Codex ----------------------------------------------------------------------
+if command -v codex >/dev/null 2>&1; then
+  if codex login status >/dev/null 2>&1; then
+    ok "codex     logged in"
+  else
+    bad "codex     not logged in  ->  run: codex login"
+  fi
+else
+  bad "codex     not installed"
+fi
+
+# --- Copilot --------------------------------------------------------------------
+if command -v copilot >/dev/null 2>&1; then
+  ok "copilot   $(copilot --version 2>&1 | head -1)"
+else
+  bad "copilot   not installed"
+fi
+
+# --- GLM / Z.AI -----------------------------------------------------------------
+# Note: there is no `glm` binary. Never test for one — see docs/field-notes.md.
+if [ -z "${Z_AI_API_KEY:-}" ]; then
+  bad "glm       Z_AI_API_KEY not set  ->  export it from ~/.zshenv"
+else
+  body=$(curl -s -m 20 https://api.z.ai/api/anthropic/v1/messages \
+    -H "Authorization: Bearer $Z_AI_API_KEY" \
+    -H "anthropic-version: 2023-06-01" \
+    -H "content-type: application/json" \
+    -d '{"model":"glm-5.3","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}' 2>/dev/null)
+  # Failures arrive inside HTTP 200, so classify on the body, not the exit code.
+  if printf '%s' "$body" | grep -q '"content"'; then
+    ok "glm       key accepted"
+  else
+    msg=$(printf '%s' "$body" | jq -r '.error.message // "no response"' 2>/dev/null || echo "no response")
+    bad "glm       $msg"
+  fi
+fi
+
+# --- Locally configured endpoints ------------------------------------------------
+ENDPOINT_DIR="${QUORUM_ENDPOINT_DIR:-$HOME/.config/quorum/endpoints}"
+if [ -d "$ENDPOINT_DIR" ]; then
+  echo
+  echo "quorum-claude-on presets ($ENDPOINT_DIR)"
+  found=0
+  for f in "$ENDPOINT_DIR"/*.env; do
+    [ -e "$f" ] || continue
+    found=1
+    name=$(basename "$f" .env)
+    printf '      %s\n' "$name"
+  done
+  [ "$found" -eq 0 ] && printf '      (none)\n'
+fi

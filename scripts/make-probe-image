@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# make-probe-image — generate the four-quadrant image used to probe a provider's vision.
+#
+#   IMG=$(make-probe-image)
+#   <provider vision invocation> "$IMG" "Name the background colour and the white shape in
+#     each quadrant, clockwise from top-left."
+#
+# Expected answer:
+#   top-left      red     circle
+#   top-right     green   square
+#   bottom-right  yellow  cross
+#   bottom-left   blue    triangle
+#
+# Why four quadrants rather than one object: it tests recognition AND spatial orientation
+# in a single call, and it is scoreable without judgement — the model either names all
+# four correctly or it does not. A model that transposes left and right will pass a
+# single-object test and fail this one.
+#
+# Pure Python stdlib (zlib + struct). No Pillow, no ImageMagick.
+
+set -euo pipefail
+
+OUT="${1:-${TMPDIR:-/tmp}/quorum-probe.png}"
+PY=$(command -v python3 || command -v python) || { echo "make-probe-image: needs python3" >&2; exit 1; }
+
+"$PY" - "$OUT" <<'PY_EOF'
+import struct, sys, zlib
+
+path = sys.argv[1]
+S = 512           # full image is S x S
+H = S // 2        # quadrant size
+
+RED, GREEN, BLUE, YELLOW = (200,30,30), (30,150,60), (30,70,200), (220,190,40)
+WHITE = (255,255,255)
+
+def bg(x, y):
+    if y < H:  return RED if x < H else GREEN
+    return BLUE if x < H else YELLOW
+
+def shape(x, y):
+    """White shape inside each quadrant: circle, square, triangle, cross."""
+    lx, ly = x % H, y % H          # quadrant-local coords
+    c, r = H / 2, H / 3.2
+    if y < H and x < H:                                  # top-left: circle
+        return (lx - c) ** 2 + (ly - c) ** 2 <= r * r
+    if y < H:                                            # top-right: square
+        return abs(lx - c) <= r * 0.8 and abs(ly - c) <= r * 0.8
+    if x < H:                                            # bottom-left: triangle
+        if ly < c - r or ly > c + r: return False
+        half = (ly - (c - r)) / (2 * r) * r              # widens toward the base
+        return abs(lx - c) <= half
+    arm = r * 0.3                                        # bottom-right: cross
+    return (abs(lx - c) <= arm and abs(ly - c) <= r) or (abs(ly - c) <= arm and abs(lx - c) <= r)
+
+raw = bytearray()
+for y in range(S):
+    raw.append(0)                                        # PNG filter type 0 per scanline
+    for x in range(S):
+        raw.extend(WHITE if shape(x, y) else bg(x, y))
+
+def chunk(tag, data):
+    return (struct.pack('>I', len(data)) + tag + data
+            + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff))
+
+png = (b'\x89PNG\r\n\x1a\n'
+       + chunk(b'IHDR', struct.pack('>IIBBBBB', S, S, 8, 2, 0, 0, 0))
+       + chunk(b'IDAT', zlib.compress(bytes(raw), 9))
+       + chunk(b'IEND', b''))
+
+with open(path, 'wb') as f:
+    f.write(png)
+print(f"make-probe-image: wrote {path} ({len(png)//1024}KB)", file=sys.stderr)
+PY_EOF
+
+printf '%s\n' "$OUT"

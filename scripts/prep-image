@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# prep-image — normalize any image for a vision API.
+#
+# Prints the path of a JPEG copy with longest edge <= MAXPX and size <= MAXMB.
+# Diagnostics go to stderr, so the path alone is on stdout and this composes:
+#
+#     npx -y zai-cli vision analyze "$(prep-image IMG_1234.HEIC)" "what's wrong?"
+#
+# Why this exists: phone photos are HEIC by default and routinely exceed 20MB, while
+# vision endpoints commonly accept only JPG/PNG under 5MB. Without this, the first real
+# photo you send fails. Normalizing once also guarantees every panelist in a visual panel
+# sees the *same* image — otherwise a difference in their answers might just be a
+# difference in what they were shown.
+#
+# Uses `sips` on macOS, ImageMagick elsewhere.
+
+set -euo pipefail
+
+IN="${1:-}"
+if [ -z "$IN" ] || [ ! -f "$IN" ]; then
+  cat >&2 <<'USAGE'
+usage: prep-image <image> [outdir]
+  converts HEIC/PNG/TIFF/etc to JPEG and downscales until under the size cap
+env:
+  QUORUM_IMG_MAXPX     longest edge in pixels (default 2048)
+  QUORUM_IMG_MAXMB     size cap in MB         (default 5)
+USAGE
+  exit 1
+fi
+
+OUTDIR="${2:-${TMPDIR:-/tmp}}"
+MAXPX="${QUORUM_IMG_MAXPX:-2048}"
+MAXMB="${QUORUM_IMG_MAXMB:-5}"
+MAXBYTES=$(( MAXMB * 1024 * 1024 ))
+QUALITY=80
+
+mkdir -p "$OUTDIR"
+base=$(basename "$IN"); base="${base%.*}"
+OUT="${OUTDIR%/}/${base}-prepped.jpg"
+
+if command -v sips >/dev/null 2>&1; then
+  ENGINE=sips
+elif command -v magick >/dev/null 2>&1; then
+  ENGINE=magick
+elif command -v convert >/dev/null 2>&1; then
+  ENGINE=convert
+else
+  echo "prep-image: need sips (macOS) or ImageMagick (magick/convert)" >&2
+  exit 1
+fi
+
+filesize() { wc -c < "$1" | tr -d ' '; }
+
+px=$MAXPX
+for _ in 1 2 3 4 5; do
+  case "$ENGINE" in
+    sips)
+      sips -s format jpeg -s formatOptions "$QUALITY" -Z "$px" "$IN" --out "$OUT" >/dev/null 2>&1 \
+        || { echo "prep-image: sips could not convert '$IN' (unsupported format?)" >&2; exit 1; } ;;
+    magick|convert)
+      "$ENGINE" "$IN" -auto-orient -resize "${px}x${px}>" -quality "$QUALITY" "$OUT" >/dev/null 2>&1 \
+        || { echo "prep-image: ImageMagick could not convert '$IN'" >&2; exit 1; } ;;
+  esac
+
+  size=$(filesize "$OUT")
+  if [ "$size" -le "$MAXBYTES" ]; then
+    echo "prep-image: $(basename "$IN") -> $(basename "$OUT") (${px}px max, $(( size / 1024 ))KB)" >&2
+    printf '%s\n' "$OUT"
+    exit 0
+  fi
+  px=$(( px / 2 ))
+  QUALITY=$(( QUALITY - 10 ))
+done
+
+echo "prep-image: could not get '$IN' under ${MAXMB}MB after 5 attempts" >&2
+exit 1
