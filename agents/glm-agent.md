@@ -42,16 +42,22 @@ cat > "$PROMPT_FILE" <<'PROMPT_EOF'
 <the question, with file contents inlined>
 PROMPT_EOF
 
+# The key goes in a HEADER FILE, never on the command line. Measured on this machine:
+# with `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to every process running
+# as you, for the whole life of the call. curl reads `@file` and it never reaches argv.
+_hdr=$(mktemp); chmod 600 "$_hdr"
+printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$_hdr"
+
 jq -n --rawfile p "$PROMPT_FILE" \
   '{model:"glm-5.3", max_tokens:32000, messages:[{role:"user", content:$p}]}' \
 | curl -s -m 300 https://api.z.ai/api/anthropic/v1/messages \
-    -H "Authorization: Bearer $Z_AI_API_KEY" \
+    -H @"$_hdr" \
     -H "anthropic-version: 2023-06-01" \
     -H "content-type: application/json" \
     -d @- \
 | jq -r 'if .content then ([.content[] | select(.type=="text") | .text] | join("")) else (.error.message // tostring) end'
 
-rm -f "$PROMPT_FILE"
+rm -f "$PROMPT_FILE" "$_hdr"
 ```
 
 **Do not use `.content[0].text`.** GLM is a reasoning model: `content[0]` is usually a
@@ -78,7 +84,10 @@ Model ids carry **no `[1m]` suffix** — it's `glm-5.3`, not `glm-5.3[1m]`. The 
 returns `modelCode: does not exist`. Query the live list rather than trusting this file:
 
 ```bash
-curl -s https://api.z.ai/api/anthropic/v1/models -H "Authorization: Bearer $Z_AI_API_KEY" | jq -r '.data[].id'
+_hdr=$(mktemp); chmod 600 "$_hdr"          # again: the key must not reach argv
+printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$_hdr"
+curl -s https://api.z.ai/api/anthropic/v1/models -H @"$_hdr" | jq -r '.data[].id'
+rm -f "$_hdr"
 ```
 
 Use a `-turbo` variant when the task is simple and speed matters more than depth.

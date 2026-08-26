@@ -132,6 +132,26 @@ jobs:
           done
           exit $fail
 
+      - name: No API key passed on a command line
+        run: |
+          # `curl -H "Authorization: Bearer $KEY"` puts the key in argv, where `ps auxww`
+          # shows it to every process running as the user for the whole life of the call.
+          # Measured here, then fixed with a chmod 600 header file and `-H @file`.
+          #
+          # The first fix reached the scripts and probes but NOT the adapter and skill
+          # markdown — the part a model actually copies and runs, under a heading reading
+          # "Tested and working. Use these exactly." Three sites shipped insecure while the
+          # repo believed the problem was solved, which is why this is a gate and not a
+          # memory. Comment lines are allowed so the danger can still be explained.
+          if grep -rnE '^[^#]*-H "Authorization: Bearer' \
+               --include='*.md' --include='*.sh' --include='*.yml' . ; then
+            echo
+            echo "ERROR: API key on a curl command line — it lands in argv and `ps` shows it."
+            echo "       Write the header to a chmod 600 mktemp file and use -H @\"\$file\"."
+            exit 1
+          fi
+          echo "no API keys on command lines"
+
       - name: Canonical URLs point at files that exist
         run: |
           # agents/ and skills/ load into the USER'S project, so a relative `docs/x.md` in

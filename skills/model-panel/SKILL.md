@@ -57,10 +57,16 @@ copilot -p "$Q" --plan -s --no-ask-user --allow-tool "read"
 jq -n --rawfile q prompt.txt \
   '{model:"glm-5.3",max_tokens:32000,messages:[{role:"user",content:$q}]}' > body.json
 BODY=$(mktemp)
+# The key goes in a header FILE, never on the command line. With
+# -H "Authorization: Bearer $KEY" it sits in argv, where `ps auxww` shows it to every
+# process running as you for the whole life of the call. curl reads @file instead.
+HDR=$(mktemp); chmod 600 "$HDR"
+printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$HDR"
 CODE=$(curl -s -m 300 -o "$BODY" -w '%{http_code}' https://api.z.ai/api/anthropic/v1/messages \
-  -H "Authorization: Bearer $Z_AI_API_KEY" \
+  -H @"$HDR" \
   -H "anthropic-version: 2023-06-01" \
   -H "content-type: application/json" -d @body.json)
+rm -f "$HDR"
 # The `else` branch is load-bearing. Without it, a failing call makes jq say
 # "Cannot iterate over null" and emit ZERO BYTES — which reads as "the model had nothing
 # to say". Measured: bad model id -> HTTP 400, 0 bytes out. See docs/field-notes.md in the Quorum repo.

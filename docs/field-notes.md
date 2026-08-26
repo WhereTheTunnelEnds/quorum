@@ -37,6 +37,29 @@ measurement command itself was piped through `tail`. Re-measured unpiped: exit 1
 > If you record only one thing from this document, record this one. It corrupts every
 > other measurement you take.
 
+### A security fix that reached the scripts but not the docs
+
+**Symptom.** `curl -H "Authorization: Bearer $KEY"` puts the key in argv, where `ps auxww`
+shows it to every process running as you for the life of the call. This was found, fixed,
+and verified at zero argv exposures — and then three more copies shipped insecure.
+
+**What was missed.** The fix landed in `scripts/quorum-status`, `scripts/quorum-auth` and
+`probes/glm.sh`. It did not land in `agents/glm-agent.md` (twice) or
+`skills/model-panel/SKILL.md` — the markdown a model actually copies and runs, under a
+heading reading *"Tested and working. Use these exactly."* The insecure form was in the
+most-executed place in the repo while the repo believed the problem was solved.
+
+**Why the search missed it.** Verification was `ps auxww` during a script run. That proves
+the script is clean; it says nothing about a code block in a Markdown file that no test
+executes. Grep for the *pattern* across every file type, not just the ones you can run.
+
+**Fix.** All six sites use a `chmod 600` `mktemp` header file and `-H @file`, and CI now
+rejects `-H "Authorization: Bearer` on any non-comment line in any `.md`, `.sh` or `.yml`.
+
+**The general lesson.** "Fixed" means every instance, and the instances you can execute are
+the ones you will find. Ask what a fix's search method structurally cannot see. Related:
+the same shape as [[the max_tokens default]] — one fact in five files, corrected in three.
+
 ### A command and a skill with the same name silently collide
 
 **Symptom.** `/quorum:add-provider` returned the text *"Invoke the `add-provider` skill and

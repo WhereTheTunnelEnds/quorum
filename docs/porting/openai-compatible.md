@@ -59,12 +59,19 @@ cat > "$PROMPT_FILE" <<'PROMPT_EOF'
 PROMPT_EOF
 
 BODY=$(mktemp)
+# The key goes in a header FILE, not on the command line: with
+# -H "Authorization: Bearer $KEY" the key sits in argv, where `ps auxww` shows it to every
+# process running as you. Harmless for a local endpoint with no real key — but copy this
+# adapter to a hosted OpenAI-compatible provider and the habit follows the code.
+HDR=$(mktemp); chmod 600 "$HDR"
+printf 'Authorization: Bearer %s\n' "${LOCAL_LLM_KEY:-none}" > "$HDR"
 CODE=$(jq -n --rawfile p "$PROMPT_FILE" --arg m "$MODEL" \
         '{model:$m, messages:[{role:"user", content:$p}], stream:false}' \
       | curl -s -m 300 -o "$BODY" -w '%{http_code}' "$BASE/chat/completions" \
           -H "content-type: application/json" \
-          -H "Authorization: Bearer ${LOCAL_LLM_KEY:-none}" \
+          -H @"$HDR" \
           -d @-)
+rm -f "$HDR"
 
 jq -r '.choices[0].message.content // .error.message // "no content"' "$BODY"
 ```
