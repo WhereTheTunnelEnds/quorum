@@ -81,11 +81,15 @@ rather than silent, but a provider that returns nothing on every hard question i
 which is worse than noisy.
 
 **32000 is not a safe ceiling either, and no constant is.** Measured on a 152 KB input — the
-whole-subsystem read this provider exists for — asking for an exhaustive review:
+whole-subsystem read this provider exists for — asking for an exhaustive review. Both rows
+are real calls, not estimates:
 
 | `max_tokens` | elapsed | `stop_reason` | output tokens | text |
 |---|---|---|---|---|
-| 32000 | **360 s** | `max_tokens` | 32000 | 17,648 chars, **cut off mid-review** |
+| 32000 | 360 s | `max_tokens` | 32000 | 17,648 chars, **cut off mid-review** |
+| **64000** | **579 s** | `end_turn` | 51,678 | **39,013 chars, complete** |
+
+64000 finished the answer that 32000 truncated, and did it inside the deadline.
 
 Two things follow, and they matter more than the number:
 
@@ -99,19 +103,18 @@ Two things follow, and they matter more than the number:
    answer.
 
 **Why the cap is 64000 and not larger.** The API is not the constraint — 128000 was accepted
-in testing. The **deadline** is. Measured throughput was 32000 output tokens in 360 s, about
-89 tokens/second:
+in testing. The **deadline** is. Both measured runs came in at ~89 output tokens/second
+(32000 in 360 s; 51,678 in 579 s), which is consistent enough to extrapolate from:
 
-| cap | projected worst case | fits `-m 900`? |
+| cap | worst case at 89 tok/s | fits `-m 900`? |
 |---|---|---|
-| 32000 | ~360 s | yes, but truncated a real 152 KB input |
-| **64000** | **~719 s** | **yes** |
-| 96000 | ~1078 s | no — the deadline kills it first |
+| 32000 | 360 s *(measured)* | yes, but truncated a real 152 KB input |
+| **64000** | **579 s *(measured)*** | **yes, with headroom** |
+| 96000 | ~1080 s *(projected)* | no — the deadline kills it first |
 
-64000 is the largest cap whose worst-case generation still finishes inside the timeout.
-Above it you trade a detected truncation for a detected timeout, which is not an
-improvement. Both are detected now either way, which is what makes this a choice rather
-than a guess.
+64000 is the largest cap whose worst case still finishes inside the timeout. Above it you
+trade a detected truncation for a detected timeout, which is not an improvement. Both are
+detected now either way, which is what makes this a choice rather than a guess.
 
 [docs/adapter-contract.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/adapter-contract.md)
 §6b already named this exact failure — *"a response that is

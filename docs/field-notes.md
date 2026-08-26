@@ -48,6 +48,7 @@ asking for an exhaustive review:
 | `max_tokens` | elapsed | `stop_reason` | output tokens | text |
 |---|---|---|---|---|
 | 32000 | 360 s | `max_tokens` | 32000 | 17,648 chars, cut off mid-review |
+| 64000 | 579 s | `end_turn` | 51,678 | 39,013 chars, complete |
 
 Two failures in one call:
 
