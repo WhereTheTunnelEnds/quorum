@@ -106,6 +106,18 @@ jobs:
           fi
           echo "no absolute home paths"
 
+      - name: Every adapter neutralises the untrusted-output delimiter
+        run: |
+          # The delimiters are forgeable: provider output containing the closing marker
+          # closes the fence early, and post-delimiter text is designated trusted. An audit
+          # had a local model emit that marker on request. The rule only helps if every
+          # adapter carries it.
+          fail=0
+          for f in agents/*-agent.md; do
+            grep -q 'Neutralise the delimiter' "$f" || { echo "ERROR: $f missing the delimiter-neutralisation rule"; fail=1; }
+          done
+          exit $fail
+
       - name: Links to local files resolve
         run: |
           python3 - <<'PY'

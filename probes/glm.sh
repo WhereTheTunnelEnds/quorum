@@ -3,13 +3,23 @@
 # There is no `glm` binary; the consult path is a direct HTTPS call. Never test for one.
 
 _glm_call() {  # $1 = model id, $2 = prompt file
+  # The key goes in a header FILE, never on the command line. Measured: with
+  # -H "Authorization: Bearer $KEY", `ps auxww` shows the key to any process running as
+  # you. curl reads @file, so it never reaches argv. Created per call because this file is
+  # SOURCED — setup at source time would run before quorum-verify is ready and leak on exit.
+  _gl_hdr=$(mktemp); chmod 600 "$_gl_hdr"
+  printf 'Authorization: Bearer %s\n' "${Z_AI_API_KEY:-}" > "$_gl_hdr"
+
   jq -n --rawfile p "$2" --arg m "$1" \
     '{model:$m, max_tokens:8000, messages:[{role:"user", content:$p}]}' \
   | qt curl -s -m 120 https://api.z.ai/api/anthropic/v1/messages \
-      -H "Authorization: Bearer ${Z_AI_API_KEY:-}" \
+      -H @"$_gl_hdr" \
       -H "anthropic-version: 2023-06-01" \
       -H "content-type: application/json" \
       -d @-
+  _gl_rc=$?
+  rm -f "$_gl_hdr"
+  return $_gl_rc
 }
 
 probe_consult() {

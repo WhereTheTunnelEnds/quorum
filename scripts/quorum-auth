@@ -193,7 +193,10 @@ if wants glm; then
       else
         umask 077
         printf '\nexport Z_AI_API_KEY=%q\n' "$KEY" >> "$ENVFILE"
-        echo "  wrote an export to $ENVFILE — open a new terminal for it to take effect"
+        # umask only governs file CREATION. Appending to an existing ~/.zshenv leaves its
+        # mode untouched — measured: -rw-r--r-- with a live key in it. Set it explicitly.
+        chmod 600 "$ENVFILE" 2>/dev/null || true
+        echo "  wrote an export to $ENVFILE (mode 600) — open a new terminal for it to take effect"
       fi
       unset KEY
     fi
@@ -206,8 +209,13 @@ if wants glm; then
     note "or by hand: echo 'export Z_AI_API_KEY=\"...\"' >> ~/.zshenv"
     note "~/.zshenv, NOT ~/.zshrc — agents run in non-interactive shells"
   else
+    # The key goes in a HEADER FILE, never on the command line. Measured: with
+# `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to any process running as
+# you. curl reads @file and it never reaches argv.
+    _hdr=$(mktemp); chmod 600 "$_hdr"
+    printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$_hdr"
     body=$(curl -s -m 20 https://api.z.ai/api/anthropic/v1/messages \
-      -H "Authorization: Bearer $Z_AI_API_KEY" \
+      -H @"$_hdr" \
       -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
       -d '{"model":"glm-5.3","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}' 2>/dev/null)
     # z.ai returns failures inside HTTP 200 — classify on the body, never the exit code.
