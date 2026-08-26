@@ -39,7 +39,6 @@ cited as if it could.
 | `prep-image` fails cleanly with no converter present | porting docs | `env -i HOME="$HOME" PATH=/usr/bin:/bin prep-image x.png` |
 | Ollama's `/v1` endpoint **discards** `options.num_ctx` while `/api/chat` honours it | field-notes | see the two-curl comparison in that entry |
 | Antigravity's headless mode auto-denies `write_file` | safety-model, field-notes | `cd $(mktemp -d) && agy -p "create a file test.txt containing X"` |
-| `agy --output-format json` emits JSON that **`jq` rejects** | field-notes | `agy -p hi --output-format json \| jq .` |
 | Adapters declare no write tools | safety-model | CI, or `grep '^tools:' agents/*.md` |
 
 ## Observed — reported, not reproducible from this repo
@@ -51,6 +50,7 @@ cited as if it could.
 | A panel run was terminated at the 600s background ceiling | model-panel | Depends on the caller's harness settings, not on this repo. |
 | A panelist claimed "verified via search" and was wrong about a datasheet figure | model-panel, field-notes | A one-off observation about model behaviour; no fixture exists. |
 | A vision model described items not present in an image | model-panel, field-notes | Same. |
+| `agy --output-format json` was once rejected by `jq` | field-notes | **Did not reproduce.** Three later runs of the identical command produced valid single-line JSON. Demoted from Reproducible after this table's own spot-check caught it. Cause unknown. |
 
 **None of these are load-bearing for safety.** Each motivates a rule that is enforced by
 something checkable — the `command -v` anecdote motivates "run the documented invocation,"

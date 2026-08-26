@@ -416,33 +416,40 @@ the whole timeout, produces nothing to classify, and looks identical to a slow m
 is what probe 2 exists to catch, and it is worth running against *every* subcommand an
 adapter might call, not just the main one.
 
-### `--output-format json` emits JSON that `jq` refuses
+### `--output-format json` — validate before you parse
 
-**Symptom.** The vendor's own documented CI recipe fails:
-```bash
-result=$(agy -p "…" --output-format json)
-status=$(echo "$result" | jq -r '.status')     # jq: parse error
+**What was observed, once.** A `--output-format json` run was rejected by `jq`:
+
+```
+jq: parse error: Invalid string: control characters from U+0000 through U+001F
+    must be escaped at line 2, column 1
 ```
 
-**Cause.** The payload carries **raw control characters inside string values** — a literal
-newline in `.response`. RFC 8259 requires U+0000–U+001F to be escaped, so `jq` rejects it.
-Python's `json` module tolerates it and parses the same bytes fine.
+The payload spanned multiple lines, indicating a raw control character inside a string
+value, which RFC 8259 forbids. Python's `json` module parsed the same bytes.
 
-**Measured** (Antigravity CLI 1.1.21):
+**It does not reproduce.** Three later runs of the identical command returned a single line
+of 257 bytes with `\n` correctly escaped, and `jq` parsed all three. A deliberately
+multi-line response also parsed. The cause of the original failure is **unknown** — it may
+have been response-dependent or transient.
 
-| Parser | Result |
-|---|---|
-| `jq` | *"Invalid string: control characters from U+0000 through U+001F must be escaped"* |
-| `python3 -c "json.loads(...)"` | parses; `status`, `response`, `error`, `usage` all present |
-| `tr -d '\n' \| jq` | works — but destroys newlines in multi-line responses |
+**Status: Observed, not Reproducible.** An earlier version of this note asserted the failure
+as general behaviour and told adapter authors not to build on it. That was an overclaim from
+a single observation, and this repo's own rule — *mark anything you did not personally
+observe as inferred* — applies just as much to something observed **once** and generalised.
+See [evidence.md](evidence.md).
 
-**Fix.** Do not build an adapter's classification on `jq` parsing this. Keep the **exit
-code** as the discriminator and treat the JSON as an optional richer signal, parsed with
-Python if you want `.status` / `.error`.
+**The useful conclusion survives, and it does not depend on the anecdote.** A documented
+output format is a claim about a program, not a guarantee. Validate the bytes with the
+parser you will actually use, on the failure path as well as the happy one, before an
+adapter's classification depends on it:
 
-**The general lesson.** A documented output format is a claim, not a guarantee. Parse the
-real bytes with your real parser during probe 4 before depending on it — this recipe is in
-the vendor's published CI guide and does not run as written.
+```bash
+agy -p "…" --output-format json | jq -e . >/dev/null || echo "not parseable — do not classify on it"
+```
+
+For `antigravity-agent` the exit code remains the discriminator, which is unaffected either
+way — so nothing in this repo rested on the claim that turned out not to hold.
 
 ### The docs and the binary disagree about headless writes
 
