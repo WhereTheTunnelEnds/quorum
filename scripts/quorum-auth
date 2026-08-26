@@ -79,6 +79,40 @@ if [ "$FIX" = 1 ] && [ ! -t 0 ]; then
   exit 2
 fi
 
+# Writing the quorum-claude-on preset needs NO live call and contains NO key material —
+# the token is read from the environment at run time. It used to live inside the branch that
+# runs only when the key call SUCCEEDS, so any transport failure, expired key, rate limit or
+# 5xx silently skipped it and said nothing. The documented remedy for "verify and delegate
+# tiers will fail" was unavailable in exactly the situations that print that message.
+_write_preset() {  # $1 = path
+  mkdir -p "$(dirname "$1")"
+  cat > "$1" <<PRESET
+# Z.AI endpoint for quorum-claude-on. Contains NO key material: the token is read from the
+# environment at run time, so this file is safe to keep and safe to back up.
+ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+ANTHROPIC_AUTH_TOKEN="\${Z_AI_API_KEY:?set Z_AI_API_KEY in $QUORUM_ENVFILE_SHORT}"
+ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5.3"
+ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5.3"
+ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-5-turbo"
+# Pinned so a parent session's [1m] context-variant suffix cannot leak into the model id.
+ANTHROPIC_MODEL="glm-5.3"
+CLAUDE_CODE_AUTO_COMPACT_WINDOW="1048576"
+PRESET
+  chmod 600 "$1"
+}
+
+# --- explicit --init-endpoint: unconditional, before any provider check ----------------
+if [ "$INIT_EP" = 1 ]; then
+  _ep0="${QUORUM_ENDPOINT_DIR:-$HOME/.config/quorum/endpoints}/zai.env"
+  if [ -f "$_ep0" ]; then
+    ok "glm       endpoint preset already present at $_ep0"
+  else
+    _write_preset "$_ep0"
+    ok "glm       endpoint preset created at $_ep0"
+  fi
+  echo
+fi
+
 # --- Claude Code ---------------------------------------------------------------
 if wants claude; then
   if [ -f "$HOME/.claude.json" ] && command -v jq >/dev/null 2>&1 \
@@ -281,21 +315,8 @@ if wants glm; then
         bad "glm       no endpoint preset — verify and delegate tiers will fail"
         todo "quorum-auth glm --init-endpoint"
         note "consult works without it; only the tiers that run Claude Code need it"
-        if [ "$FIX" = 1 ] || [ "$INIT_EP" = 1 ]; then
-          mkdir -p "$(dirname "$_ep")"
-          cat > "$_ep" <<'PRESET'
-# Z.AI endpoint for quorum-claude-on. Contains NO key material: the token is read from the
-# environment at run time, so this file is safe to keep and safe to back up.
-ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
-ANTHROPIC_AUTH_TOKEN="${Z_AI_API_KEY:?set Z_AI_API_KEY in ~/.zshenv}"
-ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5.3"
-ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5.3"
-ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-5-turbo"
-# Pinned so a parent session's [1m] context-variant suffix cannot leak into the model id.
-ANTHROPIC_MODEL="glm-5.3"
-CLAUDE_CODE_AUTO_COMPACT_WINDOW="1048576"
-PRESET
-          chmod 600 "$_ep"
+        if [ "$FIX" = 1 ]; then
+          _write_preset "$_ep"
           printf '        \033[32mcreated\033[0m %s\n' "$_ep"
           # The gap is closed now. Without this the status was computed before the write
           # and never revisited, so the documented success path rendered in red, named
@@ -305,9 +326,23 @@ PRESET
         fi
       fi
     else
-      msg=$(printf '%s' "$body" | jq -r '.error.message // "no response"' 2>/dev/null || echo "no response")
-      bad "glm       $msg"
-      todo "get a fresh key from https://z.ai then: quorum-auth glm --set-key"
+      # An EMPTY body must be handled BEFORE jq sees it. `jq -r '.x // "default"'` on zero
+      # bytes emits ZERO BYTES and exits 0 — the `//` never fires because there is no input
+      # to apply it to, and the `|| echo` never fires because jq succeeded. Measured.
+      #
+      # So every transport failure printed a bare red "-- glm" with NO reason at all, then
+      # advised getting a fresh key: an outage diagnosed as a bad credential, sending the
+      # user to rotate a key that was never the problem.
+      if [ -z "$body" ]; then
+        bad "glm       no response from api.z.ai — network, DNS, proxy or timeout, NOT your key"
+        todo "check connectivity first: curl -sS -m 10 -o /dev/null -w '%{http_code}\\n' https://api.z.ai"
+        note "your key is probably fine — do not rotate it on the strength of this"
+      else
+        msg=$(printf '%s' "$body" | jq -r '.error.message // empty' 2>/dev/null || true)
+        [ -n "$msg" ] || msg="unrecognised response from api.z.ai (not valid JSON, or an unknown shape)"
+        bad "glm       $msg"
+        todo "get a fresh key from https://z.ai then: quorum-auth glm --set-key"
+      fi
     fi
   fi
 fi

@@ -37,9 +37,9 @@ cited as if it could.
 | `quorum-status` exits 0 when a provider is reachable, 1 when none are | — | `quorum-status; echo $?` |
 | `quorum-verify` exits non-zero when it verified **nothing** | adapter-contract | `quorum-verify nosuchprovider; echo $?` |
 | The probe image really is red-circle / green-square / yellow-cross / blue-triangle | probe-checklist | `make-probe-image` then open it |
-| `prep-image` fails cleanly with no converter present | porting docs | `env -i HOME="$HOME" PATH=/usr/bin:/bin prep-image x.png` |
+| `prep-image` fails cleanly with no converter present | porting docs | `tests/test-prep-image-no-converter.sh` |
 | Ollama's `/v1` endpoint **discards** `options.num_ctx` while `/api/chat` honours it | field-notes | see the two-curl comparison in that entry |
-| Antigravity's headless mode auto-denies `write_file` | safety-model, field-notes | `cd $(mktemp -d) && agy -p "create a file test.txt containing X"` |
+| Antigravity's headless mode auto-denies `write_file` | safety-model, field-notes | `d=$(mktemp -d); cd "$d" && agy --add-dir "$d" -p "create a file test.txt containing X"` |
 | Adapters declare no write tools | safety-model | CI, or `grep '^tools:' agents/*.md` |
 | GLM reports a **truncated** answer as `error`, not `ok` | glm-agent, troubleshooting | ask GLM to count 1–400 at `max_tokens:600`; expect `stop_reason: max_tokens` with text |
 | GLM's 64000 / `-m 900` pair completes a 249 KB input | glm-agent | feed ~250 KB of source and ask for an exhaustive review; expect `end_turn` under 900 s |
