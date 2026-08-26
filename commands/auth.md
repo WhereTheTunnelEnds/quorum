@@ -1,10 +1,10 @@
 ---
 description: "Diagnose and fix provider authentication — shows exactly what's missing and the one command that fixes each."
 argument-hint: "[provider] [--fix]"
-allowed-tools: Bash(quorum-auth), Bash(quorum-auth:*), Bash(./scripts/quorum-auth), Bash(./scripts/quorum-auth:*)
+allowed-tools: Bash(quorum-auth), Bash(quorum-auth:*)
 ---
 
-Run `quorum-auth $ARGUMENTS` (or `./scripts/quorum-auth $ARGUMENTS` if it isn't on PATH)
+Run `quorum-auth $ARGUMENTS`
 and report the result.
 
 Then help the user through whatever it flagged:
@@ -26,3 +26,5 @@ Then help the user through whatever it flagged:
 
 If the user is setting up for the first time, note that authentication is not the same as
 working: finish with `quorum-verify --all`, which makes real calls.
+
+If it is not on PATH, do not guess at a relative path — this command runs in the user's project, not in the Quorum clone. Tell them to run `scripts/install.sh` from wherever they cloned Quorum, and stop.

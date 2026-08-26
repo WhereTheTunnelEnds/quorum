@@ -37,6 +37,52 @@ measurement command itself was piped through `tail`. Re-measured unpiped: exit 1
 > If you record only one thing from this document, record this one. It corrupts every
 > other measurement you take.
 
+### The docs taught the one spelling that could not work
+
+**Symptom.** `install.sh` finishes and prints, in one block:
+
+```
+/root/.local/bin is NOT on PATH. Add it in ...
+
+Next:  quorum-setup
+```
+
+Running the second line gives `command not found`, exit 127 — because of the first line. On
+macOS too, not just Linux.
+
+**Cause.** Self-inflicted: `quorum-setup` fixes PATH itself, so `./scripts/quorum-setup`
+works from the clone. The installer printed the one spelling that depends on the very thing
+it had just said was missing.
+
+**Three more of the same shape, all measured on a clean Debian container:**
+
+- **`quorum-setup --check` hardcoded `env -i zsh -c` to test PATH visibility.** Where zsh is
+  not installed that can only fail, so every Linux user was told "NOT visible to
+  non-interactive shells" and handed a fix that also did nothing. And the test is wrong for
+  bash in principle, not just in practice: bash reads nothing per-invocation, its mechanism
+  is inheritance from `~/.profile`, and `env -i` destroys exactly that. A check that can
+  only fail is as useless as one that can only pass.
+- **`quorum-setup --check` exited 0 while reporting "not on PATH".** `--check && echo ready`
+  printed *ready*. Third instance of this shape here: `quorum-verify` once exited 0 having
+  verified nothing, `quorum-status` once exited 1 while reporting everything fine.
+- **The manual install never produced the `/quorum:*` commands it promised.** User commands
+  are namespaced by **subdirectory**, so `cp commands/*.md ~/.claude/commands/` yields
+  `/status` and `/panel` — while the guide tells you to type `/quorum:status`. Verified on a
+  live install: `~/.claude/commands/build.md` → `/build`,
+  `~/.claude/commands/bench/plan_new_feature.md` → `/bench:plan_new_feature`. The plugin
+  route gets the prefix from the plugin name; the manual route has to get it from a
+  `quorum/` directory, which the docs never created.
+
+**Also found in the same pass.** `quorum-auth --set-key` was TTY-gated from the start;
+`--fix` was not — and `--fix` launches `codex login`, which opens a browser and blocks on
+the callback. `commands/auth.md` advertises `--fix` and grants `Bash(quorum-auth:*)`, so an
+agent could reach it with no terminal attached and hang, printing a real device code into
+the transcript on the way. Now refused with exit 2 and instructions to run it yourself.
+
+**The general lesson.** Instructions are code that executes in a human. Run the block you
+wrote, in order, on a machine that is not yours — every one of these is invisible to
+someone who already has a working install.
+
 ### The install worked perfectly, on the only machine it was ever run on
 
 **Symptom.** A clean Debian container, following the documented install literally, ends up

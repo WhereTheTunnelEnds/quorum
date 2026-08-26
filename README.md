@@ -75,19 +75,32 @@ never asks for a key or an auth code — installs and logins are printed for **y
 because vendor installers execute remote code, logins bind your paid accounts, and anything
 pasted into an agent chat becomes transcript.
 
-**Or copy the pieces in manually** — everything here is plain markdown and shell:
+**Or install the pieces manually** — everything here is plain markdown and shell:
 
 ```bash
-mkdir -p ~/.claude/agents ~/.claude/skills ~/.claude/commands
+git clone https://github.com/kourosh-forti-hands/quorum.git
+cd quorum
+
+mkdir -p ~/.claude/agents ~/.claude/skills ~/.claude/commands/quorum
 cp    agents/*.md   ~/.claude/agents/
 cp -r skills/*      ~/.claude/skills/
-cp    commands/*.md ~/.claude/commands/
+cp    commands/*.md ~/.claude/commands/quorum/      # note the quorum/ subdirectory
 ./scripts/install.sh
 ```
 
-The `mkdir -p` is not optional — on a machine where those directories do not yet exist,
-`cp` fails with *"Not a directory"* and installs nothing. And `commands/` must be copied
-too, or none of the `/quorum:*` commands this guide later tells you to run will exist.
+Three things about that block, each of which broke for someone:
+
+- **The clone is part of it.** This branch needs the repository too — it is not an
+  alternative to fetching the code, only to installing it as a plugin.
+- **`commands/quorum/`, not `commands/`.** User commands are namespaced by **subdirectory**,
+  so copying to `~/.claude/commands/` gives you `/status` and `/panel` — *not* the
+  `/quorum:status` and `/quorum:panel` this guide tells you to type. Verified on a live
+  install: `~/.claude/commands/build.md` → `/build`, while
+  `~/.claude/commands/bench/plan_new_feature.md` → `/bench:plan_new_feature`. The plugin
+  route gets the prefix from the plugin name; the manual route has to get it from the
+  directory.
+- **`mkdir -p` is not optional.** Where those directories do not exist, `cp` fails with
+  *"Not a directory"* and installs nothing.
 
 Both halves are needed: the plugin is what Claude uses, the scripts are what your shell
 uses. Then check what's reachable:
@@ -99,9 +112,19 @@ quorum-status
 Anything missing? `quorum-auth` names the exact fix for each, and `/quorum:auth` walks you
 through it inside Claude Code.
 
-`quorum-status` **live-checks** each provider. It does not test for a binary named after the vendor —
-that is not a reliable signal, and it is how a working provider gets reported as missing.
-See the [field notes](docs/field-notes.md#a-missing-binary-proves-nothing-about-a-provider).
+`quorum-status` makes a **real call** wherever a real call is the only evidence: GLM gets an
+API request, Ollama gets a `/api/tags` fetch, Claude gets a credential check.
+
+It does use `command -v` for the three providers that genuinely ship a binary named after
+themselves — `codex`, `copilot`, `agy` — so a stub implementing only `--version` will be
+reported as OK. That is a presence check, not an auth check, and the table says `installed`
+rather than `logged in` for `agy` for exactly that reason. Use `quorum-auth` for
+authentication and `quorum-verify` for "does it actually work".
+
+What it never does is infer *absence* from a missing binary. GLM ships no `glm` command at
+all, and `command -v glm` returning nothing has already caused a working provider to be
+reported as missing. See the
+[field notes](docs/field-notes.md#a-missing-binary-proves-nothing-about-a-provider).
 
 ## Requirements
 

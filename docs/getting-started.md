@@ -133,12 +133,17 @@ exact command that fixes each one. The rest of this guide is the long-form versi
 **Prefer not to use the plugin?** Copy the pieces in directly:
 
 ```bash
-mkdir -p ~/.claude/agents ~/.claude/skills ~/.claude/commands
+mkdir -p ~/.claude/agents ~/.claude/skills ~/.claude/commands/quorum
 cp    agents/*.md   ~/.claude/agents/
 cp -r skills/*      ~/.claude/skills/
-cp    commands/*.md ~/.claude/commands/
+cp    commands/*.md ~/.claude/commands/quorum/      # note the quorum/ subdirectory
 ./scripts/install.sh
 ```
+
+**`commands/quorum/`, not `commands/`.** User commands are namespaced by *subdirectory*.
+Copy to `~/.claude/commands/` and you get `/status` and `/panel`; this guide tells you to
+type `/quorum:status` and `/quorum:panel`, which only exist if the files sit in a `quorum/`
+subdirectory. The plugin route gets that prefix from the plugin name instead.
 
 The `mkdir -p` is not optional — on a machine where those directories do not yet exist,
 `cp` fails with *"Not a directory"* and installs nothing. And `commands/` must be copied
@@ -197,11 +202,26 @@ and history, and never opens PRs or pushes under your name. See
 
 ## 5. GLM (Z.AI Coding Plan)
 
-Get a key from [z.ai](https://z.ai), then — **`~/.zshenv`, not `~/.zshrc`**:
+Get a key from [z.ai](https://z.ai), then let Quorum store it:
 
 ```bash
-echo 'export Z_AI_API_KEY="your-key-here"' >> ~/.zshenv
+quorum-auth glm --set-key
 ```
+
+It reads the key from a **hidden prompt**, so it never reaches your shell history or a
+transcript; it writes to the right file for your shell; and it `chmod 600`s that file.
+
+If you would rather do it by hand, do all three parts:
+
+```bash
+echo 'export Z_AI_API_KEY="your-key-here"' >> ~/.zshenv   # ~/.profile on bash
+chmod 600 ~/.zshenv
+```
+
+**The `chmod` is not optional.** `umask` governs file *creation*; appending to a file that
+already exists leaves its old mode alone. Measured: a `~/.zshenv` that predates the key
+stays `-rw-r--r--`, world-readable, with a live API key in it. And note the `echo` puts the
+key in your shell history — which is why `--set-key` exists.
 
 Open a new terminal.
 

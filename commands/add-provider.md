@@ -13,5 +13,5 @@ and write the adapter from the measurements. If the provider is not installed or
 reachable on this machine, say so and stop rather than writing one for the user to test
 later. An untested adapter that looks tested is worse than no adapter.
 
-Finish by running `scripts/quorum-verify <name>`. If it does not pass, the adapter is not
+Finish by running `quorum-verify <name>` — the name `scripts/install.sh` puts on PATH. Do **not** use a bare `scripts/quorum-verify`: this command runs in the user's own project, not in the Quorum clone, so that path resolves to nothing. If it does not pass, the adapter is not
 done — and do not report it as done.

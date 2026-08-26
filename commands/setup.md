@@ -1,9 +1,9 @@
 ---
 description: "Guided first-run setup — check prerequisites, pick providers, authenticate, and prove each one actually works."
-allowed-tools: Bash(quorum-setup --check), Bash(./scripts/quorum-setup --check), Bash(quorum-status), Bash(quorum-auth), Bash(quorum-auth:*)
+allowed-tools: Bash(quorum-setup --check), Bash(quorum-status), Bash(quorum-auth), Bash(quorum-auth:*)
 ---
 
-Run `quorum-setup --check` (or `./scripts/quorum-setup --check`) and walk the user through
+Run `quorum-setup --check` and walk the user through
 whatever it reports.
 
 `--check` is the only mode you should run. The interactive wizard needs a real terminal —
@@ -26,3 +26,5 @@ Reading the output:
 If everything is already green, say so plainly and point them at `/quorum:panel`. Then note
 that `quorum-verify --all` is the check to re-run after any provider CLI update, and
 `quorum-flags` catches a renamed flag before it costs them an answer.
+
+If it is not on PATH, do not guess at a relative path — this command runs in the user's project, not in the Quorum clone. Tell them to run `scripts/install.sh` from wherever they cloned Quorum, and stop.

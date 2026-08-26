@@ -61,6 +61,24 @@ note() { printf '        %s\n' "$1"; }
 echo "quorum auth"
 echo
 
+# --fix launches INTERACTIVE login flows: `codex login` opens a browser and waits for the
+# callback, `agy` does the same. With no terminal there is nobody to complete them, so the
+# command blocks until something kills it — and a real login's device code is printed into
+# whatever is capturing stdout on the way.
+#
+# `--set-key` has been TTY-gated since it was written; `--fix` was not, while commands/auth.md
+# advertises it and grants Bash(quorum-auth:*), so an agent could invoke exactly this path.
+# The hang is the failure quorum-setup argues must be impossible, so refuse it here too.
+if [ "$FIX" = 1 ] && [ ! -t 0 ]; then
+  echo "  --fix needs a terminal: it starts interactive browser logins that nobody can" >&2
+  echo "  complete without one. Run it yourself in your own terminal:" >&2
+  echo >&2
+  echo "      quorum-auth --fix" >&2
+  echo >&2
+  echo "  Running without --fix is safe here and will print the exact fix for each provider." >&2
+  exit 2
+fi
+
 # --- Claude Code ---------------------------------------------------------------
 if wants claude; then
   if [ -f "$HOME/.claude.json" ] && command -v jq >/dev/null 2>&1 \
@@ -167,7 +185,7 @@ if wants ollama; then
   _ol_tags=$(curl -s -m 5 "$_ol_base/api/tags" 2>/dev/null)
   if [ -z "$_ol_tags" ]; then
     bad "ollama    no server at $_ol_base"
-    todo "ollama serve         # or: brew install ollama"
+    todo "ollama serve         # not installed? https://ollama.com/download"
   else
     _ol_n=$(printf '%s' "$_ol_tags" | jq -r '.models | length' 2>/dev/null || echo 0)
     case "$_ol_n" in ''|*[!0-9]*) _ol_n=0 ;; esac

@@ -123,7 +123,7 @@ agent file and the skill now say never to run that check.
 **To find out if GLM actually works, make a real call:**
 
 ```bash
-cd ~/quorum && ./scripts/quorum-verify glm
+quorum-verify glm
 ```
 
 **The general rule:** never infer availability from a `command -v` check. Not every vendor
@@ -345,7 +345,7 @@ Open an issue with:
 
 ```bash
 quorum-status
-cd ~/quorum && ./scripts/quorum-verify <provider>
+quorum-verify <provider>
 <provider-cli> --version
 ```
 

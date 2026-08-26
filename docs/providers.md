@@ -24,7 +24,7 @@ from a row in this table alone.
 | **Codex** | `codex` | `npm i -g @openai/codex` | `codex login` (browser) | **verified** |
 | **Copilot** | `copilot` | `npm i -g @github/copilot` | first run (browser) | **verified** |
 | **GLM (Z.AI)** | **none** | — | `Z_AI_API_KEY` in `~/.zshenv` | **verified** |
-| **Ollama** | server on `:11434` | `brew install ollama` then `ollama pull <model>` | none | **verified** |
+| **Ollama** | server on `:11434` | macOS `brew install ollama` · Linux `curl -fsSL https://ollama.com/install.sh \| sh` · then `ollama pull <model>` | none | **verified** |
 | **Antigravity** | **`agy`** | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | browser, or a Gemini API key for headless | **verified** (consult only) |
 | **Cline** | `cline` | `npm i -g cline` | `cline auth --provider <p> --apikey ...`, or `ANTHROPIC_API_KEY` etc. | documented |
 | **Pi** | `pi` | `npm i -g @earendil-works/pi-coding-agent` | provider key in env | documented |

@@ -60,4 +60,18 @@ EOM
 esac
 
 echo
-echo "Next:  quorum-setup    (guided: prerequisites -> providers -> auth -> verify)"
+# Print the spelling that will ACTUALLY work from here. The old version printed
+# "Next: quorum-setup" unconditionally, directly under "$DEST is NOT on PATH" — so the
+# documented next command was one the preceding paragraph had just explained could not run.
+# Measured on a clean Debian container and on macOS: `command not found`, exit 127.
+# `./scripts/quorum-setup` works either way, because quorum-setup fixes PATH itself.
+case ":$PATH:" in
+  *":$DEST:"*) echo "Next:  quorum-setup    (guided: prerequisites -> providers -> auth -> verify)" ;;
+  *) cat <<EOM
+Next:  ./scripts/quorum-setup    (guided: prerequisites -> providers -> auth -> verify)
+
+Run it with the ./scripts/ prefix from this directory — the bare name will not work
+until you have added $DEST to PATH and opened a new terminal.
+EOM
+  ;;
+esac

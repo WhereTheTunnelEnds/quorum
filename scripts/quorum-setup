@@ -21,17 +21,8 @@ while [ -L "$_src" ]; do
   case "$_src" in /*) ;; *) _src="$_d/$_src" ;; esac
 done
 ROOT=$(cd -P "$(dirname "$_src")/.." && pwd)
-# Resolve through symlinks so the shared lib is findable when installed the documented
-# way: install.sh links this onto PATH, and `dirname "$0"` would give ~/.local/bin, not the
-# repo. macOS has no `readlink -f`.
-_qsrc="$0"
-while [ -L "$_qsrc" ]; do
-  _qdir=$(cd -P "$(dirname "$_qsrc")" && pwd)
-  _qsrc=$(readlink "$_qsrc")
-  case "$_qsrc" in /*) ;; *) _qsrc="$_qdir/$_qsrc" ;; esac
-done
 # shellcheck source=/dev/null
-. "$(cd -P "$(dirname "$_qsrc")" && pwd)/quorum-lib.sh"
+. "$ROOT/scripts/quorum-lib.sh"
 
 ENVFILE="$QUORUM_ENVFILE"
 CHECK=0; ALL=0
@@ -77,6 +68,9 @@ pause() {
 }
 
 missing=0
+# Counts things that make Quorum NOT READY, which is narrower than "not perfect": a provider
+# you do not use is a normal state and must never fail the check. Only infrastructure counts.
+notready=0
 
 # ── 1. prerequisites ────────────────────────────────────────────────────────────
 b "1. Prerequisites"
@@ -99,18 +93,39 @@ if command -v quorum-verify >/dev/null 2>&1; then
   ok "quorum-* commands resolve"
 else
   no "quorum-* not on PATH"
+  notready=$((notready+1))
   if ask "run the installer now (symlinks into ~/.local/bin)?"; then
     "$ROOT/scripts/install.sh" || true
   else
     run "$ROOT/scripts/install.sh"
   fi
 fi
-# Agents get a NON-interactive shell, which reads ~/.zshenv and never ~/.zshrc. A PATH that
-# only exists in ~/.zshrc works for you and fails for every subagent. See docs/field-notes.md.
-if env -i HOME="$HOME" zsh -c 'command -v quorum-verify' >/dev/null 2>&1; then
+# Agents get a NON-interactive shell. A PATH that only your interactive shell knows about
+# works for you and fails for every subagent.
+#
+# How you TEST that differs by shell, and the old code tested only one way: it ran
+# `env -i zsh -c ...` unconditionally. On a machine without zsh that can only fail, so it
+# told every Linux user "NOT visible to non-interactive shells" and then offered a fix that
+# also did nothing. A check that can only fail is as useless as one that can only pass.
+#
+# zsh genuinely reads ~/.zshenv on every invocation, so `env -i` is a faithful test there.
+# bash reads NOTHING per-invocation when non-interactive — its mechanism is inheritance from
+# ~/.profile at login — and `env -i` deliberately destroys the inherited environment, so the
+# same test would report failure on a correctly configured machine. For bash, check the env
+# file for the PATH line, which is what actually governs it.
+_visible=1
+case "$(basename "${SHELL:-sh}")" in
+  zsh)
+    env -i HOME="$HOME" zsh -c 'command -v quorum-verify' >/dev/null 2>&1 || _visible=0 ;;
+  *)
+    { [ -r "$ENVFILE" ] && grep -q '\.local/bin' "$ENVFILE"; } \
+      || case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) _visible=0 ;; esac ;;
+esac
+if [ "$_visible" = 1 ]; then
   ok "visible to non-interactive shells (agents will find it)"
 else
   hm "NOT visible to non-interactive shells — agents will report it missing"
+  notready=$((notready+1))
   run "echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> $ENVFILE"
   if ask "append that line to $ENVFILE now?"; then
     printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$ENVFILE"
@@ -124,7 +139,7 @@ fi
 PROVIDERS='codex^codex^npm install -g @openai/codex^ChatGPT subscription
 copilot^copilot^npm install -g @github/copilot^GitHub Copilot subscription
 glm^-^get an API key from https://z.ai, then: quorum-auth glm --set-key^Z.AI Coding Plan, 1M context
-ollama^-^brew install ollama && ollama pull llama3.2:3b^local, free, private, no account
+ollama^-^see https://ollama.com/download, then: ollama pull llama3.2:3b^local, free, private, no account
 antigravity^agy^curl -fsSL https://antigravity.google/cli/install.sh | bash^Google; replaces the retired Gemini CLI'
 
 present() {  # present <name> <binary>
@@ -192,3 +207,20 @@ echo "  /quorum:add-provider <name>                          adapt a provider we
 echo "  quorum-flags                                         after any provider CLI update"
 echo
 echo "  Guide: docs/getting-started.md   Problems: docs/troubleshooting.md"
+
+# Exit status, because this script previously ended on an `echo` and so returned 0 no matter
+# what it had just reported. `quorum-setup --check && echo ready` printed "ready" while the
+# report above it said "quorum-* not on PATH". Third time this exact shape has been found
+# here: quorum-verify once exited 0 having verified nothing, and quorum-status once exited 1
+# while reporting everything fine.
+#
+# Semantics: --check exits 1 when Quorum is NOT READY, 0 when it is. A provider you do not
+# use is a normal state and does not count — only the infrastructure does, meaning PATH and
+# whether agents can actually see it. Interactive mode always exits 0: it is a guided
+# walkthrough, and a user declining an optional step is not a failure.
+if [ "$CHECK" -eq 1 ] && [ "$notready" -gt 0 ]; then
+  echo
+  echo "  NOT READY: $notready item(s) above need attention." >&2
+  exit 1
+fi
+exit 0
