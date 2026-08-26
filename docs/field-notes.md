@@ -1005,6 +1005,71 @@ test at all. Everything about the answer's form was correct; the content was inv
 disagreeing tells you far more than one model agreeing with itself — which is the argument
 for a panel rather than a single opinion in exactly the cases where you can't check.
 
+### A gate you have only read is a gate you have not tested
+
+**Symptom.** CI is green. The gate it is green on cannot fire.
+
+**Cause.** Two bugs in the *same* gate — the one forbidding an API key on a curl command
+line — neither visible by reading it:
+
+```
+grep -rnE '^[^#]*-H "Authorization: Bearer' ...
+```
+
+`[^#]*` cannot cross a `#`, so **any** earlier `#` on the line hid the violation: a URL
+fragment, a trailing shell comment. It also avoided matching its own definition only by
+accident, because the pattern itself contains a literal `#` — reformatting that line would
+have turned the gate red against the repo.
+
+The repair was worse:
+
+```
+grep -rnE -- '-H "Authorization: Bearer' --include='*.md' --exclude=field-notes.md .
+```
+
+`--` ends **option** parsing, not just pattern parsing. Every `--include` and `--exclude`
+after it became a *filename*. Five `No such file or directory` errors, an unfiltered
+recursive search, and a gate that was red against every possible tree — including a correct
+one. Use `-e` to introduce a pattern that starts with `-`.
+
+A third attempt, `^[[:space:]]*[^#[:space:]].*-H "Authorization: Bearer`, missed the
+ordinary indented `  -H "Auth…` form, because the leading `[^#[:space:]]` consumes the `-`
+of `-H` and leaves nothing for the rest of the pattern. That is the form every adapter
+actually writes, so the gate would have caught nothing real.
+
+**Fix.** Stop encoding "is not a comment" in the search pattern. Match the dangerous text
+plainly, then *filter* the hits whose line begins with a comment marker, anchoring on
+`grep -n`'s own `file:line:` prefix. Two concerns, two commands, neither able to break the
+other. Then **run it** — against a tree that must fail it and a tree that must not.
+
+**Measured.** `tests/test-lint-gates.sh` extracts every `run:` body out of the workflow file
+and executes each one three times: clean tree must exit 0, injected violation must exit
+non-zero, and after the revert it must exit 0 again. The third run is what distinguishes a
+working gate from a permanently-red one — without it, the `--` bug passes.
+
+15 of 17 gates pass all three. The two that are not exercised are named in the output, not
+omitted: the `shellcheck` step installs a package, and the `Test suite` step runs
+`tests/*.sh`, which includes that file — exercising it would recurse.
+
+### Reproduce in the environment you are reproducing
+
+**Symptom.** The new gate harness reported three gates failing that CI passes.
+
+**Cause.** It sandboxed the repo with `cp -R`, which copies the whole working directory.
+Several gates scan the **filesystem** (`grep -r`, `rglob`) rather than `git ls-files`, so
+they saw an ignored `logs/` directory of chat transcripts — full of absolute home paths,
+dangling doc URLs and the literal `Authorization: Bearer` string. Every one of those three
+"failures" was the harness, not the gate.
+
+**Fix.** Populate the sandbox from `git ls-files`, which is what `actions/checkout` gives
+CI. Separately, run each body under `bash -e`: GitHub Actions executes a `run:` block as
+`bash -e {0}`, and without `-e` the shell-syntax gate kept going past its failing `bash -n`
+and exited 0 — looking like a gate that does not fire, when in CI it does.
+
+**Measured.** Same harness, 10 passed / 5 failed before the two fixes, 15 passed / 0 failed
+after, with no change to any gate. A test environment that does not match the one being
+reproduced produces confident wrong answers — and here it produced three of them at once.
+
 ---
 
 ## Adding an entry

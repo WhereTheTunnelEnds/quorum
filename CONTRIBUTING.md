@@ -103,5 +103,34 @@ tests/drive-setup.exp n          # no to everything
 That test exists because driving the wizard under a real pty found a hang that produced no
 output and had to be killed at 400s. It was invisible in review: both code paths read fine.
 
-CI validates frontmatter, JSON, and shell syntax. It cannot validate that you ran anything —
-that part is on your honour, and it is the part that matters.
+The suite in `tests/` needs no credentials, no network and no vendor CLIs — it forces every
+provider unreachable and serves its own hostile fake provider. Run it:
+
+```bash
+for t in tests/*.sh; do bash "$t"; done
+```
+
+### If you add a CI gate, add the proof that it fires
+
+CI runs seventeen gates, and each one exists because something got through. A gate nobody
+has watched fail is not evidence — it is a green check mark asserting a property nobody
+tested. This repo has shipped three gates that could not fail and one that fired on valid
+input, and the API-key gate carried two separate bugs that were invisible on the page: a
+character class that could not cross a `#`, and a `--` that silently turned every
+`--include` into a filename.
+
+So `tests/test-lint-gates.sh` extracts each `run:` body straight out of `.github/workflows/lint.yml`
+and runs it three times — clean tree must pass, an injected violation must fail, and after
+the revert it must pass again. That third run is what separates a working gate from a
+permanently-red one.
+
+**Adding a gate means adding an `inject_<slug>` and `revert_<slug>` to that file.** Without
+one, the harness prints your gate as `NO INJECTION DEFINED — this gate is unproven` and
+says so in its own summary line. It will not quietly count it as covered.
+
+Three injections have to assemble their forbidden string at runtime, because written out
+whole they would trip the gate they test. That is the system working: the gates match on
+content, not on a path allowlist.
+
+CI still cannot validate that you *ran* the things above — that part is on your honour, and
+it is the part that matters.

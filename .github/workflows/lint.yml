@@ -66,12 +66,18 @@ jobs:
       - name: Agents and skills have valid frontmatter
         run: |
           fail=0
+          # mktemp, not a fixed /tmp/fm. Two jobs sharing a runner -- a matrix, or anything
+          # else running concurrently -- would read each other's frontmatter and report a
+          # verdict about the wrong file. A fixed name in a shared directory is a race
+          # whether or not it has lost yet.
+          fm=$(mktemp)
+          trap 'rm -f "$fm"' EXIT
           for f in agents/*.md skills/*/SKILL.md; do
             echo "checking $f"
             head -1 "$f" | grep -q '^---$' || { echo "  ERROR: no frontmatter"; fail=1; continue; }
-            awk 'NR>1 && /^---$/{exit} NR>1{print}' "$f" > /tmp/fm
-            grep -q '^name:' /tmp/fm        || { echo "  ERROR: no name:"; fail=1; }
-            grep -q '^description:' /tmp/fm || { echo "  ERROR: no description:"; fail=1; }
+            awk 'NR>1 && /^---$/{exit} NR>1{print}' "$f" > "$fm"
+            grep -q '^name:' "$fm"        || { echo "  ERROR: no name:"; fail=1; }
+            grep -q '^description:' "$fm" || { echo "  ERROR: no description:"; fail=1; }
           done
           exit $fail
 
@@ -179,9 +185,38 @@ jobs:
           # NOTE: no backticks in the messages below. The first version of this gate wrote
           # "it lands in argv and `ps` shows it" inside double quotes, and bash ran ps and
           # spliced a process list into the middle of the error.
-          if grep -rnE '^[^#]*-H "Authorization: Bearer' \
+          #
+          # "Not a comment" is expressed by FILTERING matches, not by trying to encode it in
+          # the search pattern. Two previous single-pattern attempts were each wrong in a
+          # different direction:
+          #
+          #   ^[^#]*-H "Authorization: Bearer
+          #     `[^#]*` cannot cross a '#', so any earlier '#' on the line hid the match --
+          #     a URL fragment, a shell comment after the command. It also escaped matching
+          #     its own definition only by accident, because the pattern contains a literal
+          #     '#'; reformatting this line would have turned the gate red against itself.
+          #
+          #   ^[[:space:]]*[^#[:space:]].*-H "Authorization: Bearer
+          #     the leading [^#[:space:]] consumes the '-' of '-H', leaving nothing for the
+          #     rest of the pattern -- so the ordinary indented `  -H "Auth...` form, which
+          #     is the form actually written in every adapter, was missed entirely. Measured:
+          #     it did not fire on a real violation appended to agents/ollama-agent.md.
+          #
+          # So: match the dangerous text plainly, then drop the hits whose line begins with a
+          # comment marker, using grep -n's own file:line: prefix as the anchor. The two
+          # concerns stay separate and neither can break the other.
+          #
+          # lint.yml excludes itself: the pattern above is text in this file and matches, and
+          # nothing here is executed as a curl invocation.
+          # -e, not --. The pattern begins with a '-', so it needs introducing as a pattern;
+          # `--` looks like it does that but it ends OPTION parsing entirely, which turns
+          # every following --include/--exclude into a filename. Measured: five
+          # "No such file or directory" errors and an unfiltered search that matched
+          # field-notes.md, i.e. a gate that is red no matter what the tree contains.
+          if grep -rnE -e '-H "Authorization: Bearer' \
                --include='*.md' --include='*.sh' --include='*.yml' \
-               --exclude=field-notes.md . ; then
+               --exclude=field-notes.md --exclude=lint.yml . \
+             | grep -vE '^[^:]*:[0-9]+:[[:space:]]*#' ; then
             echo
             echo 'ERROR: API key on a curl command line - it lands in argv, where ps shows it.'
             echo '       Write the header to a chmod 600 mktemp file and use -H @"$file".'
