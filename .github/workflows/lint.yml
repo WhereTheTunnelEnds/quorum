@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:      # so a run can be forced when a push-trigger is delayed or skipped
 
 jobs:
   validate:
