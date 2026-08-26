@@ -73,6 +73,64 @@ if wants copilot; then
   fi
 fi
 
+# --- Antigravity ---------------------------------------------------------------
+if wants antigravity || wants agy; then
+  # The binary is `agy`, NOT `antigravity`. See docs/field-notes.md.
+  if ! command -v agy >/dev/null 2>&1; then
+    if [ -x "$HOME/.local/bin/agy" ]; then
+      bad "agy       installed but not on PATH for non-interactive shells"
+      todo "echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> $ENVFILE"
+      note "its installer writes PATH to ~/.zshrc, which agents never read"
+    else
+      bad "agy       not installed"
+      todo "curl -fsSL https://antigravity.google/cli/install.sh | bash"
+    fi
+  else
+    # No cheap offline credential check exists: `agy models` and `agy agents` HANG when
+    # unauthenticated rather than failing, so they cannot be used as a probe. A short
+    # --print does fail fast, and costs one trivial call when already logged in.
+    _ag_err=$(mktemp)
+    timeout 60 agy --print "hi" >/dev/null 2>"$_ag_err"; _ag_rc=$?
+    if [ "$_ag_rc" = 0 ]; then
+      ok "agy       logged in ($(agy --version 2>/dev/null | head -1))"
+    elif grep -qi 'authentication' "$_ag_err" 2>/dev/null; then
+      bad "agy       not logged in"
+      todo "agy                  # opens the interactive login (browser)"
+      note "for headless/CI instead, use a Gemini API key — see docs/providers.md"
+      if [ "$FIX" = 1 ]; then
+        echo; echo "  launching 'agy' — complete the login, then quit the TUI to return here"; echo
+        agy || true
+        echo
+      fi
+    elif [ "$_ag_rc" = 124 ]; then
+      bad "agy       timed out (60s) with no auth error — is a login half-finished?"
+      todo "agy                  # run it interactively and see what it asks for"
+    else
+      bad "agy       rc=$_ag_rc: $(head -c 120 "$_ag_err" | tr '\n' ' ')"
+    fi
+    rm -f "$_ag_err"
+  fi
+fi
+
+# --- Ollama ----------------------------------------------------------------------
+if wants ollama; then
+  _ol_base="${OLLAMA_BASE:-http://localhost:11434}"
+  _ol_tags=$(curl -s -m 5 "$_ol_base/api/tags" 2>/dev/null)
+  if [ -z "$_ol_tags" ]; then
+    bad "ollama    no server at $_ol_base"
+    todo "ollama serve         # or: brew install ollama"
+  else
+    _ol_n=$(printf '%s' "$_ol_tags" | jq -r '.models | length' 2>/dev/null || echo 0)
+    case "$_ol_n" in ''|*[!0-9]*) _ol_n=0 ;; esac
+    if [ "$_ol_n" -eq 0 ]; then
+      bad "ollama    server up, no model pulled"
+      todo "ollama pull llama3.2:3b"
+    else
+      ok "ollama    $_ol_n model(s) — no auth required"
+    fi
+  fi
+fi
+
 # --- GLM / Z.AI ----------------------------------------------------------------
 if wants glm; then
   if [ "$SET_KEY" = 1 ]; then

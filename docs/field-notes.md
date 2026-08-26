@@ -361,6 +361,44 @@ answer.
 
 ---
 
+## Antigravity (`agy`)
+
+### The binary is not named after the vendor
+
+`command -v antigravity` returns nothing on a machine where it is installed and working.
+The installed binary is **`agy`**. Same class as GLM having no binary at all — see
+[the cross-cutting note](#a-missing-binary-proves-nothing-about-a-provider).
+
+### Unauthenticated subcommands hang instead of failing
+
+**Symptom.** `agy models` and `agy agents` produce nothing and never return.
+
+**Cause.** Without credentials they wait rather than erroring. `--print` does fail fast on
+the same machine, in the same state.
+
+**Measured** (Antigravity CLI 1.1.21, logged out):
+
+| Invocation | rc | stdout | stderr |
+|---|---|---|---|
+| `agy models` | **124** (timeout) | 0 | 0 |
+| `agy agents` | **124** (timeout) | 0 | 0 |
+| `agy --print "…"` | 1 | 0 | 107 — *"authentication required. Run 'agy' to log in"* |
+
+**Fix.** Never use a subcommand as a liveness or auth check for this provider. Probe with a
+short `--print` and a timeout. `quorum-auth` does exactly this, and treats a bare 124 with
+no auth message as its own diagnosis — a half-finished login.
+
+**Why it matters beyond `agy`.** A hang is the worst failure shape available: it consumes
+the whole timeout, produces nothing to classify, and looks identical to a slow model. This
+is what probe 2 exists to catch, and it is worth running against *every* subcommand an
+adapter might call, not just the main one.
+
+### Subcommand arguments are not free-form
+
+`agy mcp list` returns rc=2 — *"unexpected argument"* — with a useful hint: prompts are read
+only from `-p/--print`, `-i/--prompt-interactive`, or stdin. Check a subcommand's own
+`--help` before assuming a positional argument is accepted.
+
 ## Claude Code as a subprocess
 
 ### `claude -p` hangs on a permission prompt

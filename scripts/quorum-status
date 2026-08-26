@@ -81,6 +81,17 @@ else
   fi
 fi
 
+# --- Antigravity -----------------------------------------------------------------
+# The binary is `agy`, NOT `antigravity`. Presence only: probing auth costs a model call,
+# which does not belong in a status command. Use quorum-auth for that.
+if command -v agy >/dev/null 2>&1; then
+  ok "agy       installed ($(agy --version 2>/dev/null | head -1))  ->  quorum-auth agy"
+elif [ -x "$HOME/.local/bin/agy" ]; then
+  bad "agy       installed but NOT on PATH here  ->  add ~/.local/bin in ~/.zshenv"
+else
+  bad "agy       not installed"
+fi
+
 # --- Locally configured endpoints ------------------------------------------------
 ENDPOINT_DIR="${QUORUM_ENDPOINT_DIR:-$HOME/.config/quorum/endpoints}"
 if [ -d "$ENDPOINT_DIR" ]; then
