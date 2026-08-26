@@ -98,7 +98,8 @@ Two things follow, and they matter more than the number:
    now `error — truncated`, and the partial text is relayed as evidence rather than as an
    answer.
 
-`docs/adapter-contract.md` §6b already named this exact failure — *"a response that is
+[docs/adapter-contract.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/adapter-contract.md)
+§6b already named this exact failure — *"a response that is
 truncated mid-sentence … classifies as `ok`"* — and prescribed checking `stop_reason`. This
 adapter did not implement it. A contract the adapters do not follow is documentation, not a
 contract.
