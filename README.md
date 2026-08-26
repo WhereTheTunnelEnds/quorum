@@ -45,6 +45,7 @@ built by walking into each of those failures first.
 | **`add-provider`** | Your Claude probes a new provider and writes a verified adapter for it — MLX, Ollama, another CLI, anything |
 | **`quorum-verify`** | Re-runs the contract against live providers, so "verified" is a measurement, not a claim |
 | **`quorum-auth`** | Diagnoses what's unauthenticated and gives the one command that fixes each |
+| **`quorum-flags`** | Checks every flag the adapters depend on still exists in the live CLI |
 | **[Field notes](docs/field-notes.md)** | The failure catalogue, in symptom → cause → fix form |
 
 ## Install

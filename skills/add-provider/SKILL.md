@@ -38,6 +38,40 @@ already responsible for one panel falsely reporting a working provider as missin
 
 Establish the invocation the vendor actually documents, then confirm it by running it.
 
+## Step 0.5 — Read the **whole** flag surface first
+
+Before probing, dump the complete help and read all of it:
+
+```bash
+<cli> --help
+<cli> <subcommand> --help     # exec, chat, run — wherever the real work happens
+```
+
+Not the flags you expect to need — **all** of them. Copilot alone exposes around sixty, and
+an adapter written from the obvious ones missed `--available-tools`, `--excluded-tools`,
+`--output-format`, and `--secret-env-vars`, any of which changes how the adapter should be
+built.
+
+Four things to look for specifically, because they determine whether the adapter can exist
+at all:
+
+| Looking for | Typical spelling |
+|---|---|
+| Headless / one-shot | `-p`, `exec`, `--print`, `--json`, `--output-format` |
+| Don't ask the user | `--no-ask-user`, `--yes`, `--non-interactive`, `--autopilot` |
+| Sandbox / permission | `--sandbox`, `--plan`, `--allow-tool`, `--deny-tool`, `--mode` |
+| Working directory | `-C`, `--cwd`, `--add-dir` |
+
+Note the **variadic** ones (`<FILE>...`) as you go. A variadic flag will swallow a trailing
+prompt and hang the run — that is probe 2's most common cause and it is visible in `--help`
+before it costs you a timeout.
+
+Then snapshot it, so drift is detectable later:
+
+```bash
+quorum-flags --capture      # writes reference/flags/<provider>.txt
+```
+
 ## Step 1 — Run the six probes
 
 Full detail, including what each result means: `reference/probe-checklist.md`.
@@ -107,7 +141,8 @@ Copy the templates, then fill them from your notes — never from memory of the 
 ## Step 4 — Prove it
 
 ```bash
-scripts/quorum-verify <name>
+scripts/quorum-verify <name>      # does it work?
+scripts/quorum-flags              # do the flags it depends on still exist?
 ```
 
 It re-runs the mechanical probes against the live provider. **If it does not pass, the

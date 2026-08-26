@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# quorum-flags — keep adapters honest about the CLI surface they depend on.
+#
+#   quorum-flags                 # CHECK: every flag our adapters use still exists
+#   quorum-flags --capture       # snapshot each provider's --help into reference/flags/
+#   quorum-flags --diff          # what changed in the surface since the snapshot
+#   quorum-flags --list <prov>   # the provider's full flag surface, as it is today
+#
+# Why this exists: an adapter is a set of assumptions about someone else's CLI. Vendors
+# rename flags. When `--no-ask-user` becomes `--non-interactive`, the adapter does not
+# error in a way anyone notices — it hangs until the timeout, or returns nothing, and that
+# is indistinguishable from a model with nothing to say. See docs/field-notes.md.
+#
+# A static list of flags in a document goes stale silently. This checks the LIVE CLI, so
+# drift is caught the moment it happens rather than the next time someone needs an answer.
+
+set -uo pipefail
+
+_src="$0"
+while [ -L "$_src" ]; do
+  _d=$(cd -P "$(dirname "$_src")" && pwd); _src=$(readlink "$_src")
+  case "$_src" in /*) ;; *) _src="$_d/$_src" ;; esac
+done
+ROOT=$(cd -P "$(dirname "$_src")/.." && pwd)
+SNAP="$ROOT/reference/flags"
+
+pass=0; fail=0; warn=0
+P() { printf '  \033[32mOK\033[0m    %s\n' "$1"; pass=$((pass+1)); }
+F() { printf '  \033[31mGONE\033[0m  %s\n' "$1"; fail=$((fail+1)); }
+W() { printf '  \033[33m??\033[0m    %s\n' "$1"; warn=$((warn+1)); }
+
+# How to get each provider's full flag surface. Add a line when you add an adapter.
+help_for() {
+  case "$1" in
+    codex)   codex --help 2>&1; codex exec --help 2>&1 ;;
+    copilot) copilot --help 2>&1 ;;
+    claude)  claude --help 2>&1 ;;
+    agy)     agy --help 2>&1 ;;
+    *)       return 1 ;;
+  esac
+}
+
+# The binary each provider is actually invoked as. NOT always the provider name — see
+# docs/field-notes.md on why `command -v <vendor>` proves nothing.
+cmd_for() {
+  case "$1" in
+    codex) echo codex ;; copilot) echo copilot ;; claude) echo claude ;;
+    agy)   echo agy ;;   ollama)  echo curl ;;
+    *)     echo "$1" ;;
+  esac
+}
+
+# Flags an adapter actually depends on, harvested from its own documented invocations.
+#
+# Scoped to lines that invoke the provider binary, and git lines are excluded outright.
+# Without that scoping this harvests `--detach`, `--force`, `--stat` and `--no-pager` from
+# the worktree plumbing and reports them as missing provider flags — a false alarm that
+# would train you to ignore the check, which is worse than not having it.
+#
+# Long flags only: single-dash forms are too ambiguous to match reliably in prose.
+flags_used() {
+  _c=$(cmd_for "$1")
+  # Join backslash continuations FIRST. Real invocations span several lines, and scoping
+  # before joining silently drops every flag that is not on the same line as the binary.
+  cat "$ROOT/agents/$1-agent.md" "$ROOT/probes/$1.sh" 2>/dev/null \
+    | sed -e :a -e '/\\$/N; s/\\\n[[:space:]]*/ /; ta' \
+    | grep -E "(^|[|;(\` ])$_c " \
+    | grep -vE "^[[:space:]]*(git|#|>)" \
+    | grep -vE "[Dd]o not (use|reach|fall)|[Nn]ever (use|reach|widen)" \
+    | grep -oE -- '--[a-z][a-z0-9-]+' | sort -u
+}
+
+providers() {
+  for f in "$ROOT"/probes/*.sh; do
+    [ -e "$f" ] || continue
+    p=$(basename "$f" .sh)
+    help_for "$p" >/dev/null 2>&1 && echo "$p"
+  done
+}
+
+case "${1:-check}" in
+  --capture)
+    mkdir -p "$SNAP"
+    for p in $(providers); do
+      help_for "$p" > "$SNAP/$p.txt" 2>&1
+      printf '  captured %-10s %s lines\n' "$p" "$(wc -l < "$SNAP/$p.txt" | tr -d ' ')"
+    done
+    echo "Snapshot written to reference/flags/. Commit it — the diff is the point." ;;
+
+  --diff)
+    for p in $(providers); do
+      [ -f "$SNAP/$p.txt" ] || { echo "  $p: no snapshot (run --capture)"; continue; }
+      cur=$(mktemp); help_for "$p" > "$cur" 2>&1
+      a=$(grep -oE -- '--[a-z][a-z0-9-]+' "$SNAP/$p.txt" | sort -u)
+      b=$(grep -oE -- '--[a-z][a-z0-9-]+' "$cur" | sort -u)
+      added=$(comm -13 <(printf '%s\n' "$a") <(printf '%s\n' "$b") | tr '\n' ' ')
+      removed=$(comm -23 <(printf '%s\n' "$a") <(printf '%s\n' "$b") | tr '\n' ' ')
+      printf '\n\033[1m%s\033[0m\n' "$p"
+      [ -n "${removed// }" ] && printf '  \033[31mremoved:\033[0m %s\n' "$removed"
+      [ -n "${added// }" ]   && printf '  \033[32madded:\033[0m   %s\n' "$added"
+      [ -z "${removed// }" ] && [ -z "${added// }" ] && echo "  unchanged"
+      rm -f "$cur"
+    done ;;
+
+  --list)
+    p="${2:?usage: quorum-flags --list <provider>}"
+    help_for "$p" 2>/dev/null | grep -oE -- '--[a-z][a-z0-9-]+' | sort -u \
+      || { echo "quorum-flags: no help command known for '$p'" >&2; exit 1; } ;;
+
+  check|"")
+    echo "Checking that every flag our adapters use still exists in the live CLI."
+    echo
+    for p in $(providers); do
+      h=$(mktemp); help_for "$p" > "$h" 2>&1
+      printf '\033[1m%s\033[0m\n' "$p"
+      used=$(flags_used "$p")
+      [ -z "$used" ] && { W "no long flags found in the adapter (curl-based?)"; rm -f "$h"; continue; }
+      for f in $used; do
+        if grep -qF -- "$f" "$h"; then P "$f"; else F "$f  — not in --help any more"; fi
+      done
+      rm -f "$h"; echo
+    done
+    printf '%d present, %d missing, %d unknown\n' "$pass" "$fail" "$warn"
+    [ "$fail" -eq 0 ] || {
+      echo
+      echo "A missing flag does not fail loudly at runtime — it hangs, or returns nothing."
+      echo "Fix the adapter before trusting any answer from that provider."
+    }
+    [ "$fail" -eq 0 ] ;;
+
+  -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  *) echo "quorum-flags: unknown argument '$1'" >&2; exit 1 ;;
+esac

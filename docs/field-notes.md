@@ -101,6 +101,15 @@ invocation path precisely because these are not uniform.
 **How it was found.** A separate session ran `command -v glm`, got NOT FOUND, and reported
 the provider as missing. It was answering normally the whole time.
 
+**A second case, documented not measured:** Google's Antigravity CLI installs its binary as
+**`agy`**, not `antigravity`. So `command -v antigravity` returns nothing on a machine where
+it is installed and working. (Sourced from the CLI's own tool documentation; not yet
+verified here, because it is not installed on the machine where these notes were written.)
+
+**And a corollary for scripts:** check the *service*, not the binary. `ollama` can be
+installed with nothing serving, and a remote `OLLAMA_BASE` has no local binary at all —
+which is why `quorum-status` calls `/api/tags` instead of looking for a command.
+
 ---
 
 ## Codex (OpenAI / ChatGPT subscription)

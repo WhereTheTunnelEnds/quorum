@@ -267,6 +267,23 @@ Two rules for measuring, both learned the hard way:
 Then open a PR correcting the doc — those are more welcome than new features, because a
 stale entry is worse than a missing one. Someone trusts it.
 
+### A provider worked last week and now hangs or returns nothing
+
+Suspect a renamed flag before you suspect the model.
+
+```bash
+quorum-flags          # is every flag the adapter uses still in --help?
+quorum-flags --diff   # what changed in the surface since the last snapshot
+```
+
+This is the failure mode with no error message. When `--no-ask-user` becomes
+`--non-interactive`, the CLI does not complain in a way anyone sees — it waits for input
+that never comes, and the adapter reports a timeout or an empty answer. Both are
+indistinguishable from a model that had nothing useful to say.
+
+`quorum-flags` exits non-zero if any flag has vanished, so it belongs in the same habit as
+`quorum-verify` after a provider update.
+
 ### It says `4 passed` but the provider still seems broken
 
 `quorum-verify` checks the mechanical contract: it responds, it exits, and its failures are
