@@ -9,7 +9,7 @@ measured, so you can tell a claim from a guess.
 
 CLI behaviour changes. Entries measured against a specific version say so. Versions used
 for the current round: **Codex 0.148.0**, **Copilot CLI 1.0.80**, **Claude Code 2.1.246**,
-**Ollama 0.18.2**.
+**Ollama 0.18.2**, **Antigravity CLI 1.1.21**.
 Re-run `scripts/quorum-verify --all` after any provider update — a flag that quietly got
 renamed looks exactly like a model with nothing to say.
 
@@ -47,6 +47,45 @@ ones, which read `~/.zshenv`.
 
 **Fix.** Export credentials from `~/.zshenv`. Same idea on bash: `~/.bashrc` is skipped for
 non-interactive shells.
+
+### Vendor installers put PATH in the wrong file
+
+**Symptom.** A CLI you just installed works when you type it and is "command not found" from
+an agent, a cron job, or a launchd service — while `which` in your terminal happily prints
+its path.
+
+**Cause.** Installers append `export PATH=...` to `~/.zshrc` and `~/.bash_profile`, because
+those are what an interactive user needs. Agents get a **non-interactive, non-login** shell,
+which reads neither.
+
+**Measured** (Antigravity CLI 1.1.21, whose installer logs
+*"Appending PATH export to profile $HOME/.zshrc"* and reports
+*"PATH verification: ~/.local/bin is correctly configured in active PATH environment"*):
+
+| Shell | `command -v agy` |
+|---|---|
+| `zsh -lc` — login | found |
+| `zsh -c` — non-interactive, non-login (**what agents get**) | **not found** |
+
+The installer's own verification passed, because it checked the *active* environment — the
+interactive one it was invoked from.
+
+**Why it hides.** A Claude Code session launched from your terminal inherits that PATH, so
+everything works until something starts from a cleaner context. Then it breaks with no
+change to any config you touched.
+
+**Fix.** Add it to `~/.zshenv` yourself; the installer will not:
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshenv
+```
+
+**Generalise this.** After installing any provider CLI, verify it the way an agent will see
+it, not the way you do:
+```bash
+env -i HOME="$HOME" zsh -c 'command -v <binary>'
+```
+If that prints nothing, the adapter will fail for reasons that have nothing to do with the
+provider.
 
 ### Shell functions and aliases do not exist for agents
 

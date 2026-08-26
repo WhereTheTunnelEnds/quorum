@@ -51,6 +51,12 @@ guarantee nothing enforces. See [safety-model.md](safety-model.md).
 it stopped serving Pro/Ultra and free-tier users on 18 June 2026. Enterprise licences
 continue. Target `agy` instead.
 
+**After installing anything, verify it the way an agent sees it.** Vendor installers write
+PATH to `~/.zshrc` / `~/.bash_profile`, which non-interactive shells do not read — measured
+on Antigravity 1.1.21, where `agy` is found by a login shell and **not** by `zsh -c`. Check
+with `env -i HOME="$HOME" zsh -c 'command -v <binary>'` and add the export to `~/.zshenv`
+yourself if it comes back empty.
+
 **Check the service, not the binary, for anything that runs as a server.** `ollama` can be
 installed with nothing serving, and a remote `OLLAMA_BASE` has no local binary at all.
 
