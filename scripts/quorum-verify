@@ -109,7 +109,14 @@ verify_one() {
   else
     probe_broken "$PROMPT" >"$BOUT" 2>"$BERR"; BAD_RC=$?
     BAD_BYTES=$(wc -c < "$BOUT" | tr -d ' ')
-    P "failure shape recorded — rc=$BAD_RC, ${BAD_BYTES} bytes on stdout"
+    # Not an unconditional PASS: a "broken" call that behaves EXACTLY like the good one
+    # means probe_broken is not actually breaking anything, and the recorded failure shape
+    # is fiction. Report that rather than inflating the pass count.
+    if [ "$BAD_RC" = "$GOOD_RC" ] && [ "$BAD_BYTES" = "$GOOD_BYTES" ]; then
+      W "failure shape — broken call is byte-identical to the good one; probe_broken may not break anything"
+    else
+      P "failure shape recorded — rc=$BAD_RC, ${BAD_BYTES} bytes on stdout"
+    fi
     [ -n "$EXPECT_BROKEN_DESC" ] && I "documented: $EXPECT_BROKEN_DESC"
 
     # --- 4: is a broken call distinguishable from a good one, by ANY means? --------

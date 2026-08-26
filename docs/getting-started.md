@@ -92,7 +92,7 @@ cd quorum
 ./scripts/install.sh
 ```
 
-That symlinks five commands into `~/.local/bin`, so `git pull` updates them. If the script
+That symlinks eight commands into `~/.local/bin`, so `git pull` updates them. If the script
 says that directory isn't on your `PATH`, add it **in `~/.zshenv`, not `~/.zshrc`**:
 
 ```bash
@@ -198,13 +198,15 @@ Want: `4 passed, 0 failed`.
 > report a perfectly working provider as missing.
 
 **Optional — run Claude Code itself on GLM.** Useful for bulk work you don't want to spend
-Claude quota on:
+Claude quota on, and required for GLM's verify and delegate tiers.
 
 ```bash
-quorum-claude-on --init zai
+quorum-auth glm --init-endpoint      # writes a working preset; contains no key
 ```
 
-Then edit `~/.config/quorum/endpoints/zai.env`:
+That is all you need. (`quorum-claude-on --init zai` writes a *blank* template for a
+provider Quorum does not already know; run it only for a new endpoint, and note it refuses
+to overwrite an existing file.) The preset it writes:
 
 ```bash
 ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"

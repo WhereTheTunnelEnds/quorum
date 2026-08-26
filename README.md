@@ -129,7 +129,7 @@ every other part of Quorum is unaffected.
 
 ## Bring your own provider
 
-The three built-in adapters are examples of a pattern, not the point of the repo.
+The built-in adapters are examples of a pattern, not the point of the repo.
 
 ```
 /quorum:add-provider mlx

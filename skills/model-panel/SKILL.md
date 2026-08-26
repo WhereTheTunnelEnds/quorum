@@ -56,11 +56,17 @@ copilot -p "$Q" --plan -s --no-ask-user --allow-tool "read"
 # GLM — no CLI exists; call the API directly. Do not check for a `glm` binary.
 jq -n --rawfile q prompt.txt \
   '{model:"glm-5.3",max_tokens:8000,messages:[{role:"user",content:$q}]}' > body.json
-curl -s -m 300 https://api.z.ai/api/anthropic/v1/messages \
+BODY=$(mktemp)
+CODE=$(curl -s -m 300 -o "$BODY" -w '%{http_code}' https://api.z.ai/api/anthropic/v1/messages \
   -H "Authorization: Bearer $Z_AI_API_KEY" \
   -H "anthropic-version: 2023-06-01" \
-  -H "content-type: application/json" \
-  -d @body.json | jq -r '[.content[]|select(.type=="text")|.text]|join("")'
+  -H "content-type: application/json" -d @body.json)
+# The `else` branch is load-bearing. Without it, a failing call makes jq say
+# "Cannot iterate over null" and emit ZERO BYTES — which reads as "the model had nothing
+# to say". Measured: bad model id -> HTTP 400, 0 bytes out. See docs/field-notes.md.
+jq -r 'if .content then ([.content[]|select(.type=="text")|.text]|join(""))
+       else (.error.message // tostring) end' "$BODY"
+[ "$CODE" = 200 ] || echo "(http $CODE — this is an error, not an answer)" >&2
 ```
 
 **Dispatch every selected panelist in ONE message** so they run in parallel. Use `run_in_background: true`;
@@ -119,12 +125,20 @@ not benchmarks.
 2. **Fan out in parallel.** Dispatch the selected consultants in a **single message with
    multiple Agent tool calls** so they run concurrently.
 
-   Dispatch each in **consult mode** — every one of them enforces read-only through its
-   own harness (`--plan`, `--sandbox read-only`), so a panel cannot touch your tree:
+   Dispatch each in **consult mode**. A panel cannot touch your tree — but the *mechanism*
+   differs per provider, and two of them are not flag-based at all:
 
-   - `glm-agent` — inline any file contents; it has no machine access in consult mode
-   - `codex-agent` — name file paths; it reads the repo itself under an OS sandbox
-   - `copilot-agent` — name file paths; adds GitHub context (PRs, issues, CI)
+   | agent | what makes it read-only | pass files how |
+   |---|---|---|
+   | `codex-agent` | `--sandbox read-only` (OS-level) | name paths; it reads the repo |
+   | `copilot-agent` | `--plan` (harness blocks edits) | name paths; adds GitHub context |
+   | `antigravity-agent` | headless permission auto-deny — **not** `--sandbox`, which does nothing | name paths; it reads the repo |
+   | `glm-agent` | no machine access at all | **inline file contents** |
+   | `ollama-agent` | no machine access at all | **inline file contents** |
+
+   Do not assume a flag name implies enforcement. For Antigravity the read-only guarantee
+   comes from `-p` auto-denying permissions it cannot prompt for, and its adapter refuses
+   to run if a global allow-rule would override that.
 
    **When a claim is checkable, ask for verify mode instead.** If the disagreement turns
    on "does this actually fail?" or "what does this really output?", a panelist that ran

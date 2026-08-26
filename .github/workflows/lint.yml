@@ -31,8 +31,10 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
           # Probe files are sourced, not executed; `qt` is provided by quorum-verify.
-          shellcheck -e SC2154,SC1091 -S warning scripts/* || true
-          shellcheck -e SC2154,SC1091,SC2148 -S warning probes/*.sh || true
+          # No `|| true`. A gate that cannot fail is not a gate — it is the same object
+          # as a CLI that exits 0 with zero bytes, which is what this repo exists to catch.
+          shellcheck -e SC2154,SC1091,SC2088,SC1090,SC2034 -S error scripts/quorum-* scripts/prep-image scripts/make-probe-image scripts/install.sh
+          shellcheck -e SC2154,SC1091,SC2148,SC2034 -S error probes/*.sh
 
       - name: Agents and skills have valid frontmatter
         run: |
@@ -52,7 +54,12 @@ jobs:
           # attacker-influenced content. Granting it Write/Edit makes it a confused deputy.
           fail=0
           for f in agents/*.md; do
-            if awk 'NR>1 && /^---$/{exit} {print}' "$f" | grep -E '^tools:.*(Write|Edit)' ; then
+            fm=$(awk 'NR>1 && /^---$/{exit} {print}' "$f")
+            # A MISSING tools: line is worse than a wrong one — the agent inherits every
+            # tool, Write included, and the old grep passed it silently.
+            if ! printf '%s' "$fm" | grep -q '^tools:'; then
+              echo "ERROR: $f declares no tools: line (inherits Write/Edit by default)"; fail=1
+            elif printf '%s' "$fm" | grep -qE '^tools:.*(Write|Edit|NotebookEdit)'; then
               echo "ERROR: $f grants a write tool"; fail=1
             fi
           done

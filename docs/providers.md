@@ -36,8 +36,13 @@ from a row in this table alone.
 
 **No. It is once per machine, and for some providers it can be scripted away entirely.**
 
-Every provider stores credentials after the first login — `agy` writes
-`~/.gemini/antigravity-cli/settings.json`, Codex and Copilot keep their own OAuth state.
+Every provider stores credentials after the first login — `agy` keeps state under
+`~/.gemini/antigravity-cli/`, Codex and Copilot keep their own OAuth state (Copilot in the
+system credential store).
+
+Do not confuse `~/.gemini/antigravity-cli/settings.json` with credential storage: that file
+holds **permissions**, and it is the one `antigravity-agent`'s guard reads before claiming
+read-only.
 You do not re-authenticate per session, per project, or per call.
 
 | Provider | Browser login | Scriptable, no browser |

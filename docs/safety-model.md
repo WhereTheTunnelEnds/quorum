@@ -30,7 +30,21 @@ questions.
 |---|---|---|
 | Codex | `--sandbox read-only` | OS-level sandbox |
 | Copilot | `--plan` | Harness blocks edits and mutating shell |
+| Antigravity | headless `-p` auto-denying any permission it cannot prompt for | Harness refusal — **not** `--sandbox`, which does nothing here |
 | GLM | Direct HTTPS call to the Messages API | No machine access at all |
+| Ollama | Direct HTTP call to a local model server | No machine access at all; **no harness of any kind** |
+
+Two of those are worth dwelling on, because their enforcement story is the least obvious:
+
+**Antigravity** is the only one whose read-only comes from a *refusal* rather than a flag.
+Measured: `--sandbox` produces byte-identical output with and without it, while headless
+`-p` refuses `write_file` outright. The model tries and is denied. That guarantee can be
+overridden by a global allow-rule, so its adapter checks for one and refuses to run rather
+than quietly claiming a boundary it no longer has.
+
+**Ollama** has no sandbox, no tool loop, and no file-editing capability at all — so it is
+read-only by *absence*, and gets a consult tier only. That is why its adapter has no verify
+or delegate section: there would be nothing to enforce them with.
 
 Note what the GLM row means in practice: it has no filesystem, so **you must inline file
 contents** into the prompt. Anything it says about your codebase is inference from what you

@@ -171,8 +171,18 @@ fi
 # --- GLM / Z.AI ----------------------------------------------------------------
 if wants glm; then
   if [ "$SET_KEY" = 1 ]; then
-    printf '  paste your Z.AI key (input hidden, not echoed): '
-    read -rs KEY; echo
+    if [ ! -t 0 ]; then
+      echo "  --set-key needs a terminal (it reads the key from a hidden prompt)" >&2
+      echo "  run it yourself: quorum-auth glm --set-key" >&2
+      exit 1
+    fi
+    printf '  paste your Z.AI key (input hidden, not echoed, %ss): ' "${QUORUM_ASK_TIMEOUT:-120}"
+    # Bounded, like every read in quorum-setup. A prompt that can block forever is the same
+    # hang class, and this one is worse: it is silent because the input is hidden.
+    if ! read -rs -t "${QUORUM_ASK_TIMEOUT:-120}" KEY; then
+      echo; echo "  timed out; no change made" >&2; KEY=""
+    fi
+    echo
     if [ -z "$KEY" ]; then
       echo "  nothing entered; no change made" >&2
     else

@@ -32,14 +32,14 @@ leave the others out rather than inventing them.
 [the template](skills/add-provider/templates/probe.sh.template). `probe_broken()` is the
 part that matters. It must fail the way the adapter says it fails.
 
-**3a. Passing output from `scripts/quorum-flags`** and a captured
+**3. Passing output from `scripts/quorum-flags`** and a captured
 `reference/flags/<name>.txt` — so the next person can see when the vendor renames something
 out from under the adapter.
 
-**3. Passing output from `scripts/quorum-verify <name>`** — paste it into the PR body,
+**4. Passing output from `scripts/quorum-verify <name>`** — paste it into the PR body,
 including the provider's CLI version. This is the evidence.
 
-**4. A field-notes entry**, if you hit anything surprising. Use the documented format and
+**5. A field-notes entry**, if you hit anything surprising. Use the documented format and
 mark anything you inferred rather than observed.
 
 ## Submitting a field note
