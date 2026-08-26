@@ -96,8 +96,12 @@ jobs:
           # Pasting real terminal output into docs is how this repo documents things, and
           # it is also how an absolute home path reaches a public repo. Caught once, in a
           # verbatim installer quote, AFTER earlier manual scans had passed clean.
+          # reference/ holds vendor --help output captured verbatim; those contain the
+          # vendors' own placeholder examples (/home/user/projects) and must not be edited.
+          # Generic placeholders are fine anywhere; a real-looking username is not.
           if grep -rInE '/(Users|home)/[a-z][a-z0-9_-]+' --include='*.md' --include='*.sh' \
-               --include='*.yml' --include='*.json' . ; then
+               --include='*.yml' --include='*.json' . \
+             | grep -vE '/(Users|home)/(user|you|me|username|name|someone|example)\b' ; then
             echo "ERROR: absolute home path found — use \$HOME or ~ instead"; exit 1
           fi
           echo "no absolute home paths"
