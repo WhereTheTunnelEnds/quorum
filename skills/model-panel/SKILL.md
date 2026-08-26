@@ -64,6 +64,12 @@ curl -s -m 300 https://api.z.ai/api/anthropic/v1/messages \
 **Dispatch all three in ONE message** so they run in parallel. Use `run_in_background: true`;
 a full panel takes 2–10 minutes. Sequential dispatch triples wall-clock for no benefit.
 
+**Mind the background-wait ceiling.** A real panel run was terminated mid-synthesis at 600s
+with *"Background tasks still running after 600s; terminating."* Two panelists had answered
+and the third had not. If a panel is cut short, say which panelists actually reported —
+a truncated panel that reads as complete is the failure this skill exists to prevent.
+Raising `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` avoids it for long panels.
+
 ## Verify Claims Independently
 
 A panelist saying it verified something is **not** verification.

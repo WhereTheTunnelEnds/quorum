@@ -393,6 +393,77 @@ the whole timeout, produces nothing to classify, and looks identical to a slow m
 is what probe 2 exists to catch, and it is worth running against *every* subcommand an
 adapter might call, not just the main one.
 
+### `--output-format json` emits JSON that `jq` refuses
+
+**Symptom.** The vendor's own documented CI recipe fails:
+```bash
+result=$(agy -p "…" --output-format json)
+status=$(echo "$result" | jq -r '.status')     # jq: parse error
+```
+
+**Cause.** The payload carries **raw control characters inside string values** — a literal
+newline in `.response`. RFC 8259 requires U+0000–U+001F to be escaped, so `jq` rejects it.
+Python's `json` module tolerates it and parses the same bytes fine.
+
+**Measured** (Antigravity CLI 1.1.21):
+
+| Parser | Result |
+|---|---|
+| `jq` | *"Invalid string: control characters from U+0000 through U+001F must be escaped"* |
+| `python3 -c "json.loads(...)"` | parses; `status`, `response`, `error`, `usage` all present |
+| `tr -d '\n' \| jq` | works — but destroys newlines in multi-line responses |
+
+**Fix.** Do not build an adapter's classification on `jq` parsing this. Keep the **exit
+code** as the discriminator and treat the JSON as an optional richer signal, parsed with
+Python if you want `.status` / `.error`.
+
+**The general lesson.** A documented output format is a claim, not a guarantee. Parse the
+real bytes with your real parser during probe 4 before depending on it — this recipe is in
+the vendor's published CI guide and does not run as written.
+
+### The docs and the binary disagree about headless writes
+
+**This one decides whether the consult tier is honest, so it is worth stating loudly.**
+
+The official documentation says:
+
+> *"Workspace file operations are auto-allowed, while actions like shell commands are
+> soft-denied by default."*
+
+**Measured behaviour is the opposite for writes.** On 1.1.21, asking headless `agy` to
+create a file *inside* its own `--add-dir` workspace is refused:
+
+> *"a tool required the `write_file` permission that headless mode cannot prompt for, so it
+> was auto-denied."*
+
+Confirmed both inside the workspace and outside it (`/tmp`).
+
+**Why it matters.** This repo's read-only guarantee for `antigravity-agent` rests on that
+auto-deny. It holds today and it is genuinely harness-enforced — the model tries and is
+refused. But it rests on behaviour the vendor documents *differently*, so a future release
+that matches the docs would silently turn a read-only tier into a writing one.
+
+**Fix.** Re-run `quorum-verify antigravity` after any `agy` update, and treat probe 3 —
+*try to write, then check the filesystem* — as a recurring check rather than a one-off.
+Where a guarantee depends on undocumented behaviour, say so in the adapter instead of
+letting the next reader assume the docs back it up.
+
+### Permission rule syntax, for pre-approving specific tools
+
+From the official docs — useful if you want a *narrower* grant than
+`--dangerously-skip-permissions`, which is unconstrained:
+
+```json
+{ "permissions": {
+    "allow": ["command(git)", "read_file(/var/log/app)", "write_file(src/)", "mcp(linter/*)"],
+    "deny":  ["command(rm -rf)", "command(sudo)", "write_file(.git/)"],
+    "ask":   ["command(*)"] } }
+```
+
+Note this file is **global**, not per-workspace: a rule added for one project applies to
+every `agy` run on the machine, including Quorum's consult calls. That is why
+`antigravity-agent` checks for `permissions.allow` before claiming read-only.
+
 ### Subcommand arguments are not free-form
 
 `agy mcp list` returns rc=2 — *"unexpected argument"* — with a useful hint: prompts are read
