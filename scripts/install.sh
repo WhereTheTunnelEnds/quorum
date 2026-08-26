@@ -18,6 +18,15 @@ TOOLS="quorum-setup quorum-status quorum-auth quorum-flags quorum-claude-on quor
 
 mkdir -p "$DEST"
 
+# Warn if these symlinks already point at a DIFFERENT clone. Silently repointing them is
+# how you end up with eight dangling commands on PATH after deleting a throwaway clone.
+existing=$(readlink "$DEST/quorum-verify" 2>/dev/null || true)
+case "$existing" in
+  ""|"$SRC/quorum-verify") ;;
+  *) printf '  NOTE  re-pointing an existing install:\n        was %s\n        now %s\n\n' \
+       "$(dirname "$existing")" "$SRC" ;;
+esac
+
 for t in $TOOLS; do
   if [ ! -f "$SRC/$t" ]; then echo "  MISSING  $t (skipped)"; continue; fi
   chmod +x "$SRC/$t"

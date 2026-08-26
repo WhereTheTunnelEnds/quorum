@@ -239,6 +239,11 @@ CLAUDE_CODE_AUTO_COMPACT_WINDOW="1048576"
 PRESET
           chmod 600 "$_ep"
           printf '        \033[32mcreated\033[0m %s\n' "$_ep"
+          # The gap is closed now. Without this the status was computed before the write
+          # and never revisited, so the documented success path rendered in red, named
+          # itself as its own unrun "fix", and exited 1.
+          need=$((need-1))
+          ok "glm       endpoint preset created (verify + delegate tiers usable)"
         fi
       fi
     else

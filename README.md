@@ -78,10 +78,16 @@ pasted into an agent chat becomes transcript.
 **Or copy the pieces in manually** — everything here is plain markdown and shell:
 
 ```bash
-cp agents/*.md    ~/.claude/agents/
-cp -r skills/*    ~/.claude/skills/
+mkdir -p ~/.claude/agents ~/.claude/skills ~/.claude/commands
+cp    agents/*.md   ~/.claude/agents/
+cp -r skills/*      ~/.claude/skills/
+cp    commands/*.md ~/.claude/commands/
 ./scripts/install.sh
 ```
+
+The `mkdir -p` is not optional — on a machine where those directories do not yet exist,
+`cp` fails with *"Not a directory"* and installs nothing. And `commands/` must be copied
+too, or none of the `/quorum:*` commands this guide later tells you to run will exist.
 
 Both halves are needed: the plugin is what Claude uses, the scripts are what your shell
 uses. Then check what's reachable:

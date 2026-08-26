@@ -83,6 +83,18 @@ verify_one() {
   GOOD_RC=$?
   GOOD_BYTES=$(wc -c < "$OUT" | tr -d ' ')
 
+  # 127 = command not found. A provider you have not installed is NOT a failure — the
+  # guide promises an incomplete provider set is "a normal, working state". Reporting a
+  # wall of red for subscriptions someone deliberately does not own trains them to ignore
+  # this tool, and 127 must certainly never PASS a liveness check.
+  if [ "$GOOD_RC" = "127" ] || grep -qi 'command not found' "$ERR" 2>/dev/null; then
+    W "not installed — skipped (this is normal; providers are optional)"
+    I "$(tail -c 120 "$ERR" | tr '\n' ' ')"
+    skipped=$((skipped+1)); warned=$((warned-1))
+    rm -f "$PROMPT" "$OUT" "$ERR"
+    return 0
+  fi
+
   if [ "$GOOD_RC" = "124" ]; then
     F "non-interactive exit — hung until ${QUORUM_TIMEOUT}s (exit 124)"
     I "the invocation is missing a 'do not ask the user' flag"
@@ -181,4 +193,6 @@ if [ $(( pass + fail + warned )) -eq 0 ]; then
   echo "quorum-verify: nothing was verified — no probe ran" >&2
   exit 1
 fi
-[ "$fail" -eq 0 ] && [ "$skipped" -eq 0 ]
+# A provider that is merely absent does not fail the run; one that is present and broken
+# does. That distinction is the whole point of the skipped bucket.
+[ "$fail" -eq 0 ]

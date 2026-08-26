@@ -1,5 +1,5 @@
 ---
-description: "Fan a question out to GLM, Codex, and Copilot in parallel (read-only), then synthesize their answers against your own."
+description: "Fan a question out to every available provider in parallel (read-only), then synthesize their answers against your own."
 argument-hint: "<the question or decision>"
 ---
 

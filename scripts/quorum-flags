@@ -78,6 +78,17 @@ providers() {
   done
 }
 
+# Adapters with no CLI to interrogate — curl-based providers have no --help surface, so
+# there are no flag names to drift. Say so explicitly: "13 present, 0 missing" over three
+# of five adapters reads as full coverage when it is not.
+uncovered() {
+  for f in "$ROOT"/probes/*.sh; do
+    [ -e "$f" ] || continue
+    p=$(basename "$f" .sh)
+    help_for "$p" >/dev/null 2>&1 || echo "$p"
+  done
+}
+
 case "${1:-check}" in
   --capture)
     mkdir -p "$SNAP"
@@ -120,7 +131,12 @@ case "${1:-check}" in
       done
       rm -f "$h"; echo
     done
-    printf '%d present, %d missing, %d unknown\n' "$pass" "$fail" "$warn"
+    unc=$(uncovered | tr '\n' ' ')
+    if [ -n "${unc// }" ]; then
+      printf 'not checked (curl-based, no --help surface to drift): %s\n' "$unc"
+    fi
+    printf '%d present, %d missing, %d unknown — across %s of %s adapters\n' \
+      "$pass" "$fail" "$warn" "$(providers | wc -l | tr -d ' ')" "$(ls "$ROOT"/probes/*.sh | wc -l | tr -d ' ')"
     [ "$fail" -eq 0 ] || {
       echo
       echo "A missing flag does not fail loudly at runtime — it hangs, or returns nothing."

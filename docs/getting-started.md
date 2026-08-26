@@ -92,6 +92,9 @@ cd quorum
 ./scripts/install.sh
 ```
 
+Clone it wherever you keep code — nothing below assumes a particular location, because
+`install.sh` puts the commands on your `PATH` and every later step calls them by bare name.
+
 That symlinks eight commands into `~/.local/bin`, so `git pull` updates them. If the script
 says that directory isn't on your `PATH`, add it **in `~/.zshenv`, not `~/.zshrc`**:
 
@@ -109,8 +112,13 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshenv
 quorum-status
 ```
 
-You should get a list of providers, all showing as unavailable. That's correct — nothing is
-configured yet. If you get `command not found`, the `PATH` line didn't take.
+You should get a provider table. Anything you haven't configured shows `--`, which is
+correct at this point — nothing is set up yet. If you get `command not found`, the `PATH`
+line didn't take.
+
+Two rows will look "already done" and that is expected: **claude** reports logged in if you
+are using Claude Code at all, and **ollama** reports OK if you happen to have its server
+running. You may also see a `quorum-claude-on presets` section, which is covered in step 5.
 
 At any point from here on, `quorum-auth` will tell you what's still unauthenticated and the
 exact command that fixes each one. The rest of this guide is the long-form version of that.
@@ -118,9 +126,16 @@ exact command that fixes each one. The rest of this guide is the long-form versi
 **Prefer not to use the plugin?** Copy the pieces in directly:
 
 ```bash
-cp agents/*.md ~/.claude/agents/
-cp -r skills/* ~/.claude/skills/
+mkdir -p ~/.claude/agents ~/.claude/skills ~/.claude/commands
+cp    agents/*.md   ~/.claude/agents/
+cp -r skills/*      ~/.claude/skills/
+cp    commands/*.md ~/.claude/commands/
+./scripts/install.sh
 ```
+
+The `mkdir -p` is not optional — on a machine where those directories do not yet exist,
+`cp` fails with *"Not a directory"* and installs nothing. And `commands/` must be copied
+too, or none of the `/quorum:*` commands this guide later tells you to run will exist.
 
 ---
 
@@ -141,7 +156,7 @@ codex login status
 "answers questions" are different claims:
 
 ```bash
-cd ~/quorum && ./scripts/quorum-verify codex
+quorum-verify codex
 ```
 
 Want: `4 passed, 0 failed`.
@@ -162,7 +177,7 @@ copilot              # first run walks you through auth, then /exit
 
 ```bash
 copilot --version
-cd ~/quorum && ./scripts/quorum-verify copilot
+quorum-verify copilot
 ```
 
 Want: `4 passed, 0 failed`.
@@ -187,7 +202,7 @@ Open a new terminal.
 
 ```bash
 [ -n "$Z_AI_API_KEY" ] && echo "key is set" || echo "key is NOT set"
-cd ~/quorum && ./scripts/quorum-verify glm
+quorum-verify glm
 ```
 
 Want: `4 passed, 0 failed`.
@@ -229,6 +244,19 @@ API call.
 quorum-claude-on zai -p "reply with OK" --allowedTools "Read"
 ```
 
+**Want:** `OK` as the last line. Two warnings above it are **normal and expected**, not
+failures:
+
+```
+⚠ claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is set
+[claude-code:unrecognized_model] {"model":"glm-5.3","query_source":"sdk"}
+```
+
+The first is Claude Code noting that this run points at a third-party endpoint — which is
+the entire point. The second is it saying `glm-5.3` isn't a model *it* knows, which is also
+correct. Both appear on every successful run. See
+[troubleshooting.md](troubleshooting.md).
+
 ---
 
 ## 6. Optional: a local model
@@ -258,7 +286,7 @@ work, not to tie-breaking hard calls.
 ```bash
 quorum-status                          # what's reachable
 quorum-auth                            # what still needs auth, and the fix for each
-cd ~/quorum && ./scripts/quorum-verify --all   # does each one actually work
+quorum-verify --all   # does each one actually work
 ```
 
 Those three answer different questions, in order: is it *there*, is it *authenticated*, does
@@ -290,7 +318,7 @@ autocomplete. What comes back:
 If a panelist failed, you'll be told which and why. A consensus of two is a much weaker
 claim than a consensus of four, and you can't tell the difference unless someone says so.
 
-**Don't use a panel for routine work.** Four models on a one-line fix is waste, and it
+**Don't use a panel for routine work.** A full panel on a one-line fix is waste, and it
 trains you to stop reaching for it when a decision actually is expensive.
 
 ---
@@ -307,7 +335,7 @@ tree. You get back a path, a branch, and a diffstat.
 
 ```bash
 git worktree list
-git -C ../.worktrees/<branch> diff
+git -C ../.worktrees/<provider>/<slug> diff
 ```
 
 Two rules worth internalising:

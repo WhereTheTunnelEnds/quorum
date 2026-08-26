@@ -158,10 +158,19 @@ if ask "run the interactive logins now ($AUTH --fix)?"; then "$AUTH" --fix || tr
 
 # ── 5. prove it ─────────────────────────────────────────────────────────────────
 b "5. Does it actually work?"
-echo "  Authentication is not the same as working. This makes real calls to each provider."
-if [ "$CHECK" -eq 1 ] || ask "run quorum-verify --all now?"; then
+echo "  Authentication is not the same as working — only a real call proves that."
+# --check is a READINESS REPORT and must stay cheap: it previously ran the full verify
+# suite, so the flag that sounds passive was the expensive one, and /quorum:setup fired
+# five billable provider calls every time. Never print the header as though the proof ran.
+if [ "$CHECK" -eq 1 ]; then
+  echo "  Skipped: --check is a readiness report and does not spend provider quota."
+  echo "  To actually prove it:  quorum-verify --all"
+elif ask "run quorum-verify --all now? (makes a real call to each provider)"; then
   if command -v quorum-verify >/dev/null 2>&1; then quorum-verify --all || true
   else "$ROOT/scripts/quorum-verify" --all || true; fi
+else
+  echo "  Skipped — nothing has been proven to work yet."
+  echo "  Run when ready:  quorum-verify --all"
 fi
 
 b "Next"
