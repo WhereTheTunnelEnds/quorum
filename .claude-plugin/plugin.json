@@ -12,6 +12,7 @@
   "keywords": [
     "claude-code", "subagents", "agent-skills", "multi-model", "multi-provider",
     "codex", "copilot", "glm", "zai", "mlx", "ollama", "local-llm",
+    "antigravity", "gemini",
     "delegation", "code-review", "second-opinion", "sandbox", "worktree"
   ]
 }

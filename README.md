@@ -39,7 +39,7 @@ built by walking into each of those failures first.
 
 | | |
 |---|---|
-| **4 verified adapters** | `glm-agent`, `codex-agent`, `copilot-agent`, `ollama-agent` — every flag field-tested, every failure mode documented |
+| **5 verified adapters** | `glm-agent`, `codex-agent`, `copilot-agent`, `ollama-agent`, `antigravity-agent` — every flag field-tested, every failure mode documented |
 | **`model-panel`** | Fan a question to all three in parallel, then synthesize consensus, splits, and outliers |
 | **`delegate-task`** | Hand over whole units of work; each runs in an isolated worktree you review as a diff |
 | **`add-provider`** | Your Claude probes a new provider and writes a verified adapter for it — MLX, Ollama, another CLI, anything |
@@ -110,6 +110,7 @@ documented: [docs/providers.md](docs/providers.md).
 | Codex | `codex` CLI, `codex login` (ChatGPT subscription) |
 | Copilot | `copilot` CLI (GitHub Copilot subscription) |
 | GLM | `Z_AI_API_KEY` exported from `~/.zshenv` (Z.AI Coding Plan) |
+| Antigravity | `agy` CLI, one browser login (Antigravity subscription). **Consult only** |
 | anything else | build it with `/quorum:add-provider` |
 
 Plus `jq`, `curl`, `git`, and `bash`. `timeout(1)` is used for hang detection — macOS needs

@@ -399,6 +399,99 @@ adapter might call, not just the main one.
 only from `-p/--print`, `-i/--prompt-interactive`, or stdin. Check a subcommand's own
 `--help` before assuming a positional argument is accepted.
 
+### `--add-dir` is the workspace; the current directory is ignored
+
+**Symptom.** Probe 3 "passes" — you ask `agy` to create `probe3.txt` in a scratch directory,
+`ls` shows nothing, and you conclude writes are blocked. They were not. The file exists.
+
+**Cause.** `agy` does not treat cwd as its workspace. With no `--add-dir` it works inside
+`~/.gemini/antigravity-cli/scratch/` and writes there, whatever directory you launched it
+from. The transcript even tells you so, in a `file://` link that is easy to skim past.
+
+**Fix.** Always pass `--add-dir "$REPO"`, and when probing, check the location the output
+actually names — not the one you assumed.
+
+**Measured** (Antigravity CLI 1.1.21): run from `$(mktemp -d)` with `--sandbox -p "create
+probe3.txt"` → rc=0, cwd empty, and `~/.gemini/antigravity-cli/scratch/probe3.txt` present
+containing `WROTE`. With `--add-dir "$d"` the same prompt was auto-denied instead.
+
+> The standing advice is *check the filesystem, not the transcript*. This is its sharper
+> form: **check the filesystem the provider is actually using.** A cwd-based `ls` returning
+> nothing is not evidence of a boundary if the provider was never working in cwd — it is a
+> false pass, and it fails in the safe-looking direction.
+
+### Headless mode is read-only by default — and the denial is shaped like success
+
+**Symptom.** A consult call returns exit 0 and an empty body. Nothing indicates failure.
+
+**Cause.** In `--print` mode any tool needing a permission that cannot be prompted for is
+**auto-denied by the harness**. The model attempts the call, the CLI refuses, the turn ends
+with no output. The explanation goes to stderr only.
+
+**Fix.** Classify on stderr text *and* emptiness, never on `$?` alone:
+
+```bash
+grep -qE 'auto-denied|no output produced' "$ERR" && ST=error
+```
+
+**Measured** (1.1.21, scratch workspace via `--add-dir`):
+
+| Tool | Result |
+|---|---|
+| `read_file` | allowed — rc=0, contents returned verbatim |
+| `write_file` | **auto-denied** — rc=0, **0 bytes stdout**, 309 bytes stderr |
+| `command` (shell) | **auto-denied** — rc=0, **0 bytes stdout**, 303 bytes stderr |
+
+This is a genuine harness boundary rather than compliance — the model tried and was refused.
+It is also the good news for this provider: consult is read-only *by default*, with reads
+intact, which is what makes it useful on a real repository. The catch is that the denial is
+indistinguishable from a successful empty answer unless you read stderr.
+
+**Caveat worth stating.** The guarantee holds only while the user's **global**
+`~/.gemini/antigravity-cli/settings.json` contains no `permissions.allow` entry — that is the
+sole `settings.json` path in the binary, and there is no workspace-local override. An adapter
+cannot scope permissions per run; it can only check the precondition.
+
+### `--dangerously-skip-permissions` leaves the workspace, and `--sandbox` does not confine writes
+
+**Symptom.** You reach for a worktree to contain a delegate run, and reason that `--add-dir`
+plus `--sandbox` bounds the blast radius. Neither does.
+
+**Cause.** `--add-dir` is a workspace *hint*, not a boundary, and `--sandbox` restricts the
+*terminal*, not file writes — its own help text says so, and the measurement agrees.
+
+**Measured** (1.1.21): with `--add-dir` pointed at a scratch directory and
+`--dangerously-skip-permissions` set, asked to write `/tmp/quorum_escape_a.txt` → rc=0, file
+created **outside the workspace**. Repeated with `--sandbox` added → same result. Separately,
+`--sandbox` with permissions left alone produced *byte-identical* output to no `--sandbox` at
+all (rc=0, 0 bytes stdout, same 309-byte stderr), confirming it is not what blocks writes.
+
+**Consequence.** Antigravity gets a **consult-only** adapter. It has the capability for
+verify and delegate but no way to bound it: no per-run command allowlist exists, and the
+skip-permissions flag is unconfined. Per the safety model, an adapter may only claim a tier
+it can enforce — so this one claims one.
+
+### Three of five bad flag values are accepted silently
+
+**Symptom.** A misconfigured call returns exit 0 and a fluent answer.
+
+**Cause.** Only `--model` and `--effort` validate. The rest fall back to a default.
+
+**Measured** (1.1.21, same canary prompt each time):
+
+| Invocation | rc | stdout | stderr |
+|---|---|---|---|
+| `--model no-such-model-xyz` | **1** | 0 | 547 — *"invalid model selection"* |
+| `--effort ludicrous` | **1** | 0 | 122 — *"valid: low, medium, high"* |
+| `--mode nonsense` | 0 | canary | 74 — warning, **runs in default mode** |
+| `--add-dir /nope/missing` | 0 | canary | **0** |
+| `--output-format nonsense` | 0 | canary | **0** |
+
+**Why it matters.** A typo in `--add-dir` is the dangerous row: the provider answers about a
+repository it never opened, with no error on either stream. If a consult answer seems unaware
+of files that plainly exist, check that path before believing the answer. It also means only
+`--model`/`--effort` can serve as `probe_broken` — the other three cannot fail.
+
 ## Claude Code as a subprocess
 
 ### `claude -p` hangs on a permission prompt

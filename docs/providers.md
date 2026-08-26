@@ -25,7 +25,7 @@ from a row in this table alone.
 | **Copilot** | `copilot` | `npm i -g @github/copilot` | first run (browser) | **verified** |
 | **GLM (Z.AI)** | **none** | — | `Z_AI_API_KEY` in `~/.zshenv` | **verified** |
 | **Ollama** | server on `:11434` | `brew install ollama` then `ollama pull <model>` | none | **verified** |
-| **Antigravity** | **`agy`** | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | browser, or a Gemini API key for headless | documented |
+| **Antigravity** | **`agy`** | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | browser, or a Gemini API key for headless | **verified** (consult only) |
 | **Cline** | `cline` | `npm i -g cline` | `cline auth --provider <p> --apikey ...`, or `ANTHROPIC_API_KEY` etc. | documented |
 | **Pi** | `pi` | `npm i -g @earendil-works/pi-coding-agent` | provider key in env | documented |
 | **MLX** | server on `:8080` | `pip install mlx-lm` then `mlx_lm.server --model ...` | none | documented |
@@ -79,6 +79,16 @@ nothing on machines where those providers work perfectly — and that false nega
 already caused a panel to report a working provider as missing. Establish availability by
 running the documented invocation, never by testing for a command. See
 [field-notes.md](field-notes.md#a-missing-binary-proves-nothing-about-a-provider).
+
+**Antigravity is consult-only, and not because it lacks capability.** `agy` can write and
+run shell commands, but nothing bounds it per run: permissions live only in the user's
+**global** `~/.gemini/antigravity-cli/settings.json` with no workspace-local override, and
+`--dangerously-skip-permissions` was measured writing *outside* its `--add-dir` workspace —
+with and without `--sandbox`. So a worktree gives review and disposal but not isolation, and
+verify and delegate cannot be enforced. What it does have is a genuine harness-enforced
+read-only consult: headless `--print` auto-denies `write_file` and `command` while leaving
+`read_file` working, which makes it the one read-only provider that opens your repo itself
+instead of being pasted excerpts. See [field-notes.md](field-notes.md#antigravity-agy).
 
 **Model servers are not agents.** Ollama, MLX, LM Studio, and llama.cpp serve completions.
 They have no sandbox, no tool loop, and no file-editing capability, so an adapter for them

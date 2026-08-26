@@ -35,7 +35,7 @@ help_for() {
     codex)   codex --help 2>&1; codex exec --help 2>&1 ;;
     copilot) copilot --help 2>&1 ;;
     claude)  claude --help 2>&1 ;;
-    agy)     agy --help 2>&1 ;;
+    agy|antigravity) agy --help 2>&1 ;;
     *)       return 1 ;;
   esac
 }
@@ -45,7 +45,7 @@ help_for() {
 cmd_for() {
   case "$1" in
     codex) echo codex ;; copilot) echo copilot ;; claude) echo claude ;;
-    agy)   echo agy ;;   ollama)  echo curl ;;
+    agy|antigravity) echo agy ;;   ollama)  echo curl ;;
     *)     echo "$1" ;;
   esac
 }
