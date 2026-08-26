@@ -65,7 +65,7 @@ jobs:
           # an MCP debug log. Content-pattern scanning missed the last one entirely, because
           # it matched no secret pattern. Auditing the FILE LIST is what catches them.
           stray=$(git ls-files \
-            | grep -vE '^(agents|skills|docs|scripts|probes|commands|\.github|\.claude-plugin)/' \
+            | grep -vE '^(agents|skills|docs|scripts|probes|commands|reference|\.github|\.claude-plugin)/' \
             | grep -vE '^(\.gitignore|README\.md|LICENSE|CONTRIBUTING\.md)$' || true)
           if [ -n "$stray" ]; then
             echo "ERROR: unexpected tracked files:"; echo "$stray"; exit 1
