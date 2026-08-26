@@ -148,7 +148,7 @@ Ollama's OpenAI-compatible endpoint, which silently discards `options.num_ctx` a
 long prompts with no error signal. The native endpoint honours it. That correction is now in
 the [field notes](docs/field-notes.md), measured.
 
-Your Claude then runs [six probes](skills/add-provider/reference/probe-checklist.md)
+Your Claude then runs [six probes](skills/build-adapter/reference/probe-checklist.md)
 against the provider **on your machine** and writes the adapter from what it measured:
 
 1. Does it answer at all?
@@ -248,7 +248,7 @@ model with nothing to say.
 | [why-delegation-not-proxying.md](docs/why-delegation-not-proxying.md) | The architecture argument |
 | [field-notes.md](docs/field-notes.md) | Every failure found by breaking something |
 | [evidence.md](docs/evidence.md) | How to re-check every claim here — and which ones you can't |
-| [probe-checklist.md](skills/add-provider/reference/probe-checklist.md) | The six probes in detail |
+| [probe-checklist.md](skills/build-adapter/reference/probe-checklist.md) | The six probes in detail |
 | [providers.md](docs/providers.md) | Every known provider: binary, install, auth, verified-or-not |
 | [porting/](docs/porting/) | MLX, Ollama, OpenAI-compatible endpoints |
 

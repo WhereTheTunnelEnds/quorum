@@ -2,7 +2,7 @@
 
 > **Status: not verified by the author** — MLX was not installed on the machine where this
 > repo was built, so nothing here was measured. It is a starting point, not a field note.
-> Build a real adapter with [`add-provider`](../../skills/add-provider/SKILL.md), which
+> Build a real adapter with [`/quorum:add-provider`](../../skills/build-adapter/SKILL.md), which
 > probes the provider on *your* machine, and please contribute it back.
 
 MLX is Apple's array framework; `mlx-lm` serves models on Apple silicon with an

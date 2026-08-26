@@ -118,6 +118,66 @@ jobs:
           done
           exit $fail
 
+      - name: No command and skill share a name
+        run: |
+          # commands/ and skills/ auto-discover into ONE `quorum:<name>` namespace, so a
+          # command and a skill with the same basename collide and the command wins.
+          #
+          # This shipped: `commands/add-provider.md` shadowed `skills/add-provider/`, whose
+          # entire body is "Invoke the `add-provider` skill" — so the repo's flagship
+          # workflow resolved to an instruction to invoke itself, and the six probes were
+          # unreachable in every plugin install. Nothing in the repo could detect it,
+          # because on disk both files were present and correct; only loading the plugin
+          # showed one had eaten the other.
+          #
+          # The pattern to follow is the one the other two pairs already use by luck:
+          # panel -> model-panel, delegate -> delegate-task, add-provider -> build-adapter.
+          fail=0
+          for c in commands/*.md; do
+            [ -e "$c" ] || continue
+            n=$(basename "$c" .md)
+            if [ -d "skills/$n" ]; then
+              echo "ERROR: commands/$n.md and skills/$n/ both resolve to quorum:$n"
+              echo "       the command wins and the skill becomes unreachable — rename one"
+              fail=1
+            fi
+          done
+          [ "$fail" = 0 ] && echo "no command/skill name collisions"
+          exit $fail
+
+      - name: Skill and command bodies do not delegate to themselves
+        run: |
+          # The other half of the same bug: a command whose body says "invoke the <X> skill"
+          # is broken if <X> is the command's own name, whether or not a directory collides.
+          fail=0
+          for c in commands/*.md; do
+            [ -e "$c" ] || continue
+            n=$(basename "$c" .md)
+            if grep -qE "[Ii]nvoke the \`?$n\`? skill" "$c"; then
+              echo "ERROR: $c tells the model to invoke a skill named '$n' — itself"
+              fail=1
+            fi
+          done
+          [ "$fail" = 0 ] && echo "no self-referential commands"
+          exit $fail
+
+      - name: Skills named by a command actually exist
+        run: |
+          # A command pointing at a skill that was renamed or never existed fails silently
+          # at runtime: the model is told to invoke something, finds nothing, and improvises.
+          fail=0
+          for c in commands/*.md; do
+            [ -e "$c" ] || continue
+            for s in $(grep -oE "[Ii]nvoke the \`[a-z0-9-]+\` skill" "$c" | grep -oE '`[a-z0-9-]+`' | tr -d '`'); do
+              if [ ! -d "skills/$s" ]; then
+                echo "ERROR: $c names skill '$s', but skills/$s/ does not exist"
+                fail=1
+              fi
+            done
+          done
+          [ "$fail" = 0 ] && echo "every skill named by a command exists"
+          exit $fail
+
       - name: Links to local files resolve
         run: |
           python3 - <<'PY'

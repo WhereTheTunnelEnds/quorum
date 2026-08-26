@@ -14,7 +14,7 @@ install command instead of just reporting failure.
 | **documented** | Install command and binary name from vendor docs. **Nobody has run the probes.** |
 
 The distinction is the whole point. A documented row is a starting place, not a promise —
-see [add-provider](../skills/add-provider/SKILL.md), which will refuse to write an adapter
+see [`/quorum:add-provider`](../skills/build-adapter/SKILL.md), which will refuse to write an adapter
 from a row in this table alone.
 
 ## Table

@@ -3,7 +3,7 @@ description: "Build a verified Quorum adapter for a new provider — a local mod
 argument-hint: "<provider name or CLI>"
 ---
 
-Invoke the `add-provider` skill and follow it exactly.
+Invoke the `build-adapter` skill and follow it exactly.
 
 The provider: $ARGUMENTS
 

@@ -1,5 +1,5 @@
 ---
-name: add-provider
+name: build-adapter
 description: Use when adding a new model provider to Quorum - wiring up a local model (MLX, Ollama, LM Studio, llama.cpp, vLLM), another vendor's coding CLI (Gemini, Cursor, Amp, Aider), or any OpenAI/Anthropic-compatible endpoint so it can be consulted and delegated to like the built-in ones. Probes the provider empirically, then writes an adapter from what was measured. Also use when an existing adapter broke after a CLI update.
 ---
 

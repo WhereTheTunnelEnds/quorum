@@ -5,7 +5,7 @@ Provider-specific notes: [mlx.md](mlx.md), [ollama.md](ollama.md).
 
 > **Status: not verified by the author.** The pattern below is the one the built-in GLM
 > adapter uses, adjusted for the OpenAI response shape. Run
-> [`add-provider`](../../skills/add-provider/SKILL.md) to build and *measure* a real adapter
+> [`/quorum:add-provider`](../../skills/build-adapter/SKILL.md) to build and *measure* a real adapter
 > on your machine. Corrections welcome — a verified adapter for any of these is the most
 > useful PR this repo can receive.
 

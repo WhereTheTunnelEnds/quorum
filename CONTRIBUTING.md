@@ -19,7 +19,7 @@ honest.
 `/quorum:add-provider <name>` does most of this. A complete submission is four things:
 
 **1. `agents/<name>-agent.md`** — from
-[the template](skills/add-provider/templates/adapter.md.template). Must satisfy
+[the template](skills/build-adapter/templates/adapter.md.template). Must satisfy
 [the adapter contract](docs/adapter-contract.md): typed status envelope, untrusted-output
 delimiters, separate stdout/stderr, and `tools: Bash, Read, Glob, Grep` — never `Write` or
 `Edit`.
@@ -29,7 +29,7 @@ adapter. A local model server has no sandbox and no tool loop; give it a consult
 leave the others out rather than inventing them.
 
 **2. `probes/<name>.sh`** — from
-[the template](skills/add-provider/templates/probe.sh.template). `probe_broken()` is the
+[the template](skills/build-adapter/templates/probe.sh.template). `probe_broken()` is the
 part that matters. It must fail the way the adapter says it fails.
 
 **3. Passing output from `scripts/quorum-flags`** and a captured
