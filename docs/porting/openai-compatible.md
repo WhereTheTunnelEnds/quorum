@@ -67,7 +67,7 @@ HDR=$(mktemp); chmod 600 "$HDR"
 printf 'Authorization: Bearer %s\n' "${LOCAL_LLM_KEY:-none}" > "$HDR"
 CODE=$(jq -n --rawfile p "$PROMPT_FILE" --arg m "$MODEL" \
         '{model:$m, messages:[{role:"user", content:$p}], stream:false}' \
-      | curl -s -m 300 -o "$BODY" -w '%{http_code}' "$BASE/chat/completions" \
+      | curl -s -m 900 -o "$BODY" -w '%{http_code}' "$BASE/chat/completions" \
           -H "content-type: application/json" \
           -H @"$HDR" \
           -d @-)

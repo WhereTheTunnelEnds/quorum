@@ -102,19 +102,31 @@ Two things follow, and they matter more than the number:
    now `error — truncated`, and the partial text is relayed as evidence rather than as an
    answer.
 
-**Why the cap is 64000 and not larger.** The API is not the constraint — 128000 was accepted
-in testing. The **deadline** is. Both measured runs came in at ~89 output tokens/second
-(32000 in 360 s; 51,678 in 579 s), which is consistent enough to extrapolate from:
+**Why the cap is 64000, and why the reason is not the deadline.** An earlier version of this
+file said 64000 was the largest cap that fits inside `-m 900`. That was wrong, and a second
+round of measurement on a different input size disproved it:
 
-| cap | worst case at 89 tok/s | fits `-m 900`? |
-|---|---|---|
-| 32000 | 360 s *(measured)* | yes, but truncated a real 152 KB input |
-| **64000** | **579 s *(measured)*** | **yes, with headroom** |
-| 96000 | ~1080 s *(projected)* | no — the deadline kills it first |
+| input | cap | elapsed | `stop_reason` | output tokens | text |
+|---|---|---|---|---|---|
+| 42.5 KB | 32000 | 398 s | `max_tokens` | 32000 | **0 chars** |
+| 46.1 KB | 32000 | 390 s | `end_turn` | 31,949 | 33,458 chars |
+| 42.5 KB | 64000 | 457 s | `end_turn` | 35,554 | 39,446 chars |
+| 42.5 KB | 98304 | 525 s | `end_turn` | 41,382 | **36,567 chars** |
+| 152 KB | 32000 | 360 s | `max_tokens` | 32000 | 17,648 chars, cut off |
+| 152 KB | 64000 | 579 s | `end_turn` | 51,678 | 39,013 chars |
 
-64000 is the largest cap whose worst case still finishes inside the timeout. Above it you
-trade a detected truncation for a detected timeout, which is not an improvement. Both are
-detected now either way, which is what makes this a choice rather than a guess.
+Three things fall out, and none of them is the timeout:
+
+1. **98304 finished in 525 s.** It is not deadline-bound. The largest run at the largest
+   input — 152 KB at 64000 — took 579 s, still 321 s inside the deadline.
+2. **More budget bought a worse answer.** At 98304 the model spent 5,828 *more* tokens than
+   at 64000 and returned *fewer* characters of text (36,567 vs 39,446). The extra allowance
+   went to thinking. Demand expands to fill the budget, so raising the cap has diminishing
+   and eventually negative returns. **That** is why the cap stops at 64000.
+3. **The boundary is not sharp.** Rows 1 and 2 are the same question over inputs 3.6 KB
+   apart, landing on opposite sides of 32000 — one exhausts the budget with zero text, the
+   other finishes comfortably. Any constant sits inside the noise band of the requirement,
+   which is the real argument for detection over tuning.
 
 [docs/adapter-contract.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/adapter-contract.md)
 §6b already named this exact failure — *"a response that is

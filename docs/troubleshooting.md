@@ -166,7 +166,7 @@ question the likelier the answer is empty. Measured on glm-5.3:
 
 Three things came out of that, and the last one matters most:
 
-- The cap is now **64000** — the largest that still finishes inside the deadline.
+- The cap is now **64000** — chosen for diminishing returns, not the deadline. Measured: at 98304 the model spent 5,828 more tokens and produced *fewer* characters of text than at 64000, because the extra allowance went to thinking.
 - The GLM timeout is now **900 s**, matching every other adapter. It was `-m 300`, so the
   360 s call above was killed outright.
 - **`stop_reason: "max_tokens"` with text present is `error — truncated`, not `ok`.** No

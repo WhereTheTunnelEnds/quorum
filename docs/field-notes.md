@@ -380,7 +380,7 @@ success-shaped failure, and it is why `status: empty` exists.
 code (7 = unreachable), the HTTP status, and the presence of `.error` in the body:
 
 ```bash
-CODE=$(curl -s -m 300 -o "$BODY" -w '%{http_code}' …); RC=$?
+CODE=$(curl -s -m 900 -o "$BODY" -w '%{http_code}' …); RC=$?
 ```
 
 **The general rule.** A transport that succeeded is not an operation that succeeded. Any
@@ -428,7 +428,7 @@ setting. Size limits against the work you actually mean to do, not against the t
 **Cause.** Reasoning tokens are spent first. A small `max_tokens` is exhausted before any
 answer is emitted.
 
-**Fix.** Keep `max_tokens` generous — 8000+. **Measured:** a real call returned
+**Fix.** Detect it; do not tune it. **8000 is the value that CAUSES this**, and this line used to prescribe it — measured at 0 characters of text in 89 s, and 12000 and 20000 also returned 0. Use 64000 and treat `stop_reason: "max_tokens"` as a failure even when text is present. **Measured:** a real call returned
 `content[0].type == "thinking"` and *no* text block until the budget was raised.
 
 ### Model ids carry no `[1m]` suffix
