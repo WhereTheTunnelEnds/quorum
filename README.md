@@ -94,6 +94,9 @@ See the [field notes](docs/field-notes.md#a-missing-binary-proves-nothing-about-
 
 Only what you actually intend to use — every provider is optional.
 
+Full list of known providers, install commands, and which are verified vs merely
+documented: [docs/providers.md](docs/providers.md).
+
 | Provider | Needs |
 |---|---|
 | Ollama | `ollama` + a pulled model. **No account, no key, no subscription** |
@@ -225,6 +228,7 @@ model with nothing to say.
 | [why-delegation-not-proxying.md](docs/why-delegation-not-proxying.md) | The architecture argument |
 | [field-notes.md](docs/field-notes.md) | Every failure found by breaking something |
 | [probe-checklist.md](skills/add-provider/reference/probe-checklist.md) | The six probes in detail |
+| [providers.md](docs/providers.md) | Every known provider: binary, install, auth, verified-or-not |
 | [porting/](docs/porting/) | MLX, Ollama, OpenAI-compatible endpoints |
 
 ## Contributing

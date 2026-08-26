@@ -21,6 +21,24 @@ So the order is fixed: **probe first, write second.** If you cannot run the prov
 isn't installed, there's no key, the machine is wrong — say so and stop. Do not produce an
 adapter "for them to test later." An untested adapter that looks tested is worse than none.
 
+### If the provider isn't installed
+
+Stop, but be useful about it. Look it up in
+[docs/providers.md](../../docs/providers.md) and give the user the exact install and auth
+commands for their platform. Then say plainly that you'll run the probes once it's there.
+
+**Do not install it yourself.** Two reasons, and neither is squeamishness:
+
+- Vendor installers are frequently `curl … | bash`, which executes remote code and modifies
+  the machine outside the repo. That is the user's decision to make knowingly, not a step
+  to slip inside a task about writing an adapter.
+- **Authentication almost always needs a browser** and binds the user's paid account. You
+  cannot complete it, and you should not try — a half-authenticated CLI fails in ways that
+  look like provider bugs.
+
+Installing is a one-line command for them. Guessing at an adapter for software that isn't
+there is unrecoverable, because the guess *looks* like knowledge.
+
 ## Step 0 — Establish the invocation surface
 
 Ask the user, or find out, what kind of provider this is. The three shapes need different
@@ -32,7 +50,8 @@ adapters:
 | **HTTP endpoint, no CLI** | Z.AI, OpenRouter, a hosted API | `curl` |
 | **Local server** | MLX, Ollama, LM Studio, llama.cpp, vLLM | `curl` to localhost; see `docs/porting/` |
 
-Then find the real entry point. **Do not assume a binary is named after its vendor** —
+[docs/providers.md](../../docs/providers.md) lists the ones already known, including which
+binary each actually installs as. Then find the real entry point. **Do not assume a binary is named after its vendor** —
 GLM has no `glm` command at all. `command -v` returning NOT FOUND proves nothing; it is
 already responsible for one panel falsely reporting a working provider as missing.
 
