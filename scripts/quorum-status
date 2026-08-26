@@ -40,6 +40,23 @@ esac
 # under every provider, doubles the file and lets the two outputs drift apart.
 avail=0
 rows=()
+
+# The single choke point for anything this script did not write itself. That claim used to
+# be made in a comment while two sinks bypassed it — the endpoint directory path and the
+# preset filenames, both printed raw and both printed AFTER the table, so a cursor-up
+# sequence in either could repaint every row above it. Route all of them through here.
+scrub() {
+  # LC_ALL=C is load-bearing, not decoration. Under a UTF-8 locale — the normal case,
+  # LANG=en_US.UTF-8 — BSD tr aborts on the first byte that is not valid UTF-8 with
+  # "Illegal byte sequence" and emits only what it read up to that point. Measured on input
+  # 41 9b 42: LC_ALL=C returns 41 9b 42; the UTF-8 locale returns 41. A single invalid byte
+  # would silently swallow the rest of the string, and swallow it differently on the
+  # author's machine than in CI. Under LC_ALL=C, tr works bytewise, and multi-byte UTF-8
+  # still survives because every one of its bytes is >= 0x80 — verified, café-日本
+  # round-trips unchanged.
+  printf '%s' "$1" | LC_ALL=C tr '\000-\037\177' ' '
+}
+
 record() {
   # Details are single-line display strings, and both renderers assume that. z.ai returns
   # .error.message straight from the API and Ollama returns model names chosen by whoever
@@ -51,9 +68,21 @@ record() {
   # the cursor up and overwrites the line above, so a model named for the purpose could
   # repaint another provider's row as green OK. Bytes >= 0x80 are left alone so that
   # non-ASCII model names survive intact.
-  local d
-  d=$(printf '%s' "$3" | tr '\000-\037\177' ' ')
-  rows+=("$1"$'\t'"$2"$'\t'"$d")
+  # LC_ALL=C is load-bearing, not decoration. Under a UTF-8 locale — which is the normal
+  # case, LANG=en_US.UTF-8 — BSD tr aborts on the first byte that is not valid UTF-8 with
+  # "Illegal byte sequence" and emits only what it had read so far. Measured on input
+  # 41 9b 42: LC_ALL=C gives back 41 9b 42, the UTF-8 locale gives back 41. A provider
+  # returning any invalid byte in a model name would silently lose everything after it,
+  # and lose it differently on the author's machine than in CI. Under LC_ALL=C, tr works
+  # bytewise; multi-byte UTF-8 still survives intact because every byte of it is >= 0x80
+  # (verified: café-日本 round-trips unchanged).
+  #
+  # Length is NOT capped here, deliberately. Capping belongs in render_text, because a
+  # byte-wise cut can split a multi-byte character in half, and feeding invalid UTF-8 to jq
+  # is exactly the broken-document failure this function exists to prevent. Truncating for
+  # display can at worst produce one mangled glyph on a terminal; truncating before jq can
+  # produce no output at all.
+  rows+=("$1"$'\t'"$2"$'\t'"$(scrub "$3")")
 }
 ok()   { record ok   "$1" "$2"; avail=$((avail+1)); }
 bad()  { record bad  "$1" "$2"; }
@@ -159,9 +188,21 @@ fi
 render_text() {
   echo "quorum providers"
   echo
+  # Bound the DISPLAY length. With no bound, a long provider-controlled detail wraps, and
+  # the continuation of a wrapped line starts at column 0 where it can be shaped like a
+  # status row — no control characters required, so the sanitiser above never sees it. A
+  # long enough name also scrolls the real rows off the pane entirely.
+  #
+  # Honest about the residual: this does not eliminate the forgery, because wrapping depends
+  # on the terminal width and an attacker can emit one variant per plausible width. It
+  # bounds the damage to roughly one extra line. What actually limits the attack is that
+  # render_text resets colour immediately after the status glyph, so a forged row cannot be
+  # green — verified with `tmux capture-pane -e`, no SGR sequence on the forged line. Use
+  # --json if you need a representation with no display ambiguity at all.
   local r st name detail n
   for r in ${rows[@]+"${rows[@]}"}; do
     IFS=$'\t' read -r st name detail <<<"$r"
+    [ "${#detail}" -gt 120 ] && detail="${detail:0:117}..."
     case "$st" in
       ok)   printf '  \033[32mOK\033[0m  %-9s %s\n' "$name" "$detail" ;;
       bad)  printf '  \033[31m--\033[0m  %-9s %s\n' "$name" "$detail" ;;
@@ -170,11 +211,14 @@ render_text() {
   done
   if [ -d "$ENDPOINT_DIR" ]; then
     echo
-    echo "quorum-claude-on presets ($ENDPOINT_DIR)"
+    # Both of these are filesystem-controlled, and both print AFTER the table, so an
+    # unsanitised cursor-up sequence here reaches every row above it. Demonstrated with a
+    # preset file whose name contained ESC[9A: it repainted a provider row.
+    printf 'quorum-claude-on presets (%s)\n' "$(scrub "$ENDPOINT_DIR")"
     if [ "${#eps[@]}" -eq 0 ]; then
       printf '      (none)\n'
     else
-      for n in "${eps[@]}"; do printf '      %s\n' "$n"; done
+      for n in "${eps[@]}"; do printf '      %s\n' "$(scrub "$n")"; done
     fi
   fi
 }
@@ -190,8 +234,8 @@ render_json() {
   fi
   printf '%s\n' ${rows[@]+"${rows[@]}"} \
   | jq -R -s \
-      --arg endpoint_dir "$ENDPOINT_DIR" \
-      --arg endpoints "$(printf '%s\n' ${eps[@]+"${eps[@]}"})" \
+      --arg endpoint_dir "$(scrub "$ENDPOINT_DIR")" \
+      --arg endpoints "$(for _e in ${eps[@]+"${eps[@]}"}; do scrub "$_e"; echo; done)" \
       --argjson available "$avail" '
       {
         providers: (

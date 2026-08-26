@@ -116,6 +116,60 @@ rows_printed=$(printf '%s\n' "$text" | grep -cE '^  .*(OK|--|\?\?)')
 check "still exactly 6 rows, so the payload did not forge one (got ${rows_printed:-?})" \
       "$([ "$rows_printed" = 6 ] && echo 0 || echo 1)"
 
+# --- 3b. invalid UTF-8 must not silently truncate the detail ----------------------
+# Under a UTF-8 locale, BSD tr aborts on the first invalid byte with "Illegal byte
+# sequence" and emits only what it read so far. Measured on 41 9b 42: the UTF-8 locale
+# returned 41, LC_ALL=C returned 41 9b 42. A provider returning one bad byte in a model
+# name would silently lose everything after it — and lose it differently in CI than on a
+# developer's machine, which is the worst kind of bug to own.
+python3 - "$((PORT+1))" <<'PY' &
+import http.server, json, sys
+# A deliberately invalid byte between two markers, plus multi-byte UTF-8 that must survive.
+NAME = 'START\udcffMIDDLE-cafe-日本-END'
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        b = json.dumps({"models": [{"name": NAME}]},
+                       ensure_ascii=False).encode('utf-8', 'surrogateescape')
+        self.send_response(200); self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(b))); self.end_headers(); self.wfile.write(b)
+    def log_message(self, *a): pass
+http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+PY
+BADSRV=$!
+trap 'kill "$SERVER" "$BADSRV" 2>/dev/null' EXIT
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  curl -s -m 1 "http://127.0.0.1:$((PORT+1))/api/tags" >/dev/null 2>&1 && break
+  sleep 0.3
+done
+
+badtext=$(isolated OLLAMA_BASE="http://127.0.0.1:$((PORT+1))" "$STATUS" 2>/dev/null)
+check "text after an invalid UTF-8 byte is not truncated away" \
+      "$(printf '%s' "$badtext" | grep -q 'END' && echo 0 || echo 1)"
+check "multi-byte UTF-8 after an invalid byte still survives" \
+      "$(printf '%s' "$badtext" | grep -q '日本' && echo 0 || echo 1)"
+badjson=$(isolated OLLAMA_BASE="http://127.0.0.1:$((PORT+1))" "$STATUS" --json 2>/dev/null)
+printf '%s' "$badjson" | jq -e . >/dev/null 2>&1
+check "invalid UTF-8 from a provider still yields valid JSON" $?
+
+# --- 3c. the endpoints block is provider-adjacent output too -----------------------
+# It prints AFTER the table, so an unsanitised cursor-up here repaints every row above it.
+# record() was once described as the single choke point while these two sinks bypassed it.
+EPD=$(mktemp -d)
+: > "$EPD/$(printf 'evil\033[9A\033[2K  \033[32mOK\033[0m  glm  forged').env" 2>/dev/null \
+  || : > "$EPD/evil$(printf '\033')9A.env"
+epstext=$(env -u Z_AI_API_KEY -u OLLAMA_BASE PATH=/usr/bin:/bin \
+            HOME=/nonexistent-quorum-test QUORUM_ENDPOINT_DIR="$EPD" \
+            OLLAMA_BASE="http://127.0.0.1:1" "$STATUS" 2>/dev/null)
+esc_after=$(printf '%s\n' "$epstext" | sed -n '/presets/,$p' | tr -cd '\033' | wc -c | tr -d ' ')
+check "no ESC survives into the presets block (got ${esc_after:-?})" \
+      "$([ "$esc_after" = 0 ] && echo 0 || echo 1)"
+# Everything BEFORE the presets header is the table. Do not use a sed range ending at the
+# first blank line — that blank line is the one right under the "quorum providers" title.
+table_rows=$(printf '%s\n' "$epstext" | sed '/presets/,$d' | grep -cE '^  .*(OK|--|\?\?)')
+check "a hostile preset name did not add a table row (got ${table_rows:-?})" \
+      "$([ "$table_rows" = 6 ] && echo 0 || echo 1)"
+rm -rf "$EPD"
+
 # --- 4. argument handling ---------------------------------------------------------
 isolated "$STATUS" --jsonn >/dev/null 2>&1
 check "unknown flag exits 2 rather than silently printing the table" \
