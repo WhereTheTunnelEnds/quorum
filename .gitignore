@@ -8,3 +8,7 @@ logs/
 # into the CURRENT directory, so `git add -A` will sweep them in.
 .claude/
 .serena/
+
+# Tool logs — MCP servers and CLIs drop these into $PWD.
+*.log
+debug.log
