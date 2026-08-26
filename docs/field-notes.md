@@ -37,6 +37,57 @@ measurement command itself was piped through `tail`. Re-measured unpiped: exit 1
 > If you record only one thing from this document, record this one. It corrupts every
 > other measurement you take.
 
+### A command and a skill with the same name silently collide
+
+**Symptom.** `/quorum:add-provider` returned the text *"Invoke the `add-provider` skill and
+follow it exactly"* — an instruction to invoke itself. The six-probe workflow it was meant
+to reach never ran, in any plugin install.
+
+**Cause.** `commands/` and `skills/` auto-discover into ONE `plugin:name` namespace.
+`commands/add-provider.md` and `skills/add-provider/` both resolved to
+`quorum:add-provider`, and the command won. Invoking the bare skill name returns
+`Unknown skill: add-provider`, so the skill had no reachable name at all.
+
+**Why nothing caught it.** On disk both files were present and correct. Every in-repo
+check passed — frontmatter, links, JSON, shellcheck. The collision only exists once the
+plugin is *loaded*, so no amount of reading the repository could reveal it. It took a cold
+`claude --plugin-dir` session listing its own available skills.
+
+**Fix.** Renamed the skill to `build-adapter`, not the command, so the documented entry
+point `/quorum:add-provider` still works. The other two pairs avoided this by luck of
+naming — `panel`/`model-panel`, `delegate`/`delegate-task`. CI now rejects any
+command/skill basename collision, and any command whose body names itself as the skill to
+invoke.
+
+**The general lesson.** Test the artifact as installed, not as authored. A packaging bug is
+invisible from inside the package.
+
+### `CLAUDE_PLUGIN_ROOT` is unset, so plugin files cannot reference their own repo
+
+**Symptom.** Every adapter said *"Full spec: `docs/adapter-contract.md`"*. For anyone who
+installed Quorum as a plugin, that path resolves against **their** project directory and
+finds nothing. Measured from a plugin session: `ls docs/adapter-contract.md` →
+`No such file or directory`.
+
+**The obvious fix does not work.** `${CLAUDE_PLUGIN_ROOT}` is the documented way to
+reference plugin-local files — 133 files across the plugins installed on this machine use
+it, and the official `plugin-dev` validator checks for it. Measured under
+`claude --plugin-dir`: `printenv CLAUDE_PLUGIN_ROOT` → **UNSET**. Do not assume it is
+available; if you use it, supply a fallback, as `planning-with-files` does with
+`${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/...}`.
+
+**Fix.** Two parts. References in `agents/` and `skills/` are now absolute
+`https://github.com/.../blob/main/...` URLs, which resolve from anywhere. And each adapter
+now states that the link is background reading and everything needed is inlined — because
+the deeper problem was that a model told to consult a file will go looking for it. An
+adapter that *needs* a second file to behave correctly is already broken; the fix is for it
+not to need one.
+
+**Severity, honestly.** This was reported to me as a top-severity defect. It is not: the
+contract — the classification table, the envelope, the neutralisation rule — is inlined in
+every adapter, so they work standalone. It is a dangling cross-reference that wastes a turn,
+not a broken adapter. Worth fixing, worth not overstating.
+
 ### `~/.zshrc` is invisible to agents
 
 **Symptom.** An API key that plainly works in your terminal is unset inside a subagent, and

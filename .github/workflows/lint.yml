@@ -118,6 +118,69 @@ jobs:
           done
           exit $fail
 
+      - name: Canonical URLs point at files that exist
+        run: |
+          # agents/ and skills/ load into the USER'S project, so a relative `docs/x.md` in
+          # them resolves against their working directory and finds nothing. Measured: a
+          # plugin session running `ls docs/adapter-contract.md` gets "No such file or
+          # directory", and CLAUDE_PLUGIN_ROOT — the documented way to reference plugin
+          # files — is UNSET under --plugin-dir, so it is not a usable fallback either.
+          # Those references are therefore absolute URLs. This gate keeps them honest
+          # offline: the URL path must name a file that exists in this repo.
+          python3 - <<'PY'
+          import pathlib, re, sys
+          pat = re.compile(r'https://github\.com/[\w-]+/quorum/blob/main/([^\s)]+)')
+          bad = 0
+          for f in pathlib.Path('.').rglob('*'):
+              if not f.is_file() or '.git/' in str(f):
+                  continue
+              try:
+                  text = f.read_text()
+              except Exception:
+                  continue
+              for m in pat.finditer(text):
+                  if not pathlib.Path(m.group(1)).exists():
+                      print(f"DANGLING {f} -> {m.group(1)}")
+                      bad += 1
+          print("no dangling canonical URLs" if not bad else f"{bad} dangling")
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: Agents and skills use no repo-relative doc references
+        run: |
+          # The other half: a NEW relative reference must not creep back in. Check link
+          # TARGETS and backticked paths — not link labels. `[docs/x.md](https://…)` is
+          # correct and its label legitimately contains the repo-relative path.
+          python3 - <<'PY'
+          import pathlib, re, sys
+          # a markdown link whose target is a relative path into docs/
+          rel_link = re.compile(r'\]\((?!https?://)[^)]*docs/[a-z-]+\.md[^)]*\)')
+          # a bare backticked repo path, which reads as "open this file"
+          backticked = re.compile(r'`(?:\.{0,2}/)?docs/[a-z-]+\.md`')
+          bad = 0
+          for d in ('agents', 'skills'):
+              for f in pathlib.Path(d).rglob('*'):
+                  if not f.is_file():
+                      continue
+                  try:
+                      text = f.read_text()
+                  except Exception:
+                      continue
+                  for n, line in enumerate(text.splitlines(), 1):
+                      for pat in (rel_link, backticked):
+                          for m in pat.finditer(line):
+                              print(f"{f}:{n}: {m.group(0)}")
+                              bad += 1
+          if bad:
+              print()
+              print("ERROR: agents/ and skills/ load into the USER'S project, so a relative")
+              print("       path to docs/ resolves against their working directory and finds")
+              print("       nothing. Use the full https://github.com/.../blob/main/ URL.")
+          else:
+              print("no repo-relative doc references in agents/ or skills/")
+          sys.exit(1 if bad else 0)
+          PY
+
       - name: No command and skill share a name
         run: |
           # commands/ and skills/ auto-discover into ONE `quorum:<name>` namespace, so a

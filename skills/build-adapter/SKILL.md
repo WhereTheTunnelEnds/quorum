@@ -24,7 +24,7 @@ adapter "for them to test later." An untested adapter that looks tested is worse
 ### If the provider isn't installed
 
 Stop, but be useful about it. Look it up in
-[docs/providers.md](../../docs/providers.md) and give the user the exact install and auth
+[docs/providers.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/providers.md) and give the user the exact install and auth
 commands for their platform. Then say plainly that you'll run the probes once it's there.
 
 **Do not install it yourself.** Two reasons, and neither is squeamishness:
@@ -50,7 +50,7 @@ adapters:
 | **HTTP endpoint, no CLI** | Z.AI, OpenRouter, a hosted API | `curl` |
 | **Local server** | MLX, Ollama, LM Studio, llama.cpp, vLLM | `curl` to localhost; see `docs/porting/` |
 
-[docs/providers.md](../../docs/providers.md) lists the ones already known, including which
+[docs/providers.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/providers.md) lists the ones already known, including which
 binary each actually installs as. Then find the real entry point. **Do not assume a binary is named after its vendor** —
 GLM has no `glm` command at all. `command -v` returning NOT FOUND proves nothing; it is
 already responsible for one panel falsely reporting a working provider as missing.
@@ -138,7 +138,7 @@ This is the step where an adapter becomes trustworthy or merely optimistic.
 > repo cannot tolerate, because every downstream user trusts that word.
 
 Same reasoning for **verify** (named-command allowlist, or a scratch worktree) and
-**delegate** (throwaway worktree on its own branch, always). See `docs/safety-model.md`.
+**delegate** (throwaway worktree on its own branch, always). See [docs/safety-model.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/safety-model.md).
 
 ## Step 3 — Write the three files
 
@@ -153,16 +153,21 @@ Copy the templates, then fill them from your notes — never from memory of the 
 2. **`probes/<name>.sh`** — from `templates/probe.sh.template`. This is what makes the
    adapter re-checkable after a vendor update. `probe_broken()` encodes probe 4.
 
-3. **A `docs/field-notes.md` entry** — but only for genuine surprises. Anything that cost
+3. **A [docs/field-notes.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/field-notes.md) entry** — but only for genuine surprises. Anything that cost
    you more than one attempt to get right will cost the next person the same. Use the
    documented format, and mark anything you inferred rather than observed.
 
 ## Step 4 — Prove it
 
 ```bash
-scripts/quorum-verify <name>      # does it work?
-scripts/quorum-flags              # do the flags it depends on still exist?
+quorum-verify <name>              # does it work?
+quorum-flags                      # do the flags it depends on still exist?
 ```
+
+Those are the names `scripts/install.sh` puts on PATH, so they work from any directory. If
+you cloned Quorum but have not run the installer, use `./scripts/quorum-verify` from inside
+the clone instead — but do not assume the clone is the working directory, because when this
+skill runs the working directory is usually the user's own project.
 
 It re-runs the mechanical probes against the live provider. **If it does not pass, the
 adapter is not finished** — do not report success. When it contradicts something you

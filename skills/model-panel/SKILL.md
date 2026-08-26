@@ -63,7 +63,7 @@ CODE=$(curl -s -m 300 -o "$BODY" -w '%{http_code}' https://api.z.ai/api/anthropi
   -H "content-type: application/json" -d @body.json)
 # The `else` branch is load-bearing. Without it, a failing call makes jq say
 # "Cannot iterate over null" and emit ZERO BYTES — which reads as "the model had nothing
-# to say". Measured: bad model id -> HTTP 400, 0 bytes out. See docs/field-notes.md.
+# to say". Measured: bad model id -> HTTP 400, 0 bytes out. See docs/field-notes.md in the Quorum repo.
 jq -r 'if .content then ([.content[]|select(.type=="text")|.text]|join(""))
        else (.error.message // tostring) end' "$BODY"
 [ "$CODE" = 200 ] || echo "(http $CODE — this is an error, not an answer)" >&2
@@ -206,7 +206,7 @@ precisely the case for using a panel here rather than asking one model.
 
 Each agent returns a typed envelope, not bare prose: a `status` line
 (`ok`/`error`/`empty`/`timeout`), diagnostics, and the provider's text fenced inside
-`BEGIN/END UNTRUSTED PROVIDER OUTPUT` markers. Full spec: `docs/adapter-contract.md`.
+`BEGIN/END UNTRUSTED PROVIDER OUTPUT` markers. Full spec: [docs/adapter-contract.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/adapter-contract.md) — background reading, not a dependency. **Everything you need is inlined below.** Do not go looking for that file: your working directory is the user's project, not the Quorum repo, so a relative path to it resolves to nothing.
 
 **Check `status` before counting a vote.** A panelist that returned `empty` did not
 abstain — it failed. Counting it as agreement (or as silence) is how a four-model panel
