@@ -62,7 +62,7 @@ BODY=$(mktemp)
 # process running as you for the whole life of the call. curl reads @file instead.
 HDR=$(mktemp); chmod 600 "$HDR"
 printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$HDR"
-CODE=$(curl -s -m 300 -o "$BODY" -w '%{http_code}' https://api.z.ai/api/anthropic/v1/messages \
+CODE=$(curl -s -m 900 -o "$BODY" -w '%{http_code}' https://api.z.ai/api/anthropic/v1/messages \
   -H @"$HDR" \
   -H "anthropic-version: 2023-06-01" \
   -H "content-type: application/json" -d @body.json)
@@ -73,6 +73,11 @@ rm -f "$HDR"
 jq -r 'if .content then ([.content[]|select(.type=="text")|.text]|join(""))
        else (.error.message // tostring) end' "$BODY"
 [ "$CODE" = 200 ] || echo "(http $CODE — this is an error, not an answer)" >&2
+# Truncation is NOT success. Measured: a 152 KB input at max_tokens=32000 returned
+# stop_reason=max_tokens with 17,648 chars cut off mid-review. Counting that as a vote
+# means the panel weighs a partial answer as a whole one.
+[ "$(jq -r '.stop_reason // ""' "$BODY")" = "max_tokens" ] \
+  && echo "(TRUNCATED — partial answer, do not count as a complete vote)" >&2
 ```
 
 **Dispatch every selected panelist in ONE message** so they run in parallel. Use `run_in_background: true`;

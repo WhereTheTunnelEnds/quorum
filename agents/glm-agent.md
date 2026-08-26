@@ -50,7 +50,7 @@ printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$_hdr"
 
 jq -n --rawfile p "$PROMPT_FILE" \
   '{model:"glm-5.3", max_tokens:32000, messages:[{role:"user", content:$p}]}' \
-| curl -s -m 300 https://api.z.ai/api/anthropic/v1/messages \
+| curl -s -m 900 https://api.z.ai/api/anthropic/v1/messages \
     -H @"$_hdr" \
     -H "anthropic-version: 2023-06-01" \
     -H "content-type: application/json" \
@@ -79,6 +79,29 @@ At 8000 the thinking block consumed the entire budget and the answer was empty �
 the kind of question this provider is selected for. Use **32000**. The failure is detected
 (`status: empty`) rather than silent, but a provider that returns nothing on every hard
 question is useless, which is worse than noisy.
+
+**32000 is not a safe ceiling either, and no constant is.** Measured on a 152 KB input — the
+whole-subsystem read this provider exists for — asking for an exhaustive review:
+
+| `max_tokens` | elapsed | `stop_reason` | output tokens | text |
+|---|---|---|---|---|
+| 32000 | **360 s** | `max_tokens` | 32000 | 17,648 chars, **cut off mid-review** |
+
+Two things follow, and they matter more than the number:
+
+1. **360 s exceeded the `-m 300` this adapter used to carry**, so the call was killed
+   outright. Every other adapter in this repo allows 900 s; GLM alone allowed 300, on the
+   provider selected for the largest inputs. It is now 900.
+2. **The answer was truncated and the old table classified it `ok`.** Raising `max_tokens`
+   makes truncation less likely but never impossible — the input can always grow. So the
+   fix is detection, not a bigger constant: `stop_reason: "max_tokens"` with text present is
+   now `error — truncated`, and the partial text is relayed as evidence rather than as an
+   answer.
+
+`docs/adapter-contract.md` §6b already named this exact failure — *"a response that is
+truncated mid-sentence … classifies as `ok`"* — and prescribed checking `stop_reason`. This
+adapter did not implement it. A contract the adapters do not follow is documentation, not a
+contract.
 
 Model ids carry **no `[1m]` suffix** — it's `glm-5.3`, not `glm-5.3[1m]`. The suffixed form
 returns `modelCode: does not exist`. Query the live list rather than trusting this file:
@@ -214,7 +237,7 @@ Capture the body and HTTP status, classify, then report:
 
 ```bash
 BODY=$(mktemp)
-CODE=$(… curl -s -m 300 -o "$BODY" -w '%{http_code}' …)
+CODE=$(… curl -s -m 900 -o "$BODY" -w '%{http_code}' …)
 ```
 
 | Condition | status |
@@ -223,6 +246,7 @@ CODE=$(… curl -s -m 300 -o "$BODY" -w '%{http_code}' …)
 | `.error` present in body | `error` |
 | no block with `type=="text"` | `empty` — usually thinking-only; raise `max_tokens` |
 | `.stop_reason == "max_tokens"` and text is empty | `empty` |
+| `.stop_reason == "max_tokens"` and text is **not** empty | `error` — **truncated**. Relay the partial text, never as a complete answer |
 | otherwise | `ok` |
 
 Report exactly this envelope:
