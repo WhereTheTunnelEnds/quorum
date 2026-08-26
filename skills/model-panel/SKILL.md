@@ -29,14 +29,16 @@ synthesis step costs more than the answer is worth.
 
 | Question type | Consult | Why |
 |---|---|---|
-| Architecture / design | **All three** | Highest cost of being wrong, and disagreement *is* the deliverable |
-| Spec or implementation-plan review | **All three** | Silent errors here cost days downstream; adversarial review is cheap by comparison |
-| Security review, auth, permissions | **All three** | |
-| Hardware, part selection, datasheet specs | **All three**, then verify independently | Part numbers and their specs are the single highest confabulation surface |
+| Architecture / design | **All available** | Highest cost of being wrong, and disagreement *is* the deliverable |
+| Spec or implementation-plan review | **All available** | Silent errors here cost days downstream; adversarial review is cheap by comparison |
+| Security review, auth, permissions | **All available** | |
+| Hardware, part selection, datasheet specs | **All available**, then verify independently | Part numbers and their specs are the single highest confabulation surface |
 | Stubborn bug that survived one fix | **Codex** first; add GLM if still unresolved | Agentic with repo access, strongest on focused debugging. Slower — worth it here |
 | Huge file / whole subsystem in one read | **GLM only** | 1M context; the only one that can hold it at once |
+| The repo itself, read by the provider | **Codex** or **Antigravity** | Both open your files directly instead of working from pasted excerpts |
+| Anything that must not leave the machine | **Ollama only** | Local; nothing is transmitted |
 | Repo conventions, PR/issue/CI history | **Copilot only** | GitHub-native context the others lack |
-| Quick sanity check | **One**, whichever is least like Claude for that domain | A three-panel on a small question trains you to stop using the panel |
+| Quick sanity check | **One**, whichever is least like Claude for that domain | A full panel on a small question trains you to stop using the panel |
 | Anything already covered by good tests | **None** | Tests are a cheaper oracle than a panel |
 
 ## Verified Invocations
@@ -61,7 +63,7 @@ curl -s -m 300 https://api.z.ai/api/anthropic/v1/messages \
   -d @body.json | jq -r '[.content[]|select(.type=="text")|.text]|join("")'
 ```
 
-**Dispatch all three in ONE message** so they run in parallel. Use `run_in_background: true`;
+**Dispatch every selected panelist in ONE message** so they run in parallel. Use `run_in_background: true`;
 a full panel takes 2–10 minutes. Sequential dispatch triples wall-clock for no benefit.
 
 **Mind the background-wait ceiling.** A real panel run was terminated mid-synthesis at 600s
@@ -99,6 +101,13 @@ not benchmarks.
 - **Copilot** — fastest to a structured, well-organized answer, and good at surfacing a
   failure mode the others miss. But it produced the only confidently-wrong "verified" claim
   observed so far. Weight its structure highly and its specific numbers lightly.
+- **Antigravity** — reads your repository itself rather than working from pasted excerpts,
+  which makes it the right second opinion on questions about *this* codebase. Consult only:
+  its write path cannot be contained, so it is never given one.
+- **Ollama** — a local model, and the panel's weakest voice by a wide margin. Its value is
+  that nothing leaves the machine. Do **not** count it as a vote on a hard call: a panel
+  pays off through models being wrong in *different* ways, and a small local model is wrong
+  more often and less independently. Use it for privacy-bound work, not tie-breaking.
 
 ## Workflow
 
@@ -143,7 +152,7 @@ not benchmarks.
 
 ## Visual panels
 
-All four models can see images, so a panel works on photos as well as text — judging a
+Most panelists can see images, so a panel works on photos as well as text — judging a
 physical result (a soldered board, a rendered UI, a manufactured part, a screenshot of a
 failure) against a written standard.
 
@@ -153,6 +162,8 @@ failure) against a written standard.
 | `copilot-agent` | `--attachment <path>`, repeatable |
 | `codex-agent` | `-i <FILE>` — prompt **must** go via stdin, the flag is variadic |
 | `glm-agent` | `npx -y zai-cli vision analyze`; JPG/PNG only, ≤5MB |
+| `antigravity-agent` | reads image paths directly; verified on the four-quadrant probe |
+| `ollama-agent` | only if a vision model is pulled — otherwise skip it |
 
 **Normalize the photo once, up front:** `IMG=$(prep-image <original>)`, then hand `$IMG` to
 every panelist. Phone photos are HEIC and often 20MB+, which some endpoints reject outright
@@ -209,6 +220,6 @@ consensus of four, and the user cannot tell the difference unless you say so.
 
 ## Cost
 
-Each consult spends quota on that provider's subscription. A full panel is roughly four
-answers to one question. Worth it for a decision you'd otherwise sleep on; not worth it
+Each consult spends quota on that provider's subscription — except Ollama, which is free
+and local. A full panel is roughly one answer per panelist plus your own. Worth it for a decision you'd otherwise sleep on; not worth it
 for anything you'd merge without review.

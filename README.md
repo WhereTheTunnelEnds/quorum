@@ -40,7 +40,7 @@ built by walking into each of those failures first.
 | | |
 |---|---|
 | **5 verified adapters** | `glm-agent`, `codex-agent`, `copilot-agent`, `ollama-agent`, `antigravity-agent` — every flag field-tested, every failure mode documented |
-| **`model-panel`** | Fan a question to all three in parallel, then synthesize consensus, splits, and outliers |
+| **`model-panel`** | Fan a question to every available provider in parallel, then synthesize consensus, splits, and outliers |
 | **`delegate-task`** | Hand over whole units of work; each runs in an isolated worktree you review as a diff |
 | **`add-provider`** | Your Claude probes a new provider and writes a verified adapter for it — MLX, Ollama, another CLI, anything |
 | **`quorum-verify`** | Re-runs the contract against live providers, so "verified" is a measurement, not a claim |
