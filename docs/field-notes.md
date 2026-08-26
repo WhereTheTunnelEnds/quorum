@@ -239,15 +239,38 @@ whenever execution isn't needed.
 
 ## GLM (Z.AI Coding Plan)
 
-### Failures arrive inside HTTP 200
+### `curl` exits 0 on every failure, so its exit code tells you nothing
 
-**Symptom.** `curl` exits 0, the body looks like JSON, and there is no answer in it.
+**Symptom.** The command succeeds, the body looks like JSON, and there is no answer in it.
 
-**Cause.** The API returns `{"error":{"message":"token expired or incorrect"}}` and
-`modelCode: does not exist` as ordinary 200 responses.
+**Cause.** `curl -s` returns 0 whenever it completed an HTTP transaction — **including 4xx
+and 5xx**. Without `-w '%{http_code}'` the status is discarded and every failure looks like
+a success at the shell level.
 
-**Fix.** Capture body *and* status (`-o "$BODY" -w '%{http_code}'`), then classify on the
-presence of `.error` as well as on the code. Curl's exit status tells you nothing here.
+**Measured** (z.ai Anthropic-compatible endpoint):
+
+| Case | HTTP | curl exit | Body |
+|---|---|---|---|
+| bad API key | **401** | 0 | `{"error":{"message":"token expired or incorrect","type":"401"}}` |
+| bad model id (`glm-5.3[1m]`) | **400** | 0 | `{"type":"error","error":{"code":"1214",…}}` |
+| thinking consumed `max_tokens` | **200** | 0 | valid response, **no text block at all** |
+| server unreachable | — | **7** | empty |
+
+**Correction.** An earlier version of this note claimed the first two arrive as HTTP 200.
+They do not — both return correct status codes. The claim was never measured, and direct
+measurement while auditing failure paths disproved it. The **third** row is the real
+success-shaped failure, and it is why `status: empty` exists.
+
+**Fix.** Capture body *and* status, and classify on all three signals — curl's own exit
+code (7 = unreachable), the HTTP status, and the presence of `.error` in the body:
+
+```bash
+CODE=$(curl -s -m 300 -o "$BODY" -w '%{http_code}' …); RC=$?
+```
+
+**The general rule.** A transport that succeeded is not an operation that succeeded. Any
+adapter built on `curl` must capture `%{http_code}`; any adapter built on a CLI must capture
+the process exit code unpiped. Both are the same mistake wearing different clothes.
 
 ### `.content[0].text` is `null`
 
