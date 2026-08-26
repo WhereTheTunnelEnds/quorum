@@ -15,12 +15,23 @@ Two routes, and picking the wrong one wastes an afternoon.
 
 ### Route A — a consult-only `curl` adapter (recommended)
 
-Talk to `/v1/chat/completions` directly. No shim, no extra process, works today. You get a
-**consult** tier and nothing else — which for a local model is usually the whole truth
-anyway, since most have no agentic harness, no sandbox, and no file-editing loop.
+Talk to the server directly. No shim, no extra process, works today. You get a **consult**
+tier and nothing else — which for a local model is usually the whole truth anyway, since
+most have no agentic harness, no sandbox, and no file-editing loop.
 
 An adapter that offers only consult, honestly, is worth far more than one that claims three
 tiers it cannot enforce.
+
+> **Prefer the vendor's native endpoint over its OpenAI-compatible one where both exist.**
+> The compatibility layer is a translation, and translations drop fields. Measured on
+> ollama 0.18.2: `/v1/chat/completions` **accepts `options.num_ctx` and discards it**,
+> capping the prompt at the served window and dropping the overflow — HTTP 200,
+> `finish_reason: "stop"`, no error — while native `/api/chat` honoured the same value
+> exactly (2048 requested → 2048 processed; via `/v1`, 32768).
+>
+> An OpenAI-compatible endpoint buys you portable *code*. It does not guarantee the server
+> honours what you send. Verify the fields you depend on actually take effect —
+> [field-notes.md](../field-notes.md) has the full measurement.
 
 ### Route B — an Anthropic-compatible shim, for verify and delegate
 
@@ -34,8 +45,12 @@ afternoon. Route A first; add Route B only if you actually need a local model ed
 
 ## Route A: the adapter shape
 
+For Ollama specifically, use the native endpoint instead — see
+[ollama.md](ollama.md). The OpenAI-compatible shape below applies to MLX, LM Studio,
+llama.cpp, vLLM, and OpenRouter.
+
 ```bash
-BASE="${LOCAL_LLM_BASE:-http://localhost:11434/v1}"   # MLX: :8080/v1 · LM Studio: :1234/v1
+BASE="${LOCAL_LLM_BASE:-http://localhost:8080/v1}"    # MLX :8080 · LM Studio :1234
 MODEL="${LOCAL_LLM_MODEL:?set LOCAL_LLM_MODEL}"
 
 PROMPT_FILE=$(mktemp)
@@ -80,10 +95,21 @@ Local servers fail differently from hosted ones. Measure yours; these are the us
 | `.choices[0].message.content` empty/null | `empty` | context overflow, or reasoning ate the budget |
 | otherwise | `ok` | |
 
-**Context overflow is the local-model failure mode.** Many servers silently truncate the
-prompt to the model's window rather than erroring — so you get a confident answer about a
-file the model only saw half of. Check the served context length during probe 1 and make
-the adapter refuse oversized inputs outright rather than quietly answering from a fragment.
+**Context overflow is the local-model failure mode**, and it is measured, not theoretical:
+servers silently truncate to the served window rather than erroring, so you get a confident
+answer about a file the model saw a fragment of. Every success signal still says success.
+
+Two defences, and use both:
+
+1. **Find the real window during probe 1** and make the adapter refuse oversized inputs
+   outright rather than quietly answering from a fragment.
+2. **Check the reported prompt-token count against that window on every call.** If the
+   server says it processed exactly the window size, assume truncation and return `empty`
+   rather than relaying the answer. Ollama reports `prompt_eval_count`; OpenAI-compatible
+   servers report `usage.prompt_tokens`.
+
+A canary makes this testable: put a distinctive token on the first line of a long prompt and
+ask the model to repeat it. If it cannot, the head was dropped.
 
 ## Is it worth adding?
 

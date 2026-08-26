@@ -8,7 +8,8 @@ They're recorded in the shape that matters: **symptom → cause → fix**, plus 
 measured, so you can tell a claim from a guess.
 
 CLI behaviour changes. Entries measured against a specific version say so. Versions used
-for the current round: **Codex 0.148.0**, **Copilot CLI 1.0.80**, **Claude Code 2.1.246**.
+for the current round: **Codex 0.148.0**, **Copilot CLI 1.0.80**, **Claude Code 2.1.246**,
+**Ollama 0.18.2**.
 Re-run `scripts/quorum-verify --all` after any provider update — a flag that quietly got
 renamed looks exactly like a model with nothing to say.
 
@@ -61,6 +62,29 @@ Corollary worth knowing if you wrap `claude` in an alias carrying
 `--dangerously-skip-permissions`: that alias does **not** apply to script- or agent-launched
 sessions. Those get the real defaults, and any permission assumptions you made
 interactively are wrong there.
+
+### `jq`'s `// default` does not rescue an error
+
+**Symptom.** A defensive-looking `jq -r '...  // 8192'` yields an **empty string**, and the
+next line fails with `[: : integer expression expected` — leaking a bare shell error into an
+adapter's output.
+
+**Cause.** `//` is the *alternative* operator: it substitutes for `null` and `false` only.
+A runtime error is not null — `.model_info | to_entries` on a missing key **throws**, jq
+exits non-zero having printed nothing, and the default never applies. Error bodies are
+exactly where the key is missing, so this fires only on the failure path.
+
+**Fix.** Guard inside jq *and* validate in the shell, because the variable can still be
+empty if jq dies:
+```bash
+V=$(jq -r '[((.model_info // {}) | to_entries[] | ...)][0] // empty' "$BODY" 2>/dev/null)
+case "$V" in ''|*[!0-9]*) V=8192 ;; esac
+```
+
+**How it was found.** Building the Ollama adapter. The happy path and the classification
+were both correct; only the failure path leaked, and it still produced the right final
+status — which is the dangerous kind of correct, since testing the good case would never
+have surfaced it.
 
 ### A missing binary proves nothing about a provider
 
@@ -218,6 +242,74 @@ fine when you see this — it's the model name.
 **Fix.** `scripts/prep-image` normalizes anything to a compliant JPEG. **Measured:** HEIC
 input converts cleanly, and a 25MB PNG was reduced to 543KB at 1024px by the downscale loop
 (two passes) against a 1MB cap.
+
+---
+
+## Ollama (local model server)
+
+### The OpenAI-compatible endpoint silently ignores `num_ctx`
+
+**Symptom.** A long prompt gets a fluent, confident answer that is subtly about the wrong
+thing — and every signal says success: HTTP 200, `finish_reason: "stop"`, curl exit 0,
+non-empty body.
+
+**Cause.** Ollama exposes two chat endpoints. `/v1/chat/completions` (OpenAI-compatible)
+**accepts `options.num_ctx` and discards it**, capping the prompt at the served window and
+dropping the overflow without any error. The native `/api/chat` honours it.
+
+**Fix.** Use native `/api/chat`, and set `num_ctx` explicitly on every call.
+
+**Measured** (ollama 0.18.2, `llama3.2:3b`), same ~54,000-token prompt with a canary on
+line 1, both sent `options:{num_ctx:65536}`:
+
+| Endpoint | tokens processed | recovered the head canary? |
+|---|---|---|
+| `/v1/chat/completions` | `prompt_tokens: 32768` | no — answered *"The LETTERS E H I L O"* |
+| `/api/chat` | `prompt_eval_count: 48071` | yes — `QUORUM_HEAD_CANARY_7742` |
+
+**Truncation drops from the head**, so the beginning of the prompt is what disappears — the
+system prompt and framing go first, and the trailing question still gets answered fluently.
+That is why it reads as a real answer.
+
+**Detect it** with `prompt_eval_count`: when Ollama truncates, it lands exactly on the
+requested window. `prompt_eval_count >= num_ctx` is an exact test, and it is the *only*
+machine-readable signal that this failure occurred.
+
+### The served context is not the model's context, and raising it costs GB
+
+**Symptom.** A model advertising 128k context truncates at a quarter of that.
+
+**Cause.** `num_ctx` is a per-request/server setting, independent of what the model
+supports. It is not raised to the model's maximum for you.
+
+**Fix.** Set it per request, sized to the prompt — not maxed out, because the KV cache is
+allocated for the whole window.
+
+**Measured.** `llama3.2:3b` advertises `context length 131072`; the server served
+**32768** by default with `OLLAMA_CONTEXT_LENGTH` unset. `ollama ps` shows the live value
+in its `CONTEXT` column, and resident size grew **5.6 GB → 9.2 GB** going from `num_ctx`
+32768 to 65536 on the same 3B Q4 model.
+
+### Cold start looks exactly like a hang
+
+**Measured.** First call after idle: **9s** (model load). Warm: **0.16s**. On a 3B model.
+Set the deadline well above the cold-start cost for the largest model in use, or probe 2
+records a load as a timeout.
+
+### The two endpoints disagree on the shape of an error
+
+**Cause.** Native `/api/chat` returns a **flat string** — `{"error":"model 'x' not found"}`.
+`/v1/chat/completions` returns the OpenAI **nested object** — `{"error":{"message":...}}`.
+
+**Fix.** Read defensively, or an error extraction written against one endpoint yields
+`null` against the other and the failure reads as empty:
+```bash
+jq -r 'if (.error|type)=="string" then .error else (.error.message // "unknown") end'
+```
+
+**Measured.** Unpulled model id: **HTTP 404**, 57-byte body native / 120-byte nested on
+`/v1` — and **curl exits 0 in both cases**. Classifying on exit code alone reports it as an
+answer.
 
 ---
 

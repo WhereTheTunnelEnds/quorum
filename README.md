@@ -39,7 +39,7 @@ built by walking into each of those failures first.
 
 | | |
 |---|---|
-| **3 verified adapters** | `glm-agent`, `codex-agent`, `copilot-agent` — every flag field-tested, every failure mode documented |
+| **4 verified adapters** | `glm-agent`, `codex-agent`, `copilot-agent`, `ollama-agent` — every flag field-tested, every failure mode documented |
 | **`model-panel`** | Fan a question to all three in parallel, then synthesize consensus, splits, and outliers |
 | **`delegate-task`** | Hand over whole units of work; each runs in an isolated worktree you review as a diff |
 | **`add-provider`** | Your Claude probes a new provider and writes a verified adapter for it — MLX, Ollama, another CLI, anything |
@@ -95,6 +95,7 @@ Only what you actually intend to use — every provider is optional.
 
 | Provider | Needs |
 |---|---|
+| Ollama | `ollama` + a pulled model. **No account, no key, no subscription** |
 | Codex | `codex` CLI, `codex login` (ChatGPT subscription) |
 | Copilot | `copilot` CLI (GitHub Copilot subscription) |
 | GLM | `Z_AI_API_KEY` exported from `~/.zshenv` (Z.AI Coding Plan) |
@@ -115,6 +116,13 @@ The three built-in adapters are examples of a pattern, not the point of the repo
 ```
 /quorum:add-provider mlx
 ```
+
+`ollama-agent` was built exactly this way — by a Claude that had never seen this repo's
+development, running the probes on a real machine. It passes `quorum-verify` 4/4, and along
+the way it **found and corrected an error in these docs**: the porting guide recommended
+Ollama's OpenAI-compatible endpoint, which silently discards `options.num_ctx` and truncates
+long prompts with no error signal. The native endpoint honours it. That correction is now in
+the [field notes](docs/field-notes.md), measured.
 
 Your Claude then runs [six probes](skills/add-provider/reference/probe-checklist.md)
 against the provider **on your machine** and writes the adapter from what it measured:

@@ -63,6 +63,24 @@ else
   fi
 fi
 
+# --- Ollama (local model server) --------------------------------------------------
+# Check the SERVER, not the binary: `ollama` can be installed with nothing serving, and a
+# remote OLLAMA_BASE has no local binary at all. A real call is the only evidence.
+OLLAMA_BASE="${OLLAMA_BASE:-http://localhost:11434}"
+tags=$(curl -s -m 5 "$OLLAMA_BASE/api/tags" 2>/dev/null)
+if [ -z "$tags" ]; then
+  bad "ollama    no server at $OLLAMA_BASE  ->  run: ollama serve"
+else
+  count=$(printf '%s' "$tags" | jq -r '.models | length' 2>/dev/null || echo 0)
+  case "$count" in ''|*[!0-9]*) count=0 ;; esac
+  if [ "$count" -eq 0 ]; then
+    bad "ollama    server up, no model pulled  ->  run: ollama pull llama3.2:3b"
+  else
+    names=$(printf '%s' "$tags" | jq -r '[.models[].name] | join(", ")' 2>/dev/null)
+    ok "ollama    $count model(s): $names"
+  fi
+fi
+
 # --- Locally configured endpoints ------------------------------------------------
 ENDPOINT_DIR="${QUORUM_ENDPOINT_DIR:-$HOME/.config/quorum/endpoints}"
 if [ -d "$ENDPOINT_DIR" ]; then
