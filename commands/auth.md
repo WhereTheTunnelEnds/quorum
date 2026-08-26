@@ -14,6 +14,10 @@ Then help the user through whatever it flagged:
 - **Never run an interactive login on the user's behalf without asking.** `codex login` and
   the first `copilot` run open a browser and bind their account. Tell them the command and
   let them run it, or confirm before using `--fix`.
+- **Never ask the user to paste a key, token, device code, or one-time auth code into this
+  conversation** — not even to "check" it. Anything pasted becomes transcript, which is
+  stored and may be summarised or logged, and a leaked credential must then be rotated. If
+  the user offers one, tell them not to.
 - **Never ask for, echo, or store a key yourself.** `quorum-auth glm --set-key` reads it
   through a silent prompt so it never touches shell history or the transcript. Point them
   at that instead of taking the key into this conversation.

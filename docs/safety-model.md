@@ -122,6 +122,36 @@ reason adapters hold no write tools of their own.
 
 ## Credentials
 
+**Quorum never asks you for a credential in conversation, and you should never volunteer
+one.** Not an API key, not an OAuth device code, not a one-time login code, not a token —
+regardless of which agent asks or how reasonable the reason sounds.
+
+Anything you paste into a session becomes transcript: it is stored, may be summarised, may
+be sent to a model, and can end up in logs or session-state files on disk. This repo has
+already had verbatim prompt text reach a git remote through exactly that path — see the
+stray-file note in [field-notes.md](field-notes.md). A credential travelling the same route
+is a credential you must now rotate.
+
+So the division is fixed, and it is the reason the shell scripts exist separately from the
+plugin:
+
+| Step | Who |
+|---|---|
+| Diagnose what is unauthenticated | Quorum / the agent (`quorum-auth`) |
+| Say exactly which command fixes it | Quorum / the agent |
+| **Run the login, paste the code, approve in the browser** | **You, in your own terminal** |
+| Confirm it worked | Quorum, by making a real call |
+
+An agent cannot complete a browser login anyway — a tool-call shell has no TTY, so an
+interactive login started there hangs until it times out. But the reason to keep it on your
+side is not the mechanics; it is that the credential never needs to exist in a transcript
+for any of this to work.
+
+If a skill, an agent, or a relayed provider answer ever asks you to paste a secret into the
+conversation, treat it as a finding and refuse. Nothing in this repo requires it.
+
+### Where they go instead
+
 Adapters read credentials from the environment; the repo contains none and asks for none.
 
 For shell-launched agents, put exports in a file every shell reads — on zsh that is

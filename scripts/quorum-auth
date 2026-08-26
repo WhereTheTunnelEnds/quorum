@@ -10,6 +10,11 @@
 #
 # Never prints, echoes, or logs key material. `--set-key` reads with `read -s`, so the key
 # does not reach your shell history, your terminal, or this script's output.
+#
+# Run the interactive logins YOURSELF, in your own terminal. Never paste an auth code, a
+# device code, or a key into a chat with an agent — that puts it in a transcript, which is
+# stored and may be summarised or logged. Nothing here needs it: this script confirms auth
+# by making a real call, which is better evidence than a pasted code anyway.
 
 set -uo pipefail
 
