@@ -50,12 +50,27 @@ either, and route them to `codex-agent`, `copilot-agent`, or `glm-agent`.
 ### Consult — read-only, enforced by headless permission auto-deny
 
 ```bash
-# Precondition: the read-only guarantee below holds only while no write/shell allow-rule
-# exists in the user's GLOBAL settings. Check it, do not assume it.
+# Precondition: read-only here is enforced by headless auto-deny, which a GLOBAL allow-rule
+# can override. That file is machine-wide, so a rule added for an unrelated project silently
+# weakens this consult. Check it — do not assume it.
+#
+# Refuse only on rules that actually grant WRITES OR EXECUTION. read_file/read_url grants
+# cannot break a read-only guarantee, and refusing on those would block consult for no
+# safety reason — a guard that cries wolf gets disabled, which is worse than no guard.
 SETTINGS="$HOME/.gemini/antigravity-cli/settings.json"
-if [ -f "$SETTINGS" ] && grep -qE '"(allow)"' "$SETTINGS" 2>/dev/null; then
-  echo "status: error — permissions.allow present in $SETTINGS; consult is no longer read-only"
-  exit 1
+if [ -f "$SETTINGS" ]; then
+  RISKY=$(jq -r '[(.permissions.allow // [])[]
+                 | select(test("^(write_file|command|unsandboxed|mcp)\\("))]
+                 | join(", ")' "$SETTINGS" 2>/dev/null) || RISKY="__unparseable__"
+  if [ "$RISKY" = "__unparseable__" ]; then
+    echo "status: error — cannot parse $SETTINGS; refusing to claim read-only on an unknown policy"
+    exit 1
+  elif [ -n "$RISKY" ]; then
+    echo "status: error — global allow-rules grant write/exec: $RISKY"
+    echo "consult cannot claim read-only while these are active. Remove them, or ask the"
+    echo "caller to route this question to a provider whose read-only tier is unconditional."
+    exit 1
+  fi
 fi
 
 OUT=$(mktemp); ERR=$(mktemp)
