@@ -100,7 +100,7 @@ jobs:
           # breaks any parser anchored on `status:` at the start of the response. The rule
           # only helps if every adapter carries it.
           fail=0
-          for f in agents/*-agent.md; do
+          for f in agents/*.md; do
             grep -q 'Do not wrap the envelope in a code fence' "$f" || { echo "ERROR: $f missing the no-code-fence rule"; fail=1; }
           done
           exit $fail
@@ -120,16 +120,31 @@ jobs:
           fi
           echo "no absolute home paths"
 
+      # NOTE on globs: every adapter gate uses agents/*.md, not agents/*-agent.md.
+      # They match the same five files today, so the difference is invisible — which is
+      # exactly the problem. An adapter added under any other name would be checked by the
+      # write-tools and frontmatter gates and skipped by the delimiter one, and the CI run
+      # would still be green. Same class as a canary that passes at any setting.
       - name: Every adapter neutralises the untrusted-output delimiter
         run: |
           # The delimiters are forgeable: provider output containing the closing marker
           # closes the fence early, and post-delimiter text is designated trusted. An audit
           # had a local model emit that marker on request. The rule only helps if every
           # adapter carries it.
+          # Two halves, and the second was missing for as long as the first existed.
+          # Substituting the marker text catches text; it does not catch an ANSI escape,
+          # which edits the display without containing any of the marker's letters. \033[A
+          # overwrites the line above — the adapter's own `status:` line.
           fail=0
-          for f in agents/*-agent.md; do
-            grep -q 'Neutralise the delimiter' "$f" || { echo "ERROR: $f missing the delimiter-neutralisation rule"; fail=1; }
+          for f in agents/*.md; do
+            grep -q 'Neutralise the delimiter' "$f" \
+              || { echo "ERROR: $f missing the delimiter-neutralisation rule"; fail=1; }
+            grep -q 'Strip control characters' "$f" \
+              || { echo "ERROR: $f missing the control-character rule"; fail=1; }
+            grep -q "LC_ALL=C tr -d" "$f" \
+              || { echo "ERROR: $f names no LC_ALL=C strip command"; fail=1; }
           done
+          [ "$fail" = 0 ] && echo "all adapters neutralise markers AND control characters"
           exit $fail
 
       - name: No API key passed on a command line

@@ -146,8 +146,34 @@ closing marker plus a forged `status: ok` line on request.
 
 ```bash
 sed -e 's/--- END UNTRUSTED PROVIDER OUTPUT ---/[marker neutralised]/g' \
-    -e 's/--- BEGIN UNTRUSTED PROVIDER OUTPUT/[marker neutralised]/g' "$OUT"
+    -e 's/--- BEGIN UNTRUSTED PROVIDER OUTPUT/[marker neutralised]/g' "$OUT" \
+| LC_ALL=C tr -d '\000-\010\013-\037\177'
 ```
+
+**The `tr` is not optional, and the `sed` alone was the whole rule until an audit pointed at
+the gap.** A text substitution catches text. The delimiter exists so a reader can see where
+untrusted output starts and stops — and an ANSI escape edits the display directly, without
+containing a single letter of the marker. `\033[A` moves the cursor up and overwrites the
+line above, which is your `status:` line; `\r` rewrites the current one. The substitution
+never sees either.
+
+The asymmetry is what made this worth fixing: `quorum-status` strips control bytes out of a
+*version string*, while adapters relay entire model responses — and for `copilot-agent`,
+third-party GitHub issue text — with `ESC` intact. The larger attack surface had the weaker
+filter.
+
+`LC_ALL=C` is required. Under a UTF-8 locale, `tr` aborts on the first byte that is not
+valid UTF-8 and silently drops everything after it — measured on `41 9b 42`: `LC_ALL=C`
+returns all three bytes, `en_US.UTF-8` returns only `41`. The ranges keep `\t` and `\n`, so
+multi-line answers survive, and bytes ≥ 0x80 pass untouched so non-ASCII does too.
+
+**Known limits, stated rather than papered over.** The `sed` above is byte-exact, so
+lowercase, altered spacing, a different number of dashes, or an em-dash all survive it. And
+bytes ≥ 0x80 are deliberately preserved, which means a UTF-8-encoded C1 control (U+009B, the
+single-character CSI, encoding as `c2 9b`) passes through — tmux renders it inert, but that
+was the only emulator available to test. Treat the delimiter as a convention that raises the
+cost of confusion, never as a parser boundary. The rule that actually holds is the one below
+it: **never emit a `status:` line that came from the provider.**
 
 **And callers must not treat post-delimiter text as authoritative by position alone.** A
 worktree path or diffstat counts because *you* ran `git`. If you did not run it, do not
