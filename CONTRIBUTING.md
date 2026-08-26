@@ -53,6 +53,9 @@ Format is at the [bottom of the file](docs/field-notes.md#adding-an-entry). Requ
 - **The CLI version** you measured against. These change.
 - Say explicitly if something is inferred rather than observed. One guess wearing the same
   formatting as a measurement devalues every other entry.
+- **Add it to [evidence.md](docs/evidence.md)** — either with the command that re-measures
+  it, or in the Observed table with why it cannot be. This repo asks you to paste output
+  into a PR; it holds its own prose to the same bar.
 
 Corrections are held to the same bar and are more welcome than additions. If `quorum-verify`
 disagrees with a document, the verifier is usually right — measure directly, then fix the

@@ -241,6 +241,7 @@ model with nothing to say.
 | [safety-model.md](docs/safety-model.md) | The three tiers and what enforces them |
 | [why-delegation-not-proxying.md](docs/why-delegation-not-proxying.md) | The architecture argument |
 | [field-notes.md](docs/field-notes.md) | Every failure found by breaking something |
+| [evidence.md](docs/evidence.md) | How to re-check every claim here — and which ones you can't |
 | [probe-checklist.md](skills/add-provider/reference/probe-checklist.md) | The six probes in detail |
 | [providers.md](docs/providers.md) | Every known provider: binary, install, auth, verified-or-not |
 | [porting/](docs/porting/) | MLX, Ollama, OpenAI-compatible endpoints |

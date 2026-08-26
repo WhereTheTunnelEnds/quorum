@@ -647,3 +647,9 @@ for a panel rather than a single opinion in exactly the cases where you can't ch
 
 Mark anything you did not personally observe as inferred. The value of this file is that
 its claims are measurements, and one guess wearing the same formatting devalues all of them.
+
+**And say how it can be re-checked.** [evidence.md](evidence.md) lists every non-obvious
+claim in this repo alongside the command that re-measures it — or admits that it cannot be
+re-measured and is a report rather than a measurement. Add your entry to whichever table
+fits. An unlabelled anecdote is worse than no claim, because it spends credibility the rest
+of the file earned.
