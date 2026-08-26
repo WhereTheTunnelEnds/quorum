@@ -283,6 +283,29 @@ the process exit code unpiped. Both are the same mistake wearing different cloth
 jq -r '[.content[] | select(.type=="text") | .text] | join("")'
 ```
 
+### A generous-sounding `max_tokens` still returned zero text
+
+**Symptom.** A substantive question to GLM returns `status: empty`. A trivial one works.
+
+**Cause.** `max_tokens` bounds thinking **and** output together, and reasoning is spent
+first. Hard questions think more, so the harder the question the likelier the answer is
+empty — the inverse of what you want.
+
+**Measured** (glm-5.3, one analytical prompt, seven dimensions to cover):
+
+| `max_tokens` | `stop_reason` | output tokens | text returned |
+|---|---|---|---|
+| 8000 | `max_tokens` | 8000 | **0 characters** |
+| 32000 | `end_turn` | 13,194 | 20,077 characters |
+
+**Fix.** 32000. This repo shipped 8000 as its documented default while its own adapter
+described the failure mode — so every GLM consult on a hard question returned nothing, on
+the provider chosen specifically for hard questions over large inputs.
+
+**The general lesson.** A limit that only bites on your *intended* workload will pass every
+smoke test. The canary probe in `quorum-verify` asks for one token and passes at any
+setting. Size limits against the work you actually mean to do, not against the test.
+
 ### Thinking can consume the entire token budget
 
 **Symptom.** `stop_reason: "max_tokens"` and no text block at all.

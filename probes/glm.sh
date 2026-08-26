@@ -11,7 +11,7 @@ _glm_call() {  # $1 = model id, $2 = prompt file
   printf 'Authorization: Bearer %s\n' "${Z_AI_API_KEY:-}" > "$_gl_hdr"
 
   jq -n --rawfile p "$2" --arg m "$1" \
-    '{model:$m, max_tokens:8000, messages:[{role:"user", content:$p}]}' \
+    '{model:$m, max_tokens:32000, messages:[{role:"user", content:$p}]}' \
   | qt curl -s -m 120 https://api.z.ai/api/anthropic/v1/messages \
       -H @"$_gl_hdr" \
       -H "anthropic-version: 2023-06-01" \

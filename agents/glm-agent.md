@@ -43,7 +43,7 @@ cat > "$PROMPT_FILE" <<'PROMPT_EOF'
 PROMPT_EOF
 
 jq -n --rawfile p "$PROMPT_FILE" \
-  '{model:"glm-5.3", max_tokens:8000, messages:[{role:"user", content:$p}]}' \
+  '{model:"glm-5.3", max_tokens:32000, messages:[{role:"user", content:$p}]}' \
 | curl -s -m 300 https://api.z.ai/api/anthropic/v1/messages \
     -H "Authorization: Bearer $Z_AI_API_KEY" \
     -H "anthropic-version: 2023-06-01" \
@@ -58,8 +58,21 @@ rm -f "$PROMPT_FILE"
 `thinking` block, so indexing position 0 yields `null` and looks like an empty answer.
 Always select by `type=="text"`. **Verified:** a real call returned `content[0].type ==
 "thinking"` with no text block at all until `max_tokens` was raised — thinking consumes the
-budget first, so keep `max_tokens` generous (8000+) or you'll get `stop_reason:
-"max_tokens"` with nothing but reasoning.
+budget first, so `max_tokens` must be generous or you get `stop_reason: "max_tokens"` with
+**nothing but reasoning**.
+
+**8000 is not enough, and this file used to say it was.** Measured against a real analytical
+question (compare three architectures across seven dimensions):
+
+| `max_tokens` | `stop_reason` | output tokens | **text returned** |
+|---|---|---|---|
+| 8000 | `max_tokens` | 8000 | **0 characters** |
+| 32000 | `end_turn` | 13,194 | 20,077 characters |
+
+At 8000 the thinking block consumed the entire budget and the answer was empty — on exactly
+the kind of question this provider is selected for. Use **32000**. The failure is detected
+(`status: empty`) rather than silent, but a provider that returns nothing on every hard
+question is useless, which is worse than noisy.
 
 Model ids carry **no `[1m]` suffix** — it's `glm-5.3`, not `glm-5.3[1m]`. The suffixed form
 returns `modelCode: does not exist`. Query the live list rather than trusting this file:
