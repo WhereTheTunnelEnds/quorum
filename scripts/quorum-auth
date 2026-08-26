@@ -216,17 +216,36 @@ if wants glm; then
     if [ -z "$KEY" ]; then
       echo "  nothing entered; no change made" >&2
     else
-      # Written to ~/.zshenv (not ~/.zshrc) so non-interactive shells — i.e. agents — see it.
-      if grep -q '^export Z_AI_API_KEY=' "$ENVFILE" 2>/dev/null; then
+      # $ENVFILE is resolved by quorum-lib.sh against the user's actual shell — for bash it
+      # is whichever of .bash_profile / .bash_login / .profile that shell really reads.
+      if grep -qE '^(export Z_AI_API_KEY=|set -gx Z_AI_API_KEY )' "$ENVFILE" 2>/dev/null; then
         echo "  $ENVFILE already exports Z_AI_API_KEY; leaving it alone." >&2
         echo "  Edit it by hand if you need to replace the key." >&2
       else
         umask 077
-        printf '\nexport Z_AI_API_KEY=%q\n' "$KEY" >> "$ENVFILE"
-        # umask only governs file CREATION. Appending to an existing ~/.zshenv leaves its
-        # mode untouched — measured: -rw-r--r-- with a live key in it. Set it explicitly.
+        if [ "$QUORUM_ENVFILE_SYNTAX" = fish ]; then
+          # fish cannot parse `export X=y`. Writing it produces a file fish reads and then
+          # errors on, which is worse than not writing at all.
+          mkdir -p "$(dirname "$ENVFILE")"
+          printf 'set -gx Z_AI_API_KEY %s\n' "$KEY" >> "$ENVFILE"
+        else
+          printf '\nexport Z_AI_API_KEY=%q\n' "$KEY" >> "$ENVFILE"
+        fi
+        # umask only governs file CREATION. Appending to an existing file leaves its mode
+        # untouched — measured: -rw-r--r-- with a live key in it. Set it explicitly. This
+        # can tighten a login file shared with other tools, which is the correct trade once
+        # a secret is in it — but report it rather than doing it silently.
+        _oldmode=$(ls -l "$ENVFILE" 2>/dev/null | cut -c1-10)
         chmod 600 "$ENVFILE" 2>/dev/null || true
-        echo "  wrote an export to $ENVFILE (mode 600) — open a new terminal for it to take effect"
+        echo "  wrote an export to $ENVFILE (now mode 600, was ${_oldmode:-new file})"
+        echo "  open a new terminal for it to take effect"
+        # THE KEY MUST BECOME VISIBLE TO THIS PROCESS TOO. Without this, the checks below
+        # re-read $Z_AI_API_KEY from the current environment — which the write never touched
+        # — so the SUCCESS path printed a red "Z_AI_API_KEY not set", named itself as its
+        # own unrun fix, and exited 1. Measured under a pty: the file held the key while the
+        # command reported failure. Verbatim the bug already fixed once for
+        # --init-endpoint; this sibling path was missed.
+        export Z_AI_API_KEY="$KEY"
       fi
       unset KEY
     fi
@@ -235,9 +254,10 @@ if wants glm; then
 
   if [ -z "${Z_AI_API_KEY:-}" ]; then
     bad "glm       Z_AI_API_KEY not set"
-    todo "quorum-auth glm --set-key        # silent prompt, stores in ~/.zshenv"
-    note "or by hand: echo 'export Z_AI_API_KEY=\"...\"' >> ~/.zshenv"
-    note "~/.zshenv, NOT ~/.zshrc — agents run in non-interactive shells"
+    todo "quorum-auth glm --set-key        # silent prompt, stores in $QUORUM_ENVFILE_SHORT"
+    note "or by hand, and do BOTH parts:"
+    note "  echo 'export Z_AI_API_KEY=\"...\"' >> $QUORUM_ENVFILE_SHORT && chmod 600 $QUORUM_ENVFILE_SHORT"
+    note "$QUORUM_ENVFILE_WHY"
   else
     # The key goes in a HEADER FILE, never on the command line. Measured: with
 # `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to any process running as

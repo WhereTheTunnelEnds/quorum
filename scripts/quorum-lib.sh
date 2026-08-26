@@ -20,9 +20,11 @@
 #          non-interactive. On macOS this matters doubly: GUI-launched apps never go through
 #          a login shell at all, so ~/.zprofile would not be read either.
 #   bash — reads NOTHING per-invocation when non-interactive (only $BASH_ENV, unset by
-#          default). What actually works is ~/.profile: read once at login and *exported*,
-#          so every child process, including agents, inherits it. ~/.bashrc is the common
-#          guess and it is wrong here — non-interactive bash skips it.
+#          default). What works is a LOGIN file: read once at login and *exported*, so every
+#          child process, including agents, inherits it. ~/.bashrc is the common guess and it
+#          is wrong here — non-interactive bash skips it. Which login file is not fixed: bash
+#          reads the FIRST of ~/.bash_profile, ~/.bash_login, ~/.profile that exists and then
+#          STOPS, so the answer has to be resolved against the filesystem, not hardcoded.
 case "$(basename "${SHELL:-/bin/sh}")" in
   zsh)
     QUORUM_ENVFILE="${ZDOTDIR:-$HOME}/.zshenv"
@@ -30,18 +32,44 @@ case "$(basename "${SHELL:-/bin/sh}")" in
     QUORUM_ENVFILE_WHY="~/.zshenv, not ~/.zshrc — zsh reads .zshenv on every invocation, and skips .zshrc when non-interactive, which is what agents get"
     ;;
   bash)
-    QUORUM_ENVFILE="$HOME/.profile"
-    QUORUM_ENVFILE_SHORT="~/.profile"
-    QUORUM_ENVFILE_WHY="~/.profile, not ~/.bashrc — non-interactive bash reads neither, but .profile is exported at login so child processes and agents inherit it"
+    # bash reads the FIRST of ~/.bash_profile, ~/.bash_login, ~/.profile that EXISTS, and
+    # then stops. Hardcoding ~/.profile therefore recreates, for bash users, precisely the
+    # bug this file was written to eliminate: the write succeeds, the shell never reads it.
+    #
+    # Not a corner case. ~/.bash_profile is created by nvm, rvm, conda, pyenv and
+    # Homebrew-on-Linux, so most developer machines have one — including this author's,
+    # which has ~/.bash_profile and no ~/.profile at all. Measured with both present:
+    # `bash -lc` reports the value from .bash_profile and never reads .profile.
+    QUORUM_ENVFILE=""
+    for _q_f in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+      if [ -f "$_q_f" ]; then QUORUM_ENVFILE="$_q_f"; break; fi
+    done
+    # If none exists, create ~/.profile — bash reads it when the other two are absent.
+    [ -n "$QUORUM_ENVFILE" ] || QUORUM_ENVFILE="$HOME/.profile"
+    unset _q_f
+    QUORUM_ENVFILE_SHORT="~/$(basename "$QUORUM_ENVFILE")"
+    QUORUM_ENVFILE_WHY="$QUORUM_ENVFILE_SHORT, not ~/.bashrc — non-interactive bash reads neither, but a login file is exported at login so child processes and agents inherit it; bash reads only the FIRST of .bash_profile, .bash_login, .profile that exists"
+    ;;
+  fish)
+    # fish parses neither `export X=y` nor ~/.profile. Writing POSIX syntax into a file
+    # fish does not read is the same bug twice over, so do not pretend: name the real
+    # location and the real syntax, and let the caller decide.
+    QUORUM_ENVFILE="$HOME/.config/fish/conf.d/quorum.fish"
+    QUORUM_ENVFILE_SHORT="~/.config/fish/conf.d/quorum.fish"
+    QUORUM_ENVFILE_WHY="fish does not read ~/.profile and cannot parse \`export X=y\` — use \`set -gx NAME value\` in a file under ~/.config/fish/conf.d/, which fish sources for every shell"
+    QUORUM_ENVFILE_SYNTAX="fish"
     ;;
   *)
-    # ash, dash, fish, ksh and anything else. ~/.profile is the portable answer for the
-    # POSIX-ish ones; say so rather than guessing confidently at a file that may not exist.
+    # ash, dash, ksh and anything else POSIX-ish. ~/.profile is the portable answer; say it
+    # is a best guess rather than asserting a file that may never be read.
     QUORUM_ENVFILE="$HOME/.profile"
     QUORUM_ENVFILE_SHORT="~/.profile"
     QUORUM_ENVFILE_WHY="~/.profile is the portable choice; if your shell does not read it, use whichever file it loads for NON-interactive shells"
     ;;
 esac
+# Callers that WRITE must check this: anything other than "posix" means `export X=y` is
+# wrong syntax for the target file.
+QUORUM_ENVFILE_SYNTAX="${QUORUM_ENVFILE_SYNTAX:-posix}"
 
 # --- How does this machine install a package? --------------------------------------------
 # Detect by what is present, not by uname: a Mac can have no Homebrew, and a container can
@@ -76,5 +104,5 @@ else
   QUORUM_PKG_TIMEOUT="$QUORUM_PKG_INSTALL coreutils"
 fi
 
-export QUORUM_ENVFILE QUORUM_ENVFILE_SHORT QUORUM_ENVFILE_WHY
+export QUORUM_ENVFILE QUORUM_ENVFILE_SHORT QUORUM_ENVFILE_WHY QUORUM_ENVFILE_SYNTAX
 export QUORUM_PKG_INSTALL QUORUM_PKG_TIMEOUT

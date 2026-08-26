@@ -113,13 +113,32 @@ fi
 # ~/.profile at login — and `env -i` deliberately destroys the inherited environment, so the
 # same test would report failure on a correctly configured machine. For bash, check the env
 # file for the PATH line, which is what actually governs it.
+# Ask the shell, in the mode that actually governs it. Both branches below run the user's
+# real shell with a CLEARED environment, so the answer can only come from a file that shell
+# reads — which is the whole question.
+#
+# The first version of this check ran `env -i zsh -c` for everyone, which on a machine
+# without zsh could only FAIL. Its replacement, for non-zsh, consulted `$PATH` of the
+# invoking shell — which could only PASS, since that PATH is inherited from the very
+# terminal running the check and says nothing about what a subagent will see. Two useless
+# checks in opposite directions, both of them contradicting the comment directly above.
+#
+# zsh: `-c` is enough, because zsh reads ~/.zshenv on every invocation.
+# bash: `-lc` is required, because bash's mechanism is a LOGIN file, and a non-login
+#       non-interactive bash reads nothing at all.
 _visible=1
-case "$(basename "${SHELL:-sh}")" in
-  zsh)
-    env -i HOME="$HOME" zsh -c 'command -v quorum-verify' >/dev/null 2>&1 || _visible=0 ;;
+_shname=$(basename "${SHELL:-sh}")
+case "$_shname" in
+  zsh)  env -i HOME="$HOME" zsh -c  'command -v quorum-verify' >/dev/null 2>&1 || _visible=0 ;;
+  bash) env -i HOME="$HOME" bash -lc 'command -v quorum-verify' >/dev/null 2>&1 || _visible=0 ;;
   *)
-    { [ -r "$ENVFILE" ] && grep -q '\.local/bin' "$ENVFILE"; } \
-      || case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) _visible=0 ;; esac ;;
+    # Unknown shell: try a login shell, and fall back to inspecting the env file rather
+    # than asserting either way. Never fall back to $PATH — that is the can-only-pass trap.
+    if command -v "$_shname" >/dev/null 2>&1; then
+      env -i HOME="$HOME" "$_shname" -lc 'command -v quorum-verify' >/dev/null 2>&1 || _visible=0
+    else
+      { [ -r "$ENVFILE" ] && grep -q '\.local/bin' "$ENVFILE"; } || _visible=0
+    fi ;;
 esac
 if [ "$_visible" = 1 ]; then
   ok "visible to non-interactive shells (agents will find it)"
