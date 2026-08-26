@@ -37,6 +37,34 @@ measurement command itself was piped through `tail`. Re-measured unpiped: exit 1
 > If you record only one thing from this document, record this one. It corrupts every
 > other measurement you take.
 
+### A check that fails when nothing is wrong
+
+**Symptom.** `quorum-flags` reported `GONE --help — not in --help any more` and exited 1 on
+a fully working machine.
+
+**Cause.** Two things, and the second is the interesting one.
+
+`--help` can never appear in its own output. No CLI lists `--help` inside `--help`, so any
+tool that verifies flags against help text will report it missing forever.
+
+It got into the checked set because the extractor scans an adapter for `<cli> ` anywhere and
+pulls the flags off that line — so **prose mentioning a flag is indistinguishable from an
+invocation using one.** A single sentence added that day, *"(default 5m0s, per `agy
+--help`)"*, was enough.
+
+**Fix.** Exclude `--help` and `--version` by name. The over-eager extraction stays, because
+catching flags in examples and comments is where drift actually hides — but universal flags
+have to be named as exceptions.
+
+**Why this is worth a note rather than a quiet patch.** A gate that fires when nothing is
+wrong is not a harmless annoyance. It teaches the reader that its output is noise, and the
+next failure — a real one — gets the same shrug. That is the same reasoning behind refusing
+`|| true` in CI, arriving from the opposite direction: a check that cannot fail and a check
+that always fails are both checks nobody acts on.
+
+Verified both ways after fixing, which is the standard any gate here has to meet: 0 missing
+and exit 0 on a healthy machine, and `GONE` plus exit 1 when a flag is genuinely invented.
+
 ### The docs taught the one spelling that could not work
 
 **Symptom.** `install.sh` finishes and prints, in one block:

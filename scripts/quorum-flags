@@ -67,8 +67,28 @@ flags_used() {
     | grep -E "(^|[|;(\` ])$_c " \
     | grep -vE "^[[:space:]]*(git|#|>)" \
     | grep -vE "[Dd]o not (use|reach|fall)|[Nn]ever (use|reach|widen)" \
-    | grep -oE -- '--[a-z][a-z0-9-]+' | sort -u
+    | grep -oE -- '--[a-z][a-z0-9-]+' \
+    | grep -vxE -- '--help|--version' \
+    | sort -u
 }
+
+# Why --help and --version are excluded — removing an exclusion is exactly the kind of
+# tidying that looks harmless:
+#
+# `--help` can never appear in its own output. No CLI lists --help inside --help, so
+# checking it reports GONE on a perfectly healthy provider, permanently. This shipped: one
+# prose mention of "per `agy --help`" in an adapter was extracted as a flag, and
+# quorum-flags then exited 1 on a fully working machine.
+#
+# That matters more than one wrong line. A check that fails when nothing is wrong teaches
+# people to ignore it, which costs more than never having written it — the same reason this
+# repo refuses `|| true` in CI. `--version` goes for the same reason: universal, and often
+# absent from help output.
+#
+# The root cause is that the extractor scans for `<cli> ` anywhere in the adapter, so PROSE
+# mentioning a flag is indistinguishable from an invocation using one. That is a deliberate
+# trade — over-eagerness catches flags in examples and comments, which is where drift
+# actually hides — but it means universal flags have to be excluded by name.
 
 providers() {
   for f in "$ROOT"/probes/*.sh; do

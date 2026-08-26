@@ -32,6 +32,7 @@ cited as if it could.
 | Ollama's unpulled-model failure is **HTTP 404**, curl exits 0 | field-notes | `quorum-verify ollama` |
 | Antigravity's broken call is **rc=1, 0 bytes stdout** | field-notes | `quorum-verify antigravity` |
 | Every flag the adapters use still exists | model-panel, adapters | `quorum-flags` |
+| `quorum-flags` exits 0 on a healthy machine and 1 on a real drift | field-notes | `quorum-flags; echo $?`, then invent a flag in an adapter and re-run |
 | The setup wizard completes without hanging | getting-started | `tests/drive-setup.exp n` |
 | `quorum-status` exits 0 when a provider is reachable, 1 when none are | — | `quorum-status; echo $?` |
 | `quorum-verify` exits non-zero when it verified **nothing** | adapter-contract | `quorum-verify nosuchprovider; echo $?` |
