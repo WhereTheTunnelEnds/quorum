@@ -1,0 +1,30 @@
+#!/usr/bin/expect -f
+# Regression test for quorum-setup's INTERACTIVE path.
+#
+#   tests/drive-setup.exp          # answer yes to everything
+#   tests/drive-setup.exp n        # answer no to everything
+#
+# Why this exists: `quorum-setup --check` exercises none of the interactive code — not one
+# prompt, pause, or branch a real user touches. Driving it under a real pty is the only way
+# to test it, and doing so found a hang that produced no output at all and had to be killed
+# at 400s. That bug was invisible in review: both paths read fine.
+#
+# Not run in CI — it needs live providers and a terminal. Run it before releasing a change
+# to quorum-setup, quorum-auth, or install.sh.
+
+set answer "y"
+if {$argc > 0} { set answer [lindex $argv 0] }
+set timeout 900
+
+spawn quorum-setup
+expect {
+    -re {\[y/N\] $}                        { send "$answer\r"; exp_continue }
+    -re {press return when done[^\r\n]*}   { send "\r";        exp_continue }
+    "Guide: docs/getting-started.md"       { }
+    timeout { puts "\n*** TIMEOUT — quorum-setup stalled. This is the hang class. ***"; exit 2 }
+    eof     { }
+}
+catch wait result
+set code [lindex $result 3]
+puts "\n--- quorum-setup exited $code (answers: $answer) ---"
+exit $code

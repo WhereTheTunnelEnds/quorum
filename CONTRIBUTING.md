@@ -84,9 +84,21 @@ That distinction is what everything downstream trusts.
 
 ```bash
 ./scripts/install.sh
-quorum-status
-scripts/quorum-verify --all      # costs a little quota on each provider
+quorum-setup --check             # readiness, non-interactive
+scripts/quorum-verify --all      # real calls; costs a little quota on each provider
+scripts/quorum-flags             # do the flags the adapters use still exist?
 ```
+
+**If you touched `quorum-setup`, `quorum-auth`, or `install.sh`, drive the interactive path
+too** — `--check` exercises none of it:
+
+```bash
+tests/drive-setup.exp            # yes to everything
+tests/drive-setup.exp n          # no to everything
+```
+
+That test exists because driving the wizard under a real pty found a hang that produced no
+output and had to be killed at 400s. It was invisible in review: both code paths read fine.
 
 CI validates frontmatter, JSON, and shell syntax. It cannot validate that you ran anything —
 that part is on your honour, and it is the part that matters.
