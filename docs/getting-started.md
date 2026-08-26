@@ -57,6 +57,10 @@ sudo apt install -y jq git curl coreutils
 # node: use nodejs.org or nvm
 ```
 
+You do **not** need ImageMagick on macOS — `sips` is built in and is always preferred.
+ImageMagick is only the Linux/BSD fallback for `prep-image`, which itself is needed only for
+sending images to a panel. Skip it unless both apply.
+
 **`coreutils` matters more than it looks on macOS.** It provides `timeout(1)`, which is how
 Quorum detects a provider that hangs instead of answering. Without it, hang detection is
 silently skipped — you'll see a warning, and a hung provider will look like a slow one.

@@ -113,7 +113,13 @@ documented: [docs/providers.md](docs/providers.md).
 | anything else | build it with `/quorum:add-provider` |
 
 Plus `jq`, `curl`, `git`, and `bash`. `timeout(1)` is used for hang detection — macOS needs
-`brew install coreutils`. Vision helpers use `sips` (macOS) or ImageMagick.
+`brew install coreutils`.
+
+**Nothing else is required.** Image normalization (`prep-image`, needed only if you send
+images to a panel) uses `sips`, which ships with macOS. ImageMagick is the fallback for
+Linux and BSD, where there is no `sips` — install it only if you actually want visual
+panels there. With neither present, `prep-image` exits 1 with a one-line explanation and
+every other part of Quorum is unaffected.
 
 > Export keys from **`~/.zshenv`**, not `~/.zshrc`. Agents run in non-interactive shells,
 > which never read `~/.zshrc`. A key that plainly works in your terminal but is "unset"
