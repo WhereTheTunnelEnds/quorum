@@ -55,7 +55,7 @@ copilot -p "$Q" --plan -s --no-ask-user --allow-tool "read"
 
 # GLM — no CLI exists; call the API directly. Do not check for a `glm` binary.
 jq -n --rawfile q prompt.txt \
-  '{model:"glm-5.3",max_tokens:32000,messages:[{role:"user",content:$q}]}' > body.json
+  '{model:"glm-5.3",max_tokens:64000,messages:[{role:"user",content:$q}]}' > body.json
 BODY=$(mktemp)
 # The key goes in a header FILE, never on the command line. With
 # -H "Authorization: Bearer $KEY" it sits in argv, where `ps auxww` shows it to every

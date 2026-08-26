@@ -149,16 +149,30 @@ per-token bill instead of the subscription you're already paying for.
 
 | Cause | Tell | Fix |
 |---|---|---|
-| Reasoning ate the token budget | `stop_reason: "max_tokens"`, no text block | Raise `max_tokens` to **32000** |
+| Reasoning ate the token budget | `stop_reason: "max_tokens"`, no text block | Raise `max_tokens` to **64000** |
 | Reading the wrong JSON field | Response body is non-empty | Select by `type=="text"`, never `content[0]` |
 | Provider refused silently | Zero bytes, non-zero exit | Check stderr; usually a flag |
 
 On the first row, **8000 is not a safe number** — this file used to say it was. `max_tokens`
 bounds thinking *and* output together and reasoning is spent first, so the harder the
-question the likelier the answer is empty. Measured on glm-5.3 with one analytical prompt:
-at 8000 it returned `stop_reason: max_tokens`, 8000 output tokens and **zero characters of
-text**; at 32000, `end_turn` and 20,077 characters. A canary probe that asks for one token
-passes at either setting, which is why this survived three audits.
+question the likelier the answer is empty. Measured on glm-5.3:
+
+| input | cap | elapsed | `stop_reason` | text |
+|---|---|---|---|---|
+| one analytical prompt | 8000 | — | `max_tokens` | **0 characters** |
+| one analytical prompt | 32000 | — | `end_turn` | 20,077 chars |
+| 152 KB whole-subsystem read | 32000 | 360 s | `max_tokens` | 17,648 chars, **cut off** |
+
+Three things came out of that, and the last one matters most:
+
+- The cap is now **64000** — the largest that still finishes inside the deadline.
+- The GLM timeout is now **900 s**, matching every other adapter. It was `-m 300`, so the
+  360 s call above was killed outright.
+- **`stop_reason: "max_tokens"` with text present is `error — truncated`, not `ok`.** No
+  constant is safe, because the input can always grow; only detection is.
+
+A canary probe that asks for one token passes at *any* cap, which is why the 8000 default
+survived three audits.
 
 The middle one catches people constantly: on reasoning models `content[0]` is a *thinking*
 block, so `.content[0].text` is `null` and a perfectly good answer looks empty.

@@ -49,7 +49,7 @@ _hdr=$(mktemp); chmod 600 "$_hdr"
 printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$_hdr"
 
 jq -n --rawfile p "$PROMPT_FILE" \
-  '{model:"glm-5.3", max_tokens:32000, messages:[{role:"user", content:$p}]}' \
+  '{model:"glm-5.3", max_tokens:64000, messages:[{role:"user", content:$p}]}' \
 | curl -s -m 900 https://api.z.ai/api/anthropic/v1/messages \
     -H @"$_hdr" \
     -H "anthropic-version: 2023-06-01" \
@@ -76,9 +76,9 @@ question (compare three architectures across seven dimensions):
 | 32000 | `end_turn` | 13,194 | 20,077 characters |
 
 At 8000 the thinking block consumed the entire budget and the answer was empty — on exactly
-the kind of question this provider is selected for. Use **32000**. The failure is detected
-(`status: empty`) rather than silent, but a provider that returns nothing on every hard
-question is useless, which is worse than noisy.
+the kind of question this provider is selected for. The failure is detected (`status: empty`)
+rather than silent, but a provider that returns nothing on every hard question is useless,
+which is worse than noisy.
 
 **32000 is not a safe ceiling either, and no constant is.** Measured on a 152 KB input — the
 whole-subsystem read this provider exists for — asking for an exhaustive review:
@@ -97,6 +97,21 @@ Two things follow, and they matter more than the number:
    fix is detection, not a bigger constant: `stop_reason: "max_tokens"` with text present is
    now `error — truncated`, and the partial text is relayed as evidence rather than as an
    answer.
+
+**Why the cap is 64000 and not larger.** The API is not the constraint — 128000 was accepted
+in testing. The **deadline** is. Measured throughput was 32000 output tokens in 360 s, about
+89 tokens/second:
+
+| cap | projected worst case | fits `-m 900`? |
+|---|---|---|
+| 32000 | ~360 s | yes, but truncated a real 152 KB input |
+| **64000** | **~719 s** | **yes** |
+| 96000 | ~1078 s | no — the deadline kills it first |
+
+64000 is the largest cap whose worst-case generation still finishes inside the timeout.
+Above it you trade a detected truncation for a detected timeout, which is not an
+improvement. Both are detected now either way, which is what makes this a choice rather
+than a guess.
 
 [docs/adapter-contract.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/adapter-contract.md)
 §6b already named this exact failure — *"a response that is

@@ -10,6 +10,11 @@ _glm_call() {  # $1 = model id, $2 = prompt file
   _gl_hdr=$(mktemp); chmod 600 "$_gl_hdr"
   printf 'Authorization: Bearer %s\n' "${Z_AI_API_KEY:-}" > "$_gl_hdr"
 
+  # 32000 here on purpose, while the adapter uses 64000. This is a reachability canary with
+  # a one-word prompt: the cap only has to be large enough not to truncate a short answer,
+  # and a bigger one would neither be exercised nor prove anything. A deliberate difference,
+  # not drift — and note that this probe passing at ANY cap is exactly why the adapter's
+  # 8000 default survived three audits.
   jq -n --rawfile p "$2" --arg m "$1" \
     '{model:$m, max_tokens:32000, messages:[{role:"user", content:$p}]}' \
   | qt curl -s -m 120 https://api.z.ai/api/anthropic/v1/messages \
