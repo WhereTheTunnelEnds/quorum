@@ -40,12 +40,29 @@ hm() { printf '  \033[33m!\033[0m %s\n' "$1"; }
 run() { printf '      \033[1m%s\033[0m\n' "$1"; }
 
 interactive() { [ "$CHECK" -eq 0 ] && [ -t 0 ]; }
+
+# Read from STDIN, not /dev/tty. `interactive` tests stdin (`-t 0`), so reading from a
+# different descriptor can block on a terminal nobody is typing at — a detached pty, a
+# harness, `< /dev/null`. Measured: that combination hung forever with no output at all.
+#
+# Every read is bounded. A setup script must never be able to hang indefinitely: it is the
+# first thing a new user runs, and a silent hang is indistinguishable from a broken install.
+ASK_TIMEOUT="${QUORUM_ASK_TIMEOUT:-120}"
 ask() {  # ask <prompt> ; yes = 0
   interactive || return 1
-  printf '  %s [y/N] ' "$1"; read -r a </dev/tty 2>/dev/null || return 1
-  case "$a" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
+  printf '  %s [y/N] ' "$1"
+  if read -r -t "$ASK_TIMEOUT" a; then
+    case "$a" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
+  else
+    printf '\n  (no answer in %ss — assuming no)\n' "$ASK_TIMEOUT"; return 1
+  fi
 }
-pause() { interactive || return 0; printf '  press return when done (or ctrl-c to stop) '; read -r _ </dev/tty 2>/dev/null || true; }
+pause() {
+  interactive || return 0
+  printf '  press return when done (or ctrl-c to stop) '
+  read -r -t "$ASK_TIMEOUT" _ || printf '\n  (continuing)\n'
+  return 0
+}
 
 missing=0
 

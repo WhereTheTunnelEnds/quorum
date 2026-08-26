@@ -35,6 +35,12 @@ wants() { [ -z "$WANT" ] && return 0; case " $WANT " in *" $1 "*) return 0;; *) 
 ENVFILE="${ZDOTDIR:-$HOME}/.zshenv"
 need=0
 
+# macOS ships no timeout(1). Degrade instead of emitting `timeout: command not found`,
+# which surfaces as a bare rc=127 and reads like a provider fault rather than a missing
+# local tool. Same class of leak the field notes warn about.
+_TO=$(command -v timeout || command -v gtimeout || true)
+qt() { if [ -n "$_TO" ]; then "$_TO" "$@"; else shift; "$@"; fi; }
+
 ok()   { printf '  \033[32m%s\033[0m  %s\n' "OK" "$1"; }
 bad()  { printf '  \033[31m%s\033[0m  %s\n' "--" "$1"; need=$((need+1)); }
 todo() { printf '        \033[1mfix:\033[0m %s\n' "$1"; }
@@ -92,18 +98,25 @@ if wants antigravity || wants agy; then
       bad "agy       not installed"
       todo "curl -fsSL https://antigravity.google/cli/install.sh | bash"
     fi
+  elif [ -n "${GEMINI_API_KEY:-}" ]; then
+    # Scripted path: no browser, works in CI. The binary references GEMINI_API_KEY, and the
+    # vendor documents key auth for headless runs — but this has NOT been verified here (no
+    # key available), so report it as configured rather than as working.
+    ok "agy       GEMINI_API_KEY set — headless auth path (unverified here)"
+    note "confirm with a real call: agy --print 'hi'"
   else
     # No cheap offline credential check exists: `agy models` and `agy agents` HANG when
     # unauthenticated rather than failing, so they cannot be used as a probe. A short
     # --print does fail fast, and costs one trivial call when already logged in.
     _ag_err=$(mktemp)
-    timeout 60 agy --print "hi" >/dev/null 2>"$_ag_err"; _ag_rc=$?
+    qt 60 agy --print "hi" >/dev/null 2>"$_ag_err"; _ag_rc=$?
     if [ "$_ag_rc" = 0 ]; then
       ok "agy       logged in ($(agy --version 2>/dev/null | head -1))"
     elif grep -qi 'authentication' "$_ag_err" 2>/dev/null; then
       bad "agy       not logged in"
-      todo "agy                  # opens the interactive login (browser)"
-      note "for headless/CI instead, use a Gemini API key — see docs/providers.md"
+      todo "agy                  # opens the interactive login (browser), ONE TIME"
+      note "credentials persist in ~/.gemini/antigravity-cli/ — not a per-session step"
+      note "fully scripted alternative: export GEMINI_API_KEY in ~/.zshenv (no browser)"
       if [ "$FIX" = 1 ]; then
         echo; echo "  launching 'agy' — complete the login, then quit the TUI to return here"; echo
         agy || true

@@ -32,6 +32,45 @@ from a row in this table alone.
 | **LM Studio** | server on `:1234` | app, or `lms server start` | none | documented |
 | **Gemini CLI** | `gemini` | — | — | **retired** |
 
+## Is authentication a repeated chore?
+
+**No. It is once per machine, and for some providers it can be scripted away entirely.**
+
+Every provider stores credentials after the first login — `agy` writes
+`~/.gemini/antigravity-cli/settings.json`, Codex and Copilot keep their own OAuth state.
+You do not re-authenticate per session, per project, or per call.
+
+| Provider | Browser login | Scriptable, no browser |
+|---|---|---|
+| GLM (Z.AI) | — | **yes** — `Z_AI_API_KEY` |
+| Ollama | — | **yes** — no auth at all |
+| Antigravity | one time | **yes** — `GEMINI_API_KEY` *(documented, unverified here)* |
+| Codex | one time | ChatGPT subscription is OAuth-only; an API key bills separately |
+| Copilot | one time | subscription is OAuth-only |
+
+So for CI, containers, or a fleet of machines, prefer the key column: export the variable
+from `~/.zshenv` and nothing interactive ever happens.
+
+### Why the browser step cannot be scripted away for the rest
+
+Because it is the security boundary, not a missing feature. An OAuth consent screen exists
+so that a **human** approves binding a paid account to a program. A script that could
+complete that on your behalf would be a script that could impersonate you to your provider —
+and any tool offering it would be asking you to hand over credentials that let it do so.
+
+Quorum therefore automates everything up to that moment and stops:
+
+| Step | Who | How |
+|---|---|---|
+| Detect what is missing | script | `quorum-setup --check` |
+| Print the exact install command | script | `quorum-setup` |
+| Detect what is unauthenticated | script | `quorum-auth` |
+| Open the login | script | `quorum-auth --fix` |
+| **Approve in the browser** | **you, once** | — |
+| Confirm it actually works | script | `quorum-verify --all` |
+
+One human step per provider per machine. Everything on either side of it is a script.
+
 ## Notes that will cost you time if you skip them
 
 **Two binaries are not named after their vendor.** Antigravity installs as **`agy`**. GLM
