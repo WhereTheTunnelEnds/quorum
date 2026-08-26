@@ -48,6 +48,10 @@ built by walking into each of those failures first.
 
 ## Install
 
+> **New here?** [**getting-started.md**](docs/getting-started.md) is a step-by-step
+> walkthrough from zero to your first panel, with a check after every step. This section is
+> the short version.
+
 **As a plugin** (recommended — one command, updates with `git pull`):
 
 ```
@@ -70,7 +74,8 @@ cp -r skills/*    ~/.claude/skills/
 ./scripts/install.sh
 ```
 
-Check what's reachable:
+Both halves are needed: the plugin is what Claude uses, the scripts are what your shell
+uses. Then check what's reachable:
 
 ```bash
 quorum-status
@@ -96,7 +101,8 @@ Plus `jq`, `curl`, `git`, and `bash`. `timeout(1)` is used for hang detection �
 
 > Export keys from **`~/.zshenv`**, not `~/.zshrc`. Agents run in non-interactive shells,
 > which never read `~/.zshrc`. A key that plainly works in your terminal but is "unset"
-> inside an agent is almost always this.
+> inside an agent is almost always this — it is the most common setup failure by a wide
+> margin, and [troubleshooting.md](docs/troubleshooting.md) opens with it.
 
 ## Bring your own provider
 
@@ -199,6 +205,8 @@ model with nothing to say.
 
 | | |
 |---|---|
+| [**getting-started.md**](docs/getting-started.md) | **Start here** — zero to a working panel, step by step |
+| [**troubleshooting.md**](docs/troubleshooting.md) | Indexed by what you actually see when it breaks |
 | [adapter-contract.md](docs/adapter-contract.md) | What every adapter must guarantee |
 | [safety-model.md](docs/safety-model.md) | The three tiers and what enforces them |
 | [why-delegation-not-proxying.md](docs/why-delegation-not-proxying.md) | The architecture argument |
