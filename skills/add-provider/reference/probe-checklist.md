@@ -141,6 +141,10 @@ top-left.
 
 **Pass.** All four, in the right positions.
 
+**Score the shape, not the word.** "cross" and "plus" are the same answer — two of the three
+built-in providers said *plus* and were correct. Mark on whether the shape and quadrant are
+right, not on vocabulary.
+
 Four quadrants rather than one object, on purpose: it tests recognition *and* spatial
 orientation, and it scores without judgement. A model that transposes left and right passes
 a single-object test and fails this one.

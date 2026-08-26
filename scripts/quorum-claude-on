@@ -12,7 +12,13 @@
 #   ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5.3"
 #   ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5.3"
 #   ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-5-turbo"
+#   ANTHROPIC_MODEL="glm-5.3"                  # pin it — see below
 #   CLAUDE_CODE_AUTO_COMPACT_WINDOW="1048576"  # if the endpoint has a bigger window
+#
+# PIN ANTHROPIC_MODEL. Without it, a parent session running a [1m] context variant leaks
+# that suffix through the alias mapping, and the upstream model id becomes "glm-5.3[1m]".
+# Measured: harmless via this path (the request still succeeds), but a bare model id is
+# deterministic and that exact suffix IS fatal on a direct API call — see docs/field-notes.md.
 #
 # `quorum-claude-on --init <preset>` writes a starter file you can edit.
 #
@@ -56,6 +62,8 @@ ANTHROPIC_AUTH_TOKEN="${MY_PROVIDER_KEY:?set MY_PROVIDER_KEY in ~/.zshenv}"
 ANTHROPIC_DEFAULT_OPUS_MODEL="your-large-model"
 ANTHROPIC_DEFAULT_SONNET_MODEL="your-large-model"
 ANTHROPIC_DEFAULT_HAIKU_MODEL="your-small-model"
+# Pin the model so a parent session's [1m] context-variant suffix cannot leak into the id.
+ANTHROPIC_MODEL="your-large-model"
 TEMPLATE
     chmod 600 "$target"
     printf 'wrote %s — edit it, then: quorum-claude-on %s -p "hello"\n' "$target" "$2"

@@ -108,8 +108,8 @@ Run `prep-image` first for anything off a phone. Normalizing keeps every panelis
 at the *same* image — otherwise a difference in their answers might just be a difference in
 what they were shown.
 
-**Verified working:** named all four quadrants of a probe image exactly, no flag fiddling
-required. This is the least fussy of the three image paths.
+**Verified working:** named all four quadrants of `make-probe-image`'s output exactly, no
+flag fiddling required. This is the least fussy of the three image paths.
 
 ## GitHub tools
 

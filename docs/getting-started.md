@@ -194,8 +194,14 @@ ANTHROPIC_AUTH_TOKEN="${Z_AI_API_KEY:?set Z_AI_API_KEY in ~/.zshenv}"
 ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5.3"
 ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5.3"
 ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-5-turbo"
+ANTHROPIC_MODEL="glm-5.3"
 CLAUDE_CODE_AUTO_COMPACT_WINDOW="1048576"
 ```
+
+`ANTHROPIC_MODEL` is worth pinning: without it, a parent session running a `[1m]` context
+variant leaks that suffix into the model id (`glm-5.3[1m]`). Measured as harmless through
+this path, but the bare id is deterministic — and that exact suffix *is* fatal on a direct
+API call.
 
 **Check:**
 

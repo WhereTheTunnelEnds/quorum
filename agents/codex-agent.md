@@ -109,8 +109,8 @@ Run `prep-image` first for anything off a phone. Normalizing also keeps every pa
 looking at the *same* image — otherwise a difference in their answers might just be a
 difference in what they were shown.
 
-**Verified working:** correctly named all four quadrants of a probe image
-(`make-probe-image`).
+**Verified working:** named all four quadrants of `make-probe-image`'s output correctly —
+"Red — circle / Green — square / Yellow — plus / Blue — triangle".
 
 ## Useful flags
 

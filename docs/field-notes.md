@@ -215,8 +215,9 @@ fine when you see this — it's the model name.
 
 **Cause.** JPG/PNG only, ≤5MB. iPhone photos are HEIC and routinely exceed 20MB.
 
-**Fix.** `scripts/prep-image` normalizes anything to a compliant JPEG. **Measured:** a 26MB
-HEIC became a 466KB 2048px JPEG that the API accepted.
+**Fix.** `scripts/prep-image` normalizes anything to a compliant JPEG. **Measured:** HEIC
+input converts cleanly, and a 25MB PNG was reduced to 543KB at 1024px by the downscale loop
+(two passes) against a 1MB cap.
 
 ---
 

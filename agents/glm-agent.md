@@ -86,8 +86,8 @@ npx -y zai-cli vision analyze "$IMG" "<question>" 2>&1 | grep -vE '^\[20'
 **Always run `prep-image` first.** It converts any image to JPEG and downscales until it is
 under the 5MB cap, printing the new path on stdout (diagnostics go to stderr, so command
 substitution stays clean). Phone photos are HEIC and frequently 20MB+ — both of which this
-endpoint rejects outright. **Verified:** a 26MB HEIC became a 466KB 2048px JPEG that the
-API accepted.
+endpoint rejects outright. **Verified:** `prep-image` converts HEIC to JPEG and downscales
+until it fits — a 25MB source became 543KB at 1024px after two passes.
 
 **Filter the log lines.** `zai-cli` writes `INFO`/`DEBUG` records to *stdout*, interleaved
 with the answer. Strip them with `grep -vE '^\[20'` **before** the text reaches your
@@ -99,7 +99,9 @@ an actual one), `extract-text` (OCR), `diagnose-error`, `diagram`, `chart`, `vid
 
 Constraints: images ≤5MB, JPG/PNG/JPEG only (**HEIC is rejected**); video ≤8MB, MP4/MOV/M4V.
 
-**Verified working:** named all four quadrants of a probe image exactly.
+**Verified working:** named all four quadrants of `make-probe-image`'s output exactly, and
+was the only one to label the positions explicitly ("Top-left: Red background, white
+circle…").
 
 ### Verify — GLM with tools, in a scratch worktree
 

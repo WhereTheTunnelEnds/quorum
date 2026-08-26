@@ -181,6 +181,27 @@ files, GitHub issues, and PR descriptions written by strangers. It's why everyth
 provider returns arrives fenced in `BEGIN/END UNTRUSTED PROVIDER OUTPUT` markers, and why
 adapters hold no `Write` or `Edit` tools.
 
+### `[claude-code:unrecognized_model] {"model":"glm-5.3"}` when using `quorum-claude-on`
+
+**Expected. Not an error.** Claude Code is noting that the model id isn't a known Anthropic
+one — which is exactly right when you've pointed it at a third-party endpoint. Measured:
+the request succeeds and the model answers normally.
+
+**If the id shows a `[1m]` suffix** (`glm-5.3[1m]`), your parent session is running a 1M
+context variant and the suffix is leaking through the alias mapping. Harmless via this path
+— but pin the model in the preset so the id is deterministic, because that same suffix *is*
+fatal on a direct API call:
+
+```bash
+echo 'ANTHROPIC_MODEL="glm-5.3"' >> ~/.config/quorum/endpoints/zai.env
+```
+
+### `claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is set`
+
+Expected under `quorum-claude-on`. It sets `ANTHROPIC_AUTH_TOKEN` to point at the other
+provider, which by design takes precedence over your claude.ai login for that run. It
+affects only that subprocess; your normal `claude` sessions are untouched.
+
 ---
 
 ## Delegation
