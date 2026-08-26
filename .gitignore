@@ -3,3 +3,8 @@
 node_modules/
 .worktrees/
 logs/
+
+# Local tool state — never repo content. Claude Code and Serena write these
+# into the CURRENT directory, so `git add -A` will sweep them in.
+.claude/
+.serena/
