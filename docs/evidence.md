@@ -40,6 +40,10 @@ cited as if it could.
 | Ollama's `/v1` endpoint **discards** `options.num_ctx` while `/api/chat` honours it | field-notes | see the two-curl comparison in that entry |
 | Antigravity's headless mode auto-denies `write_file` | safety-model, field-notes | `cd $(mktemp -d) && agy -p "create a file test.txt containing X"` |
 | Adapters declare no write tools | safety-model | CI, or `grep '^tools:' agents/*.md` |
+| GLM reports a **truncated** answer as `error`, not `ok` | glm-agent, troubleshooting | ask GLM to count 1–400 at `max_tokens:600`; expect `stop_reason: max_tokens` with text |
+| `quorum-status --json` stays valid JSON under hostile provider text | quorum-status | `tests/test-quorum-status-json.sh` |
+| A command and a skill cannot share a name | field-notes | CI, or `for c in commands/*.md; do [ -d "skills/$(basename "$c" .md)" ] && echo COLLISION; done` |
+| No API key is ever passed on a curl command line | field-notes | CI, or `grep -rnE '^[^#]*-H "Authorization: Bearer' --exclude=field-notes.md .` |
 
 ## Observed — reported, not reproducible from this repo
 
