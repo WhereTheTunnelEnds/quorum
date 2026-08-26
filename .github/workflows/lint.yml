@@ -57,6 +57,21 @@ jobs:
           done
           exit $fail
 
+      - name: No stray files (allowlist)
+        run: |
+          # Agent tooling (MCP servers, Claude Code, Serena) writes state into $PWD, and
+          # `git add -A` sweeps it in. Four such files reached this repo before this check
+          # existed — hook logs, session state with verbatim prompt text, Serena config, and
+          # an MCP debug log. Content-pattern scanning missed the last one entirely, because
+          # it matched no secret pattern. Auditing the FILE LIST is what catches them.
+          stray=$(git ls-files \
+            | grep -vE '^(agents|skills|docs|scripts|probes|commands|\.github|\.claude-plugin)/' \
+            | grep -vE '^(\.gitignore|README\.md|LICENSE|CONTRIBUTING\.md)$' || true)
+          if [ -n "$stray" ]; then
+            echo "ERROR: unexpected tracked files:"; echo "$stray"; exit 1
+          fi
+          echo "no stray files"
+
       - name: Links to local files resolve
         run: |
           python3 - <<'PY'

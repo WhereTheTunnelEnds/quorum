@@ -5,13 +5,22 @@ Indexed by **what you actually see**, because that's what you have when somethin
 Start here every time:
 
 ```bash
-quorum-status                          # what is reachable
-cd ~/quorum && ./scripts/quorum-verify --all   # does it actually work
+quorum-status        # is it there?
+quorum-auth          # is it authenticated? — and the exact fix for anything that isn't
+quorum-verify --all  # does it actually work?
 ```
 
-Those answer different questions. `quorum-status` says a provider *responds*.
-`quorum-verify` says it responds **and** that its failures are detectable — which is what
-makes an answer from it worth trusting.
+Those answer three different questions, and a provider can pass the first two and fail the
+third. `quorum-status` says a provider *responds*. `quorum-auth` says your credentials are
+accepted, and names the one command that fixes each gap. `quorum-verify` says it responds
+**and** that its failures are detectable — which is what makes an answer from it worth
+trusting.
+
+If you're stuck on credentials specifically, `quorum-auth` is almost certainly faster than
+reading further: it prints a `fix:` line per provider. `/quorum:auth` does the same inside
+Claude Code. Note it will never ask you for a key in conversation — `quorum-auth glm
+--set-key` reads one through a silent prompt so it never reaches your shell history or a
+transcript.
 
 ---
 

@@ -97,6 +97,9 @@ quorum-status
 You should get a list of providers, all showing as unavailable. That's correct — nothing is
 configured yet. If you get `command not found`, the `PATH` line didn't take.
 
+At any point from here on, `quorum-auth` will tell you what's still unauthenticated and the
+exact command that fixes each one. The rest of this guide is the long-form version of that.
+
 **Prefer not to use the plugin?** Copy the pieces in directly:
 
 ```bash
@@ -237,8 +240,12 @@ work, not to tie-breaking hard calls.
 
 ```bash
 quorum-status                          # what's reachable
+quorum-auth                            # what still needs auth, and the fix for each
 cd ~/quorum && ./scripts/quorum-verify --all   # does each one actually work
 ```
+
+Those three answer different questions, in order: is it *there*, is it *authenticated*, does
+it *work*. A provider can pass the first two and fail the third.
 
 `quorum-verify --all` exits **non-zero** if anything failed *or* if it verified nothing at
 all — so it's safe to put in a script. A tool that reports "all clear" after checking

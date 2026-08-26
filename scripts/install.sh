@@ -14,7 +14,7 @@ set -euo pipefail
 
 SRC=$(cd "$(dirname "$0")" && pwd)
 DEST="${1:-$HOME/.local/bin}"
-TOOLS="quorum-status quorum-claude-on quorum-verify prep-image make-probe-image"
+TOOLS="quorum-status quorum-auth quorum-claude-on quorum-verify prep-image make-probe-image"
 
 mkdir -p "$DEST"
 
@@ -38,4 +38,4 @@ EOM
 esac
 
 echo
-echo "Next:  quorum-status"
+echo "Next:  quorum-status   (then quorum-auth for anything missing)"

@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# quorum-auth — diagnose and fix provider authentication.
+#
+#   quorum-auth                 # what needs auth, and the exact command that fixes each
+#   quorum-auth --fix           # run the interactive login flows for anything unauthenticated
+#   quorum-auth <provider>...   # only these
+#   quorum-auth glm --set-key   # read a key from a silent prompt and store it in ~/.zshenv
+#
+# quorum-status tells you what is broken. This tells you what to do about it.
+#
+# Never prints, echoes, or logs key material. `--set-key` reads with `read -s`, so the key
+# does not reach your shell history, your terminal, or this script's output.
+
+set -uo pipefail
+
+FIX=0; SET_KEY=0; WANT=""
+for a in "$@"; do
+  case "$a" in
+    --fix)      FIX=1 ;;
+    --set-key)  SET_KEY=1 ;;
+    -h|--help)  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*)         echo "quorum-auth: unknown flag $a" >&2; exit 1 ;;
+    *)          WANT="$WANT $a" ;;
+  esac
+done
+wants() { [ -z "$WANT" ] && return 0; case " $WANT " in *" $1 "*) return 0;; *) return 1;; esac; }
+
+ENVFILE="${ZDOTDIR:-$HOME}/.zshenv"
+need=0
+
+ok()   { printf '  \033[32m%s\033[0m  %s\n' "OK" "$1"; }
+bad()  { printf '  \033[31m%s\033[0m  %s\n' "--" "$1"; need=$((need+1)); }
+todo() { printf '        \033[1mfix:\033[0m %s\n' "$1"; }
+note() { printf '        %s\n' "$1"; }
+
+echo "quorum auth"
+echo
+
+# --- Claude Code ---------------------------------------------------------------
+if wants claude; then
+  if [ -f "$HOME/.claude.json" ] && command -v jq >/dev/null 2>&1 \
+     && jq -e 'has("oauthAccount")' "$HOME/.claude.json" >/dev/null 2>&1; then
+    ok "claude    logged in"
+  else
+    bad "claude    not logged in"
+    todo "claude    (then /login inside the session)"
+  fi
+fi
+
+# --- Codex ---------------------------------------------------------------------
+if wants codex; then
+  if ! command -v codex >/dev/null 2>&1; then
+    bad "codex     not installed"
+    todo "npm install -g @openai/codex"
+  elif codex login status >/dev/null 2>&1; then
+    ok "codex     logged in"
+  else
+    bad "codex     not logged in"
+    todo "codex login          # browser OAuth, spends your ChatGPT subscription"
+    note "do NOT use an API key here — that bills per token instead"
+    [ "$FIX" = 1 ] && { echo; codex login; echo; }
+  fi
+fi
+
+# --- Copilot -------------------------------------------------------------------
+if wants copilot; then
+  if ! command -v copilot >/dev/null 2>&1; then
+    bad "copilot   not installed"
+    todo "npm install -g @github/copilot"
+  else
+    ok "copilot   installed ($(copilot --version 2>&1 | head -1))"
+    note "if calls fail with an auth error, run: copilot   (first run authenticates)"
+  fi
+fi
+
+# --- GLM / Z.AI ----------------------------------------------------------------
+if wants glm; then
+  if [ "$SET_KEY" = 1 ]; then
+    printf '  paste your Z.AI key (input hidden, not echoed): '
+    read -rs KEY; echo
+    if [ -z "$KEY" ]; then
+      echo "  nothing entered; no change made" >&2
+    else
+      # Written to ~/.zshenv (not ~/.zshrc) so non-interactive shells — i.e. agents — see it.
+      if grep -q '^export Z_AI_API_KEY=' "$ENVFILE" 2>/dev/null; then
+        echo "  $ENVFILE already exports Z_AI_API_KEY; leaving it alone." >&2
+        echo "  Edit it by hand if you need to replace the key." >&2
+      else
+        umask 077
+        printf '\nexport Z_AI_API_KEY=%q\n' "$KEY" >> "$ENVFILE"
+        echo "  wrote an export to $ENVFILE — open a new terminal for it to take effect"
+      fi
+      unset KEY
+    fi
+    echo
+  fi
+
+  if [ -z "${Z_AI_API_KEY:-}" ]; then
+    bad "glm       Z_AI_API_KEY not set"
+    todo "quorum-auth glm --set-key        # silent prompt, stores in ~/.zshenv"
+    note "or by hand: echo 'export Z_AI_API_KEY=\"...\"' >> ~/.zshenv"
+    note "~/.zshenv, NOT ~/.zshrc — agents run in non-interactive shells"
+  else
+    body=$(curl -s -m 20 https://api.z.ai/api/anthropic/v1/messages \
+      -H "Authorization: Bearer $Z_AI_API_KEY" \
+      -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
+      -d '{"model":"glm-5.3","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}' 2>/dev/null)
+    # z.ai returns failures inside HTTP 200 — classify on the body, never the exit code.
+    if printf '%s' "$body" | grep -q '"content"'; then
+      ok "glm       key accepted"
+    else
+      msg=$(printf '%s' "$body" | jq -r '.error.message // "no response"' 2>/dev/null || echo "no response")
+      bad "glm       $msg"
+      todo "get a fresh key from https://z.ai then: quorum-auth glm --set-key"
+    fi
+  fi
+fi
+
+echo
+if [ "$need" -eq 0 ]; then
+  echo "Everything requested is authenticated."
+  echo "Confirm it actually works:  quorum-verify --all"
+else
+  echo "$need item(s) need attention. Re-run with --fix to start the interactive logins."
+  echo "Providers are independent — Quorum works fine with only some of them."
+fi
+[ "$need" -eq 0 ]

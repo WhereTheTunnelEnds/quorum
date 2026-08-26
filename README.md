@@ -44,6 +44,7 @@ built by walking into each of those failures first.
 | **`delegate-task`** | Hand over whole units of work; each runs in an isolated worktree you review as a diff |
 | **`add-provider`** | Your Claude probes a new provider and writes a verified adapter for it — MLX, Ollama, another CLI, anything |
 | **`quorum-verify`** | Re-runs the contract against live providers, so "verified" is a measurement, not a claim |
+| **`quorum-auth`** | Diagnoses what's unauthenticated and gives the one command that fixes each |
 | **[Field notes](docs/field-notes.md)** | The failure catalogue, in symptom → cause → fix form |
 
 ## Install
@@ -81,7 +82,10 @@ uses. Then check what's reachable:
 quorum-status
 ```
 
-It **live-checks** each provider. It does not test for a binary named after the vendor —
+Anything missing? `quorum-auth` names the exact fix for each, and `/quorum:auth` walks you
+through it inside Claude Code.
+
+`quorum-status` **live-checks** each provider. It does not test for a binary named after the vendor —
 that is not a reliable signal, and it is how a working provider gets reported as missing.
 See the [field notes](docs/field-notes.md#a-missing-binary-proves-nothing-about-a-provider).
 
