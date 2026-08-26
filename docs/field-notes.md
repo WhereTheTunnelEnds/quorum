@@ -58,7 +58,7 @@ rejects `-H "Authorization: Bearer` on any non-comment line in any `.md`, `.sh` 
 
 **The general lesson.** "Fixed" means every instance, and the instances you can execute are
 the ones you will find. Ask what a fix's search method structurally cannot see. Related:
-the same shape as [[the max_tokens default]] — one fact in five files, corrected in three.
+the same shape as the `max_tokens` default below — one fact in five files, corrected in three.
 
 ### A command and a skill with the same name silently collide
 
