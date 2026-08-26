@@ -33,7 +33,7 @@ CANARY="QUORUM_CANARY_OK"
 QUORUM_TIMEOUT="${QUORUM_VERIFY_TIMEOUT:-180}"
 export QUORUM_TIMEOUT
 
-pass=0; fail=0; warned=0
+pass=0; fail=0; warned=0; skipped=0
 P() { printf '  \033[32mPASS\033[0m  %s\n' "$1"; pass=$((pass+1)); }
 F() { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; fail=$((fail+1)); }
 W() { printf '  \033[33mWARN\033[0m  %s\n' "$1"; warned=$((warned+1)); }
@@ -58,6 +58,7 @@ verify_one() {
   if [ ! -f "$file" ]; then
     echo "quorum-verify: no probe file at $file" >&2
     echo "               write one (see probes/README.md) or run: /quorum:add-provider $provider" >&2
+    skipped=$((skipped+1))
     return 2
   fi
 
@@ -148,5 +149,13 @@ else
   for p in "$@"; do verify_one "$p"; done
 fi
 
-printf '\n%d passed, %d failed, %d warned\n' "$pass" "$fail" "$warned"
-[ "$fail" -eq 0 ]
+printf '\n%d passed, %d failed, %d warned, %d skipped\n' "$pass" "$fail" "$warned" "$skipped"
+
+# Exit non-zero unless something was actually checked and everything checked passed.
+# "I verified nothing" must never be reported as success — that is the precise failure
+# this whole repo exists to prevent, and it does not get an exemption here.
+if [ $(( pass + fail + warned )) -eq 0 ]; then
+  echo "quorum-verify: nothing was verified — no probe ran" >&2
+  exit 1
+fi
+[ "$fail" -eq 0 ] && [ "$skipped" -eq 0 ]
