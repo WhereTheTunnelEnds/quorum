@@ -136,10 +136,19 @@ IMG=$(scripts/make-probe-image)
 That is a 512×512 image with four quadrants: **red circle** (top-left), **green square**
 (top-right), **yellow cross** (bottom-right), **blue triangle** (bottom-left).
 
-**Ask.** Name the background colour and the white shape in each quadrant, clockwise from
-top-left.
+**Ask.** Use labels, not ordering:
 
-**Pass.** All four, in the right positions.
+> For each quadrant answer on its own line in the form `top-left: <colour> <shape>`. Use
+> exactly these four labels: top-left, top-right, bottom-right, bottom-left.
+
+**Pass.** All four labels present, each with the right colour and shape.
+
+**Demand the labels — do not accept four ordered lines.** Asking for "four lines clockwise
+from top-left" reads as a spatial test and is not one: the caller supplies the ordering, so
+a model that recognised all four colour/shape pairs but scrambled their positions scores
+identically to one that got it right. This was observed in a real run — three providers all
+returned unlabelled ordered lines, and the probe could not distinguish recall from spatial
+grounding. Requiring the model to emit the position itself is what closes that.
 
 **Score the shape, not the word.** "cross" and "plus" are the same answer — two of the three
 built-in providers said *plus* and were correct. Mark on whether the shape and quadrant are

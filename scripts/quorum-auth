@@ -81,8 +81,25 @@ if wants copilot; then
     bad "copilot   not installed"
     todo "npm install -g @github/copilot"
   else
-    ok "copilot   installed ($(copilot --version 2>&1 | head -1))"
-    note "if calls fail with an auth error, run: copilot   (first run authenticates)"
+    # `command -v` + --version only proves the BINARY is present. Copilot stores its token
+    # in the system credential store, so there is no readable file to inspect — the only
+    # reliable check is a real call. Reporting "installed" as if it were "logged in" is how
+    # an all-green auth report hides a provider that will fail on first use.
+    _cp_out=$(mktemp); _cp_err=$(mktemp)
+    qt 90 copilot -p "hi" -s --no-ask-user --allow-tool "read" >"$_cp_out" 2>"$_cp_err"
+    _cp_rc=$?
+    if [ "$_cp_rc" = 0 ] && [ -s "$_cp_out" ]; then
+      ok "copilot   logged in ($(copilot --version 2>&1 | head -1))"
+    elif grep -qiE 'auth|login|sign in|credential|token' "$_cp_err" "$_cp_out" 2>/dev/null; then
+      bad "copilot   not logged in"
+      todo "copilot login        # browser OAuth, or --device-code on a headless box"
+    elif [ "$_cp_rc" = 124 ]; then
+      bad "copilot   timed out (90s) with no auth error"
+      todo "copilot              # run interactively and see what it asks for"
+    else
+      bad "copilot   rc=$_cp_rc: $(head -c 100 "$_cp_err" | tr '\n' ' ')"
+    fi
+    rm -f "$_cp_out" "$_cp_err"
   fi
 fi
 
