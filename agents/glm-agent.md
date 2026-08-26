@@ -114,6 +114,7 @@ round of measurement on a different input size disproved it:
 | 42.5 KB | 98304 | 525 s | `end_turn` | 41,382 | **36,567 chars** |
 | 152 KB | 32000 | 360 s | `max_tokens` | 32000 | 17,648 chars, cut off |
 | 152 KB | 64000 | 579 s | `end_turn` | 51,678 | 39,013 chars |
+| **249 KB** *(65,060 input tokens)* | 64000 | **570 s** | `end_turn` | 42,731 | 44,515 chars |
 
 Three things fall out, and none of them is the timeout:
 
@@ -127,6 +128,31 @@ Three things fall out, and none of them is the timeout:
    apart, landing on opposite sides of 32000 — one exhausts the budget with zero text, the
    other finishes comfortably. Any constant sits inside the noise band of the requirement,
    which is the real argument for detection over tuning.
+
+**Which bound is actually binding — check this before tuning either number.** Output grows
+*slowly* with input; wall-clock grows fast:
+
+| input tokens | output tokens (cap 64000) | elapsed |
+|---|---|---|
+| 12,513 | 35,554 | 457 s |
+| 65,060 | 42,731 | 570 s |
+
+A **5.2× larger input bought only 1.2× more output** — 67% of the cap, never approaching it —
+**but 1.25× more wall-clock.** So the cap has real headroom and `-m 900` is the tighter of
+the two. If you ever add retry-at-a-higher-cap, bound the escalation by **wall-clock**, not
+by token count: a blind retry doubles a 570-second call, and the retry is precisely the run
+most likely to cross the deadline.
+
+**What has actually been validated, and what has not.** The largest verified run is the
+249 KB / 65,060-token row above: `end_turn`, 570 s, 330 s of headroom under `-m 900`. That
+is 64% larger than the input that broke the old 32000 / `-m 300` pair, so the shipped
+settings are confirmed well past the case that motivated them.
+
+But this provider is selected *for* its 1M-token window, and 65,060 tokens is **6% of it**.
+An input fifteen times larger is possible by design and has not been measured. On the curve
+above, that run would exceed 900 s and be killed — which is now a *detected* failure
+(`status: timeout`) rather than a silent one, but a failure nonetheless. If you routinely
+feed inputs of that size, measure your own worst case and raise `-m` before trusting it.
 
 [docs/adapter-contract.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/adapter-contract.md)
 §6b already named this exact failure — *"a response that is

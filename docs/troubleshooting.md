@@ -163,6 +163,7 @@ question the likelier the answer is empty. Measured on glm-5.3:
 | one analytical prompt | 32000 | — | `end_turn` | 20,077 chars |
 | 152 KB whole-subsystem read | 32000 | 360 s | `max_tokens` | 17,648 chars, **cut off** |
 | 152 KB whole-subsystem read | **64000** | 579 s | `end_turn` | **39,013 chars, complete** |
+| 249 KB whole-repo read | **64000** | 570 s | `end_turn` | **44,515 chars, complete** |
 
 Three things came out of that, and the last one matters most:
 
