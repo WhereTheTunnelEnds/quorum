@@ -5,6 +5,7 @@
 #   quorum-auth --fix           # run the interactive login flows for anything unauthenticated
 #   quorum-auth <provider>...   # only these
 #   quorum-auth glm --set-key   # read a key from a silent prompt and store it in ~/.zshenv
+#   quorum-auth glm --init-endpoint  # write the quorum-claude-on preset (no key in it)
 #
 # quorum-status tells you what is broken. This tells you what to do about it.
 #
@@ -18,11 +19,12 @@
 
 set -uo pipefail
 
-FIX=0; SET_KEY=0; WANT=""
+FIX=0; SET_KEY=0; INIT_EP=0; WANT=""
 for a in "$@"; do
   case "$a" in
     --fix)      FIX=1 ;;
     --set-key)  SET_KEY=1 ;;
+    --init-endpoint) INIT_EP=1 ;;
     -h|--help)  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)         echo "quorum-auth: unknown flag $a" >&2; exit 1 ;;
     *)          WANT="$WANT $a" ;;
@@ -171,6 +173,34 @@ if wants glm; then
     # z.ai returns failures inside HTTP 200 — classify on the body, never the exit code.
     if printf '%s' "$body" | grep -q '"content"'; then
       ok "glm       key accepted"
+      # A valid key covers the CONSULT tier only. Verify and delegate run Claude Code
+      # against the GLM endpoint via quorum-claude-on, which needs a preset. Without it
+      # those tiers fail at use time, long after auth "passed" — so check it here.
+      _ep="${QUORUM_ENDPOINT_DIR:-$HOME/.config/quorum/endpoints}/zai.env"
+      if [ -f "$_ep" ]; then
+        ok "glm       endpoint preset present (verify + delegate tiers usable)"
+      else
+        bad "glm       no endpoint preset — verify and delegate tiers will fail"
+        todo "quorum-auth glm --init-endpoint"
+        note "consult works without it; only the tiers that run Claude Code need it"
+        if [ "$FIX" = 1 ] || [ "$INIT_EP" = 1 ]; then
+          mkdir -p "$(dirname "$_ep")"
+          cat > "$_ep" <<'PRESET'
+# Z.AI endpoint for quorum-claude-on. Contains NO key material: the token is read from the
+# environment at run time, so this file is safe to keep and safe to back up.
+ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+ANTHROPIC_AUTH_TOKEN="${Z_AI_API_KEY:?set Z_AI_API_KEY in ~/.zshenv}"
+ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5.3"
+ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5.3"
+ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-5-turbo"
+# Pinned so a parent session's [1m] context-variant suffix cannot leak into the model id.
+ANTHROPIC_MODEL="glm-5.3"
+CLAUDE_CODE_AUTO_COMPACT_WINDOW="1048576"
+PRESET
+          chmod 600 "$_ep"
+          printf '        \033[32mcreated\033[0m %s\n' "$_ep"
+        fi
+      fi
     else
       msg=$(printf '%s' "$body" | jq -r '.error.message // "no response"' 2>/dev/null || echo "no response")
       bad "glm       $msg"

@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# quorum-setup — one guided pass from nothing to a working Quorum install.
+#
+#   quorum-setup            # interactive: pick your providers, walk each one to green
+#   quorum-setup --check    # non-interactive: report readiness and exit
+#   quorum-setup --all      # interactive, but assume you want every provider offered
+#
+# Run this FIRST. It does, in order: prerequisites, PATH, provider selection, then for each
+# provider install -> authenticate -> verify, and finishes by proving the whole thing works
+# with a real call to each.
+#
+# It will never ask you for a key, a token, or an auth code. Installs and logins are printed
+# for YOU to run — vendor installers execute remote code and logins bind your paid accounts,
+# and anything pasted into an agent chat becomes transcript. See docs/safety-model.md.
+
+set -uo pipefail
+
+_src="$0"
+while [ -L "$_src" ]; do
+  _d=$(cd -P "$(dirname "$_src")" && pwd); _src=$(readlink "$_src")
+  case "$_src" in /*) ;; *) _src="$_d/$_src" ;; esac
+done
+ROOT=$(cd -P "$(dirname "$_src")/.." && pwd)
+ENVFILE="${ZDOTDIR:-$HOME}/.zshenv"
+CHECK=0; ALL=0
+
+for a in "$@"; do
+  case "$a" in
+    --check) CHECK=1 ;;
+    --all)   ALL=1 ;;
+    -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "quorum-setup: unknown argument '$a'" >&2; exit 1 ;;
+  esac
+done
+
+b()  { printf '\n\033[1m%s\033[0m\n' "$1"; }
+ok() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
+no() { printf '  \033[31m✗\033[0m %s\n' "$1"; }
+hm() { printf '  \033[33m!\033[0m %s\n' "$1"; }
+run() { printf '      \033[1m%s\033[0m\n' "$1"; }
+
+interactive() { [ "$CHECK" -eq 0 ] && [ -t 0 ]; }
+ask() {  # ask <prompt> ; yes = 0
+  interactive || return 1
+  printf '  %s [y/N] ' "$1"; read -r a </dev/tty 2>/dev/null || return 1
+  case "$a" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
+}
+pause() { interactive || return 0; printf '  press return when done (or ctrl-c to stop) '; read -r _ </dev/tty 2>/dev/null || true; }
+
+missing=0
+
+# ── 1. prerequisites ────────────────────────────────────────────────────────────
+b "1. Prerequisites"
+for c in git curl jq; do
+  command -v "$c" >/dev/null 2>&1 && ok "$c" || { no "$c missing"; missing=$((missing+1)); }
+done
+command -v node >/dev/null 2>&1 && ok "node $(node --version 2>/dev/null)" \
+  || hm "node missing — needed only for the Codex and Copilot CLIs"
+if command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; then
+  ok "timeout"
+else
+  hm "timeout(1) missing — hang detection disabled"
+  run "brew install coreutils"
+fi
+[ "$missing" -gt 0 ] && { echo; no "install the missing prerequisites first"; run "brew install git curl jq"; exit 1; }
+
+# ── 2. PATH ─────────────────────────────────────────────────────────────────────
+b "2. Helper scripts on PATH"
+if command -v quorum-verify >/dev/null 2>&1; then
+  ok "quorum-* commands resolve"
+else
+  no "quorum-* not on PATH"
+  if ask "run the installer now (symlinks into ~/.local/bin)?"; then
+    "$ROOT/scripts/install.sh" || true
+  else
+    run "$ROOT/scripts/install.sh"
+  fi
+fi
+# Agents get a NON-interactive shell, which reads ~/.zshenv and never ~/.zshrc. A PATH that
+# only exists in ~/.zshrc works for you and fails for every subagent. See docs/field-notes.md.
+if env -i HOME="$HOME" zsh -c 'command -v quorum-verify' >/dev/null 2>&1; then
+  ok "visible to non-interactive shells (agents will find it)"
+else
+  hm "NOT visible to non-interactive shells — agents will report it missing"
+  run "echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> $ENVFILE"
+  if ask "append that line to $ENVFILE now?"; then
+    printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$ENVFILE"
+    ok "appended — open a new terminal for it to take effect"
+  fi
+fi
+
+# ── 3. providers ────────────────────────────────────────────────────────────────
+# name^binary^install^note
+# Delimiter is ^ and not | on purpose: install commands contain pipes.
+PROVIDERS='codex^codex^npm install -g @openai/codex^ChatGPT subscription
+copilot^copilot^npm install -g @github/copilot^GitHub Copilot subscription
+glm^-^get an API key from https://z.ai, then: quorum-auth glm --set-key^Z.AI Coding Plan, 1M context
+ollama^-^brew install ollama && ollama pull llama3.2:3b^local, free, private, no account
+antigravity^agy^curl -fsSL https://antigravity.google/cli/install.sh | bash^Google; replaces the retired Gemini CLI'
+
+present() {  # present <name> <binary>
+  case "$1" in
+    glm)    [ -n "${Z_AI_API_KEY:-}" ] ;;
+    ollama) curl -s -m 3 "${OLLAMA_BASE:-http://localhost:11434}/api/tags" >/dev/null 2>&1 ;;
+    *)      command -v "$2" >/dev/null 2>&1 ;;
+  esac
+}
+
+b "3. Providers"
+echo "  Every provider is optional. Quorum works with one; it gets more useful with three."
+echo
+
+while IFS='^' read -r name bin inst note; do
+  [ -z "$name" ] && continue
+  if present "$name" "$bin"; then
+    ok "$(printf '%-12s' "$name") already present — $note"
+  else
+    no "$(printf '%-12s' "$name") not present — $note"
+    # Always print the install command, including in --check mode: it is the actionable
+    # part, and a readiness report that withholds the fix is only half a report.
+    run "$inst"
+    if [ "$CHECK" -eq 0 ]; then
+      if [ "$ALL" -eq 1 ] || ask "    set $name up now? (run the line above, then return here)"; then
+        pause
+      fi
+    fi
+  fi
+done <<EOF
+$PROVIDERS
+EOF
+
+# ── 4. authenticate ─────────────────────────────────────────────────────────────
+b "4. Authentication"
+if command -v quorum-auth >/dev/null 2>&1; then AUTH=quorum-auth; else AUTH="$ROOT/scripts/quorum-auth"; fi
+"$AUTH" || true
+echo
+echo "  Anything marked above needs YOU to run its fix: logins open a browser and bind your"
+echo "  account, and an agent shell has no terminal to complete one in."
+echo "  Never paste a key, token, or auth code into a chat — nothing here needs it."
+if ask "run the interactive logins now ($AUTH --fix)?"; then "$AUTH" --fix || true; fi
+
+# ── 5. prove it ─────────────────────────────────────────────────────────────────
+b "5. Does it actually work?"
+echo "  Authentication is not the same as working. This makes real calls to each provider."
+if [ "$CHECK" -eq 1 ] || ask "run quorum-verify --all now?"; then
+  if command -v quorum-verify >/dev/null 2>&1; then quorum-verify --all || true
+  else "$ROOT/scripts/quorum-verify" --all || true; fi
+fi
+
+b "Next"
+echo "  /plugin marketplace add kourosh-forti-hands/quorum   install the Claude Code half"
+echo "  /quorum:panel <a hard question>                      fan it out to every provider"
+echo "  /quorum:add-provider <name>                          adapt a provider we don't cover"
+echo "  quorum-flags                                         after any provider CLI update"
+echo
+echo "  Guide: docs/getting-started.md   Problems: docs/troubleshooting.md"

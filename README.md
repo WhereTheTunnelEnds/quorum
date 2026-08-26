@@ -44,6 +44,7 @@ built by walking into each of those failures first.
 | **`delegate-task`** | Hand over whole units of work; each runs in an isolated worktree you review as a diff |
 | **`add-provider`** | Your Claude probes a new provider and writes a verified adapter for it — MLX, Ollama, another CLI, anything |
 | **`quorum-verify`** | Re-runs the contract against live providers, so "verified" is a measurement, not a claim |
+| **`quorum-setup`** | Guided first run: prerequisites, PATH, provider choice, auth, then proof |
 | **`quorum-auth`** | Diagnoses what's unauthenticated and gives the one command that fixes each |
 | **`quorum-flags`** | Checks every flag the adapters depend on still exists in the live CLI |
 | **[Field notes](docs/field-notes.md)** | The failure catalogue, in symptom → cause → fix form |
@@ -61,12 +62,18 @@ built by walking into each of those failures first.
 /plugin install quorum@quorum
 ```
 
-Then put the helper scripts on `PATH`:
+Then put the helper scripts on `PATH` and run the guided setup:
 
 ```bash
 git clone https://github.com/kourosh-forti-hands/quorum.git
 cd quorum && ./scripts/install.sh
+quorum-setup          # prerequisites -> providers -> auth -> a real call to each
 ```
+
+`quorum-setup` walks you through it and stops at each thing you need to do yourself. It
+never asks for a key or an auth code — installs and logins are printed for **you** to run,
+because vendor installers execute remote code, logins bind your paid accounts, and anything
+pasted into an agent chat becomes transcript.
 
 **Or copy the pieces in manually** — everything here is plain markdown and shell:
 

@@ -9,6 +9,17 @@ this guide says it should, stop there — the next step will not fix it, and
 
 ---
 
+## The short version
+
+```bash
+git clone https://github.com/kourosh-forti-hands/quorum.git
+cd quorum && ./scripts/install.sh && quorum-setup
+```
+
+`quorum-setup` runs everything below interactively and stops at each step that needs you.
+Use `quorum-setup --check` any time for a non-interactive readiness report. The rest of this
+page is the long form — read it if the wizard stalls, or if you'd rather do it by hand.
+
 ## 0. Decide what you're actually setting up
 
 **Every provider is optional.** Quorum works with one; it gets more useful with three.
