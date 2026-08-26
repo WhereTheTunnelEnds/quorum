@@ -8,63 +8,90 @@
 
 set -uo pipefail
 
+json=0
 case "${1:-}" in
   -h|--help)
     cat <<'USAGE'
 quorum-status — which providers are reachable right now.
 
   quorum-status         live-check every provider and print a table
+  quorum-status --json  the same checks, as JSON on stdout
 
 This makes REAL calls; it does not test for binaries. Not every provider ships a
 command named after itself, so `command -v` proves nothing. See docs/field-notes.md.
 
+Exit status: 0 if at least one provider is reachable, 1 if none are. A provider you
+do not use is a normal state, not a failure.
+
 Related:  quorum-auth (fix what is unauthenticated) · quorum-verify (does it work?)
 USAGE
     exit 0 ;;
+  --json) json=1 ;;
+  '') ;;
+  # An unrecognised flag must not be silently ignored: a typo'd `--jsonn` would
+  # otherwise print the human table and exit 0, and a machine consumer parsing that
+  # as JSON gets a confusing failure far from its cause.
+  *) printf 'quorum-status: unknown option %s (try --help)\n' "$1" >&2; exit 2 ;;
 esac
 
 
+# Checks record their result; rendering happens once at the end. Collecting first is what
+# lets --json and the human table share one code path — the alternative, a render branch
+# under every provider, doubles the file and lets the two outputs drift apart.
 avail=0
-ok()   { printf '  \033[32m%s\033[0m  %s\n' "OK" "$1"; avail=$((avail+1)); }
-bad()  { printf '  \033[31m%s\033[0m  %s\n' "--" "$1"; }
-warn() { printf '  \033[33m%s\033[0m  %s\n' "??" "$1"; }
-
-echo "quorum providers"
-echo
+rows=()
+record() {
+  # Details are single-line display strings, and both renderers assume that. z.ai returns
+  # .error.message straight from the API and Ollama returns model names chosen by whoever
+  # published the model, so this is remote-controlled text: sanitise here, once, rather
+  # than trusting six call sites.
+  #
+  # ALL C0 controls and DEL, not just tab/newline/CR. Newline-stripping alone stops a
+  # provider forging a whole status row, but ESC does not need a newline: `\033[A` moves
+  # the cursor up and overwrites the line above, so a model named for the purpose could
+  # repaint another provider's row as green OK. Bytes >= 0x80 are left alone so that
+  # non-ASCII model names survive intact.
+  local d
+  d=$(printf '%s' "$3" | tr '\000-\037\177' ' ')
+  rows+=("$1"$'\t'"$2"$'\t'"$d")
+}
+ok()   { record ok   "$1" "$2"; avail=$((avail+1)); }
+bad()  { record bad  "$1" "$2"; }
+warn() { record warn "$1" "$2"; }
 
 # --- Claude Code ----------------------------------------------------------------
 if [ -f "$HOME/.claude.json" ] && command -v jq >/dev/null 2>&1; then
   if jq -e 'has("oauthAccount")' "$HOME/.claude.json" >/dev/null 2>&1; then
-    ok "claude    logged in"
+    ok claude "logged in"
   else
-    bad "claude    not logged in  ->  run: claude"
+    bad claude "not logged in  ->  run: claude"
   fi
 else
-  warn "claude    cannot determine (no ~/.claude.json or jq)"
+  warn claude "cannot determine (no ~/.claude.json or jq)"
 fi
 
 # --- Codex ----------------------------------------------------------------------
 if command -v codex >/dev/null 2>&1; then
   if codex login status >/dev/null 2>&1; then
-    ok "codex     logged in"
+    ok codex "logged in"
   else
-    bad "codex     not logged in  ->  run: codex login"
+    bad codex "not logged in  ->  run: codex login"
   fi
 else
-  bad "codex     not installed"
+  bad codex "not installed"
 fi
 
 # --- Copilot --------------------------------------------------------------------
 if command -v copilot >/dev/null 2>&1; then
-  ok "copilot   $(copilot --version 2>&1 | head -1)"
+  ok copilot "$(copilot --version 2>&1 | head -1)"
 else
-  bad "copilot   not installed"
+  bad copilot "not installed"
 fi
 
 # --- GLM / Z.AI -----------------------------------------------------------------
 # Note: there is no `glm` binary. Never test for one — see docs/field-notes.md.
 if [ -z "${Z_AI_API_KEY:-}" ]; then
-  bad "glm       Z_AI_API_KEY not set  ->  export it from ~/.zshenv"
+  bad glm "Z_AI_API_KEY not set  ->  export it from ~/.zshenv"
 else
   # The key goes in a HEADER FILE, never on the command line. Measured: with
 # `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to any process running as
@@ -78,10 +105,10 @@ else
     -d '{"model":"glm-5.3","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}' 2>/dev/null)
   # Failures arrive inside HTTP 200, so classify on the body, not the exit code.
   if printf '%s' "$body" | grep -q '"content"'; then
-    ok "glm       key accepted"
+    ok glm "key accepted"
   else
     msg=$(printf '%s' "$body" | jq -r '.error.message // "no response"' 2>/dev/null || echo "no response")
-    bad "glm       $msg"
+    bad glm "$msg"
   fi
 fi
 
@@ -91,15 +118,15 @@ fi
 OLLAMA_BASE="${OLLAMA_BASE:-http://localhost:11434}"
 tags=$(curl -s -m 5 "$OLLAMA_BASE/api/tags" 2>/dev/null)
 if [ -z "$tags" ]; then
-  bad "ollama    no server at $OLLAMA_BASE  ->  run: ollama serve"
+  bad ollama "no server at $OLLAMA_BASE  ->  run: ollama serve"
 else
   count=$(printf '%s' "$tags" | jq -r '.models | length' 2>/dev/null || echo 0)
   case "$count" in ''|*[!0-9]*) count=0 ;; esac
   if [ "$count" -eq 0 ]; then
-    bad "ollama    server up, no model pulled  ->  run: ollama pull llama3.2:3b"
+    bad ollama "server up, no model pulled  ->  run: ollama pull llama3.2:3b"
   else
     names=$(printf '%s' "$tags" | jq -r '[.models[].name] | join(", ")' 2>/dev/null)
-    ok "ollama    $count model(s): $names"
+    ok ollama "$count model(s): $names"
   fi
 fi
 
@@ -107,27 +134,79 @@ fi
 # The binary is `agy`, NOT `antigravity`. Presence only: probing auth costs a model call,
 # which does not belong in a status command. Use quorum-auth for that.
 if command -v agy >/dev/null 2>&1; then
-  ok "agy       installed ($(agy --version 2>/dev/null | head -1))  ->  quorum-auth agy"
+  ok agy "installed ($(agy --version 2>/dev/null | head -1))  ->  quorum-auth agy"
 elif [ -x "$HOME/.local/bin/agy" ]; then
-  bad "agy       installed but NOT on PATH here  ->  add ~/.local/bin in ~/.zshenv"
+  bad agy "installed but NOT on PATH here  ->  add ~/.local/bin in ~/.zshenv"
 else
-  bad "agy       not installed"
+  bad agy "not installed"
 fi
 
 # --- Locally configured endpoints ------------------------------------------------
 ENDPOINT_DIR="${QUORUM_ENDPOINT_DIR:-$HOME/.config/quorum/endpoints}"
+eps=()
 if [ -d "$ENDPOINT_DIR" ]; then
-  echo
-  echo "quorum-claude-on presets ($ENDPOINT_DIR)"
-  found=0
   for f in "$ENDPOINT_DIR"/*.env; do
     [ -e "$f" ] || continue
-    found=1
-    name=$(basename "$f" .env)
-    printf '      %s\n' "$name"
+    eps+=("$(basename "$f" .env)")
   done
-  [ "$found" -eq 0 ] && printf '      (none)\n'
 fi
+
+# --- Render ----------------------------------------------------------------------
+# `${arr[@]+"${arr[@]}"}` and not `"${arr[@]}"`: under `set -u`, bash 3.2 — which is what
+# macOS still ships as /bin/bash — treats an empty array as unset and aborts. Rows is never
+# empty in practice, but eps usually is.
+
+render_text() {
+  echo "quorum providers"
+  echo
+  local r st name detail n
+  for r in ${rows[@]+"${rows[@]}"}; do
+    IFS=$'\t' read -r st name detail <<<"$r"
+    case "$st" in
+      ok)   printf '  \033[32mOK\033[0m  %-9s %s\n' "$name" "$detail" ;;
+      bad)  printf '  \033[31m--\033[0m  %-9s %s\n' "$name" "$detail" ;;
+      warn) printf '  \033[33m??\033[0m  %-9s %s\n' "$name" "$detail" ;;
+    esac
+  done
+  if [ -d "$ENDPOINT_DIR" ]; then
+    echo
+    echo "quorum-claude-on presets ($ENDPOINT_DIR)"
+    if [ "${#eps[@]}" -eq 0 ]; then
+      printf '      (none)\n'
+    else
+      for n in "${eps[@]}"; do printf '      %s\n' "$n"; done
+    fi
+  fi
+}
+
+render_json() {
+  # jq builds the document rather than a printf template, so escaping is correct by
+  # construction. `detail` carries remote-controlled text (z.ai echoes .error.message
+  # verbatim), and hand-rolled escaping is precisely how you get invalid JSON emitted at
+  # the moment a provider fails — which is when a machine consumer most needs this to work.
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "quorum-status: --json requires jq" >&2
+    exit 2
+  fi
+  printf '%s\n' ${rows[@]+"${rows[@]}"} \
+  | jq -R -s \
+      --arg endpoint_dir "$ENDPOINT_DIR" \
+      --arg endpoints "$(printf '%s\n' ${eps[@]+"${eps[@]}"})" \
+      --argjson available "$avail" '
+      {
+        providers: (
+          split("\n") | map(select(length > 0)) | map(split("\t"))
+          | map({ key: .[1],
+                  value: { status: .[0], available: (.[0] == "ok"), detail: .[2] } })
+          | from_entries
+        ),
+        endpoint_dir: $endpoint_dir,
+        endpoints: ($endpoints | split("\n") | map(select(length > 0))),
+        available: $available
+      }'
+}
+
+if [ "$json" -eq 1 ]; then render_json; else render_text; fi
 
 # Exit code, because the script previously ended on `[ "$found" -eq 0 ]` and returned
 # whatever that happened to be — reporting every provider OK while exiting 1, which breaks
@@ -135,10 +214,11 @@ fi
 #
 # Semantics: 0 if at least one provider is reachable, 1 if none are. Providers are optional,
 # so a missing one is a normal state and must not fail the command; having NONE means Quorum
-# cannot do anything, which is the only condition worth failing on.
+# cannot do anything, which is the only condition worth failing on. --json obeys the same
+# rule, and still emits a complete document when it exits 1 — a consumer should be able to
+# read WHICH providers are down from the same run that told it none were up.
 if [ "$avail" -eq 0 ]; then
-  echo
-  echo "No providers are reachable. Run: quorum-auth" >&2
+  [ "$json" -eq 1 ] || { echo; echo "No providers are reachable. Run: quorum-auth" >&2; }
   exit 1
 fi
 exit 0
