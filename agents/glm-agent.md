@@ -1,6 +1,6 @@
 ---
 name: glm-agent
-description: Runs Z.AI GLM on the user's GLM Coding Plan. Three modes - consult (direct API call, 1M context, for inputs too large for other models or a non-Anthropic second opinion), verify (Claude Code on GLM with read-only tools in a scratch worktree), and delegate (GLM driving Claude Code with full tooling, worktree-isolated). Use for whole-subsystem reads, cheap bulk work, or to offload implementation off the Claude quota.
+description: Runs Z.AI GLM on the user's GLM Coding Plan. Three modes - consult (direct API call, 1M context, for inputs too large for other models or a non-Anthropic second opinion), verify (Claude Code on GLM in a scratch worktree - note Bash is granted, so this is not actually read-only), and delegate (GLM driving Claude Code with full tooling in a worktree - reviewable and disposable, but NOT contained). Use for whole-subsystem reads, cheap bulk work, or to offload implementation off the Claude quota.
 tools: Bash, Read, Glob, Grep
 model: haiku
 color: green
@@ -193,19 +193,50 @@ git worktree add --detach "$WT" 2>&1
     --allowedTools "Read,Glob,Grep,Bash" \
     --disallowedTools "Write,Edit,NotebookEdit" )
 
-git -C "$WT" --no-pager diff --stat   # expect empty; report it if not
+# diff --stat alone is NOT enough: it shows nothing for untracked files, nothing outside
+# the worktree, and nothing under the shared .git.
+MAIN=$(dirname "$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)")
+git -C "$WT"   status --porcelain     # expect empty — untracked files included
+git -C "$MAIN" status --porcelain     # expect UNCHANGED
+ls -la "$(git -C "$WT" rev-parse --path-format=absolute --git-path hooks)"
 ```
 
 **The tool flags are what keep this from hanging.** `claude -p` is non-interactive, so a
 permission prompt has nobody to answer it and the run stalls until the timeout. Naming the
-allowed tools pre-approves exactly what verification needs — reading and running commands —
-while `--disallowedTools` blocks edits outright. Do not drop these and rely on
-`--dangerously-skip-permissions` instead: that would grant write access, turning a
-verification into an unreviewed delegation.
+allowed tools pre-approves what verification needs — reading and running commands.
+
+**But `--disallowedTools` does not make this read-only, and an earlier version of this file
+claimed it did.** It said `--disallowedTools` "blocks edits outright". That is false for the
+same reason the tier tables elsewhere in this repo now spell out: **`Bash` is a superset of
+`Write` and `Edit`.** Denying the write *tools* while granting an unqualified shell denies a
+spelling, not a capability.
+
+**Verified, with no trickery in the prompt.** Asked plainly to *"create a file named
+proof.txt in the current directory containing exactly HELLO"*, this exact invocation
+produced a 5-byte `proof.txt`. Its own account of how:
+
+> *"direct shell redirects (`printf 'HELLO' > proof.txt`) were blocked twice by the
+> permission system… Writing via a Python one-liner was permitted and produced the identical
+> result."*
+
+It routed around the one guard it met. The same `conftest.py` escape documented for Copilot
+also works here and reaches the user's real tree.
+
+Two further contradictions worth naming, since they are in this repo's own documents: an
+unqualified `Bash` is the general shell that
+[docs/safety-model.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/safety-model.md)
+tells you never to grant — *"delegate mode wearing a disguise"* — and
+[docs/adapter-contract.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/adapter-contract.md)
+says verify may run *named commands only*, which this does not.
+
+**So treat GLM verify as delegate with a tidier prompt.** It is useful — running the command
+still beats reasoning about it — but it is reviewability and disposability, not containment.
+If you need a verify tier that genuinely cannot write, use Codex, whose sandbox is enforced
+by the OS rather than by an allowlist.
 
 Remove the scratch worktree when done: `git worktree remove --force "$WT"`.
 
-### Delegate — GLM driving Claude Code, worktree-isolated
+### Delegate — GLM driving Claude Code, in a worktree (reviewable, not contained)
 
 GLM can run *Claude Code itself*, which gives it the full tool suite (file edits, bash,
 search, subagents) rather than just a chat endpoint. This is the cheapest way to get real

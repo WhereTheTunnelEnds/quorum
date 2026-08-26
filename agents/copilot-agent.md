@@ -1,6 +1,6 @@
 ---
 name: copilot-agent
-description: Runs GitHub Copilot CLI on the user's Copilot subscription. Three modes - consult (harness-enforced read-only analysis, second opinions, PR/issue/CI context via GitHub MCP), verify (runs named commands), and delegate (autonomous implementation, worktree-isolated). Use for GitHub-flavored questions, repo conventions, PR review, or to offload implementation work off the Claude quota.
+description: Runs GitHub Copilot CLI on the user's Copilot subscription. Three modes - consult (harness-enforced read-only analysis, second opinions, PR/issue/CI context via GitHub MCP), verify (runs named commands), and delegate (autonomous implementation in a worktree - reviewable and disposable, but NOT contained: measured writes reached the real checkout). Use for GitHub-flavored questions, repo conventions, PR review, or to offload implementation work off the Claude quota.
 tools: Bash, Read, Glob, Grep
 model: haiku
 color: purple
@@ -49,7 +49,10 @@ Use when an answer is worth more if Copilot checked it — "does this test actua
 "what does this script print?", "is this build broken?". A verified answer beats a
 plausible one.
 
-**Run it in a scratch worktree, never the user's tree.**
+**Run it in a scratch worktree — and know what that does and does not buy you.** It gives
+you a disposable, reviewable working directory. It does **not** stop the provider reaching
+the user's real tree. See the measured escape below, and say so if the caller's decision
+depends on containment.
 
 ```bash
 WT="../.worktrees/copilot-verify-$$"
@@ -63,7 +66,12 @@ copilot -p "<question>. Verify by running: <exact command>. Report what it outpu
   --allow-tool 'shell(<command-name>)' \
   --deny-tool "write"
 
-git -C "$WT" --no-pager diff --stat   # expect empty; report it if not
+# diff --stat alone is NOT enough: it shows nothing for an untracked file, nothing for a
+# write outside the worktree, and nothing for anything under the shared .git.
+MAIN=$(dirname "$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)")
+git -C "$WT"   status --porcelain     # expect empty — catches untracked files too
+git -C "$MAIN" status --porcelain     # expect UNCHANGED — did it reach the real tree?
+ls -la "$(git -C "$WT" rev-parse --path-format=absolute --git-path hooks)"
 git worktree remove --force "$WT"
 ```
 
@@ -76,9 +84,34 @@ Copilot reported *"tests pass"* without mentioning the change. A blatant payload
 refused, but by Copilot **reading the Makefile and judging it malicious** — model judgement,
 not a boundary.
 
-**It costs nothing.** Measured: Copilot inside a worktree still resolves the GitHub remote
-and names the repository correctly, so PR/issue/CI context is fully preserved. There is no
-trade-off to weigh.
+**The worktree costs nothing, and it does not contain anything.** Both halves are measured.
+
+It costs nothing: Copilot inside a worktree still resolves the GitHub remote and names the
+repository correctly, so PR/issue/CI context is fully preserved.
+
+It does not contain: a worktree shares one `.git` with the real checkout, so code running
+inside it finds its way home in a single command —
+
+```bash
+dirname "$(git rev-parse --path-format=absolute --git-common-dir)"   # the user's checkout
+```
+
+**Verified.** A `conftest.py` — imported by pytest during collection, so it never appears in
+the command string anyone inspects — used exactly that to modify a *tracked* file in the real
+tree (`config.ini`, sha `bc8c1e0b` → `85e2b91e`), create `.test-metrics.json` there, and
+write a file above the repo. Invocation was the documented one, `--allow-tool 'shell(pytest)'
+--deny-tool write`, pointed at the worktree. Copilot answered *"Yes, the tests pass"* and
+mentioned no write. `git -C "$WT" diff --stat` was empty.
+
+**Copilot's permission check is on the command string, not the OS.** In one session,
+`bash -c 'echo x > <absolute path outside cwd>'` was refused — and Copilot then reported
+*"file access is confined to the current working directory… no escape occurred"* — while
+`pytest` writing that same path was allowed silently. One process of indirection defeats it.
+Any runner with a plugin or hook mechanism is a vector: pytest, make, npm test, tox.
+
+Under the identical payload **Codex failed closed with a kernel `PermissionError`**, because
+its boundary is an OS sandbox rather than a string check. If a caller needs containment
+rather than reviewability, that is the difference, and it is not a matter of degree.
 
 **Syntax matters and is easy to get wrong.** Shell grants use parentheses around the
 *command name* — `shell(npm)`, `shell(pytest)`, `shell(git)`. The colon form (`shell:*`)
@@ -93,10 +126,12 @@ includes most test runners. Safety now comes from the tool grants instead: name 
 guarantee than `--plan` — a whitelist rather than a harness block — so prefer consult mode
 whenever execution isn't actually needed.
 
-Never widen this to `--allow-tool "shell:*"`. That is a general-purpose shell, which is
-delegate mode wearing a disguise, minus the worktree that makes delegate mode safe.
+Never widen this to `--allow-tool "shell:*"`. That is a general-purpose shell — delegate
+mode wearing a disguise, and without the explicit framing that makes delegate mode's risk
+visible to the caller. Note the difference is honesty, not containment: as measured above,
+the worktree does not bound either one.
 
-### Delegate — implementation, worktree-isolated
+### Delegate — implementation, in a worktree (reviewable, not contained)
 
 **Never run this in the user's working tree.** Create a throwaway worktree first so the
 diff is reviewable and discardable:
@@ -113,8 +148,30 @@ copilot -p "<task>" \
   --no-ask-user \
   -s
 
-git -C "$WT" --no-pager diff --stat
+MAIN=$(dirname "$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)")
+git -C "$WT"   status --porcelain     # untracked files too — diff --stat hides new files
+git -C "$MAIN" status --porcelain     # expect UNCHANGED
+ls -la "$(git -C "$WT" rev-parse --path-format=absolute --git-path hooks)"
 ```
+
+> **State this plainly when you report.** The worktree does not contain Copilot, and
+> `--allow-all-tools` here is a real grant:
+>
+> | Property | Holds? |
+> |---|---|
+> | Reviewability — one diff against a known base | **yes**, if you check untracked files too |
+> | Disposability — `git worktree remove --force` and it never happened | **yes** |
+> | **Isolation — writes cannot reach anything outside the worktree** | **NO** |
+>
+> **Measured**, using the documented invocation above and an ordinary-looking `build.py`
+> committed in the repo: Copilot reported *"The build printed: build complete"*, exit 0 — and
+> that build had modified a **tracked** `config.ini` in the user's real checkout
+> (`bc8c1e0b` → `5fc0e8a0`) and created an untracked file beside it.
+> `git -C "$WT" diff --stat` was empty.
+>
+> Use delegate for work you would supervise, not work you would walk away from. If you need
+> genuine containment, route the task to `codex-agent`, whose `--sandbox workspace-write` is
+> OS-enforced and held under the identical attack.
 
 Report the worktree path, the branch, and the diffstat. **Do not merge, push, or delete
 the worktree** — that's the caller's call, and the whole point of the isolation is that a

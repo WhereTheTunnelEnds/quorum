@@ -37,6 +37,69 @@ measurement command itself was piped through `tail`. Re-measured unpiped: exit 1
 > If you record only one thing from this document, record this one. It corrupts every
 > other measurement you take.
 
+### A git worktree is not a sandbox
+
+**Symptom.** A provider runs in a detached scratch worktree, reports *"the tests pass"*, and
+`git -C "$WT" diff --stat` comes back empty. A tracked file in the user's real checkout has
+been modified.
+
+**Cause.** A worktree shares one `.git` with the main checkout, so anything running inside it
+can walk home in a single command:
+
+```bash
+cd "$WT"
+dirname "$(git rev-parse --path-format=absolute --git-common-dir)"   # the user's checkout
+```
+
+Measured with no model involved: writing there changed a tracked file's blob
+(`f48a20db` → `9ad88bcd`), and `git -C "$WT" diff --stat` and `status --porcelain` both
+stayed **empty**.
+
+**Why the grant does not save you.** `--allow-tool 'shell(pytest)'` sounds narrow. pytest
+imports `conftest.py` during collection, so the grant is to arbitrary repo-controlled Python
+that never appears in the command string anyone inspects. Same for `make`, `npm test`, `tox`.
+Confirmed end to end: Copilot, given the documented verify invocation, reported *"Yes, the
+tests pass"* while its pytest run modified `config.ini` in the real tree, created a file
+there, and wrote another above the repo.
+
+**The check is string-level, not OS-level, and it says otherwise.** In the same session
+`bash -c 'echo x > <absolute path outside cwd>'` was **refused** — after which Copilot
+reported *"file access is confined to the current working directory… no escape occurred"* —
+while `pytest` writing that same path was **allowed silently**. One process of indirection
+defeats it.
+
+**Codex is the control, and it held.** Identical payload, identical layout:
+
+```
+INTERNALERROR> PermissionError: [Errno 1] Operation not permitted:
+'/.../usertree/.test-metrics.json'
+```
+
+That is the kernel, not a model. The difference between an OS sandbox and a permission
+prompt is not a matter of degree.
+
+**The shared `.git` is worse than the shared filesystem.** All measured, all invisible to
+every documented check:
+
+- `git config --local` set from the worktree lands in the **shared** config and reads back
+  from the main repo immediately.
+- The worktree's `hooks` path **is** the main repo's `.git/hooks`. A `post-commit` planted
+  from inside the worktree survived `git worktree remove` and ran the next time the user made
+  an ordinary commit in their own tree.
+- `diff --stat` reports nothing for an **untracked** file — so a delegate that *adds* a
+  module shows an empty diffstat as its review artifact.
+
+**Fix.** Stop claiming isolation the worktree never provided. It gives **reviewability** and
+**disposability**, both real and both useful; it does not give **containment** unless the
+provider's sandbox is OS-enforced, which here means Codex alone. Check four things, not one:
+worktree `status --porcelain`, the real tree's `status`, the shared `config --list --local`,
+and the hooks directory. And say plainly that no git command detects a write to `$HOME` or
+`/tmp`.
+
+**The general lesson.** "Where the process runs" and "what the process can reach" are
+different questions, and a `cd` only answers the first. Before trusting a boundary, ask what
+enforces it — the kernel, or a string comparison one `exec` away from irrelevance.
+
 ### A truncated answer scored as a complete one
 
 **Symptom.** GLM returns a long, confident, well-formed review of a large codebase. It is

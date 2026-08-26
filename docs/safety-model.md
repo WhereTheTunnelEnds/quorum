@@ -52,33 +52,97 @@ pasted. That is a real limitation, not a formality — and it is the reason tier
 
 ## Tier 2 — verify
 
-The provider may execute **named** commands, but still cannot write to your tree.
+The provider may execute **named** commands. Whether it can also write to your tree depends
+entirely on the provider, and for two of the three the honest answer is **yes, it can.**
 
 Use it when the disagreement turns on something runnable: *does this test actually fail?*
 *What does this script print?* A panelist that ran the command outranks three that reasoned
 about it.
 
-Two mechanisms, and they are not equally strong:
+### Naming a command is not bounding what it does
 
-- **Allowlist** (Copilot): `--allow-tool 'shell(pytest)'` names one command. `--deny-tool
-  "write"` on top. A whitelist, not a boundary — weaker than tier 1, so prefer consult
-  whenever execution isn't genuinely needed.
-- **Scratch worktree** (Codex, GLM): sandboxes here are all-or-nothing per mode, and
-  `read-only` blocks *all* writes — which breaks most test runners, since they write caches,
-  coverage data, and build artifacts. So verify runs with write access pointed at a
-  **detached throwaway worktree**, never your tree.
+This is the load-bearing fact of tier 2, and an earlier version of this document had it
+wrong. `--allow-tool 'shell(pytest)'` grants **whatever pytest does**, and pytest runs
+repo-controlled Python before it runs a single test: `conftest.py` is imported during
+collection. The same is true of `make`, `npm test`, and `tox`. The grant narrows what the
+model may *launch*. It does not bound what the launched process may *touch*.
 
-After a verify run, check the diffstat. It should be empty:
+And a worktree does not close that gap, because a worktree can trivially find its way home.
+Measured, in a plain shell with no model involved:
 
 ```bash
-git -C "$WT" --no-pager diff --stat   # expect nothing
+cd "$WT"
+dirname "$(git rev-parse --path-format=absolute --git-common-dir)"   # -> the user's checkout
 ```
 
-If it isn't, the provider modified something to make its answer come out right. Report
-that rather than discarding it quietly — it usually means the answer is wrong.
+**Verified end to end.** A `conftest.py` resolving the path that way modified a *tracked*
+file in the real tree (`config.ini`, sha `bc8c1e0b` → `85e2b91e`), created
+`.test-metrics.json` there, and wrote `OUTSIDE_REPO.txt` above the repo — while Copilot,
+run with `--allow-tool 'shell(pytest)' --deny-tool write` and pointed at the worktree,
+reported *"Yes, the tests pass"* and mentioned no write at all. The documented diffstat
+check came back empty.
+
+### Which boundaries are real
+
+| Provider | Boundary | Real? |
+|---|---|---|
+| **Codex** | OS sandbox (`--sandbox`), enforced below the process | **Yes** |
+| **Copilot** | permission check on the shell command *string* | **No** |
+| **GLM / any Claude-Code-based tier** | tool allowlist in the harness | **No** |
+
+Codex is not on that list by reputation. Given the identical payload and worktree layout it
+failed closed, from the kernel:
+
+```
+INTERNALERROR> PermissionError: [Errno 1] Operation not permitted:
+'/.../usertree/.test-metrics.json'
+```
+
+Copilot's check is string-level, which is a different thing entirely. Measured in one
+session: `bash -c 'echo x > /abs/path/outside'` was **refused** — after which Copilot
+reported *"file access is confined to the current working directory… no escape occurred"* —
+while `pytest` writing that same path was **allowed, silently**. One level of process
+indirection defeats it. There is a second, weaker layer above that: a crude payload with a
+visible `warm-cache` target in a Makefile *was* refused, because the model read it and
+judged it malicious. That is model judgement, not enforcement, and it also operates on
+strings.
+
+**So: for Copilot and GLM, tier 2 is a convention, not a containment boundary.** Treat a
+verify run from either as *code you have not read has run on your machine with your
+permissions*. If that is not acceptable for the task, use Codex, or use consult.
+
+### Checking afterwards, and what checking cannot tell you
+
+The old advice here was one command, and it misses most of what matters:
+
+```bash
+git -C "$WT" --no-pager diff --stat    # NOT sufficient on its own
+```
+
+It reports nothing for an untracked file — so a delegate that *adds* a module shows an empty
+diffstat as its review artifact — nothing for writes outside the worktree, and nothing for
+anything under `.git`. Use all four:
+
+```bash
+git -C "$WT"   status --porcelain      # untracked files too, not just modifications
+git -C "$MAIN" status --porcelain      # did it reach the real tree?
+git -C "$MAIN" config --list --local   # `git config --local` from a worktree writes HERE
+ls -la "$(git -C "$WT" rev-parse --path-format=absolute --git-path hooks)"
+```
+
+That last one is not paranoia. A worktree's `hooks` path **is the main repository's hooks
+directory** — they share one `.git`. Measured: a `post-commit` hook planted from inside the
+worktree was invisible to all three `status`/`diff` commands above, and then ran when the
+user made an ordinary commit in their own tree. `git config --local core.pager` set from the
+worktree reads back immediately from the main repo the same way. Neither is tracked content,
+so no diff will ever show them.
+
+And state the limit plainly: **no git command detects a write to `$HOME`, `/tmp`, or
+`~/.gitconfig`.** If you need that guarantee, you need an OS sandbox, which means Codex.
 
 **Never widen an allowlist to a general shell.** `--allow-tool "shell:*"` is delegate mode
-wearing a disguise, minus the worktree that makes delegate mode safe.
+wearing a disguise — and note that an unqualified `Bash` in a Claude-Code allowlist is the
+same thing by another name, since `Bash` is a superset of `Write` and `Edit`.
 
 ## Tier 3 — delegate
 
@@ -92,15 +156,32 @@ git worktree add -b "$BRANCH" "$WT"
 git -C "$WT" --no-pager diff --stat
 ```
 
-The worktree is what makes an otherwise alarming permission grant acceptable. Three
-properties do the work:
+The worktree is what makes an otherwise alarming permission grant tolerable. It buys three
+properties — but only two of them unconditionally, and the missing one is the one people
+assume:
 
-1. **Isolation** — writes cannot reach your working tree.
-2. **Reviewability** — the entire result is one diff against a known base.
-3. **Disposability** — `git worktree remove --force` and it never happened.
+1. **Isolation** — **conditional, and usually absent.** Writes cannot reach your working
+   tree *only* where the sandbox is OS-enforced. **Codex: yes. Copilot and every
+   Claude-Code-based delegate: NO.** A worktree changes the working directory; it is not a
+   boundary, and reading it as one is the single most consequential misunderstanding this
+   document can leave you with. Code
+   running in it can resolve your real checkout in one command, and the shared `.git` gives
+   it your hooks and your config as well. Demonstrated above in tier 2, and it applies with
+   more force here, where the grant is full write access rather than one named command.
+2. **Reviewability** — the result is one diff against a known base, *provided you look at
+   untracked files too*. `diff --stat` alone does not show a newly added file.
+3. **Disposability** — `git worktree remove --force` and it never happened. This one is
+   unconditional, and for non-sandboxed providers it is most of what you are actually
+   getting.
 
-An adapter in delegate mode may pass its provider's "skip confirmations" flag. That is
-acceptable **only** because of those three properties, and only there.
+An adapter in delegate mode may pass its provider's "skip confirmations" flag. For Codex
+that is backed by an enforced boundary. For the others it is backed by reviewability and
+disposability alone — so delegate to them the way you would run a stranger's build script:
+in a copy you are willing to lose, on a machine whose `$HOME` you have not bet on the
+outcome.
+
+If you want a delegate that genuinely cannot touch your tree, that is Codex, and the
+difference is not a matter of degree.
 
 ### Delegation ends at a reviewed diff
 

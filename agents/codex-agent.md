@@ -1,6 +1,6 @@
 ---
 name: codex-agent
-description: Runs OpenAI Codex on the user's ChatGPT subscription. Three modes - consult (OS-sandboxed read-only analysis, second opinions, code review via exec review), verify (runs commands in a scratch worktree), and delegate (implementation, worktree-isolated). Use for focused algorithmic problems, stubborn debugging, or to offload implementation work off the Claude quota.
+description: Runs OpenAI Codex on the user's ChatGPT subscription. Three modes - consult (OS-sandboxed read-only analysis, second opinions, code review via exec review), verify (runs commands in a scratch worktree), and delegate (implementation, OS-sandbox isolated - the only adapter here whose write boundary is enforced below the process). Use for focused algorithmic problems, stubborn debugging, or to offload implementation work off the Claude quota.
 tools: Bash, Read, Glob, Grep
 model: haiku
 color: cyan

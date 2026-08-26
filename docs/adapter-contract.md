@@ -118,7 +118,8 @@ What actually stands between attacker-influenced text and your filesystem:
 | Layer | Kind |
 |---|---|
 | The provider's own sandbox (`--sandbox read-only`, `--plan`, headless auto-deny) | **harness** — holds regardless |
-| The worktree a delegate runs in | **harness** for Codex and Copilot; **not** for Claude-Code-based delegates |
+| The worktree a delegate runs in | **not a boundary for anyone.** It changes the working directory. Code inside it resolves the real checkout with one `git rev-parse`, and shares its `.git` |
+| Codex's OS sandbox specifically | **harness** — the only enforced write boundary here, verified by a kernel `PermissionError` under a payload that escaped every other provider |
 | The adapter choosing not to act on relayed instructions | **prompt** — a behaviour, not a boundary |
 
 Only the first row is unconditional. Keep `Write`/`Edit` off adapters — it is still the
@@ -166,8 +167,15 @@ full treatment; the contract-level requirement is this:
 | Tier | Can read | Can run commands | Can write |
 |---|---|---|---|
 | **consult** | yes | no | no |
-| **verify** | yes | yes, named commands only | no (scratch worktree) |
-| **delegate** | yes | yes | yes, **inside a throwaway worktree only** |
+| **verify** | yes | yes, named commands only | **only Codex can enforce "no"** — see below |
+| **delegate** | yes | yes | yes; the worktree bounds *review*, not *reach* |
+
+**The "can write" column is where adapters lie to themselves.** Naming a command does not
+bound what that command does: `shell(pytest)` runs `conftest.py`, `shell(make)` runs the
+Makefile, and an unqualified `Bash` in a Claude-Code allowlist is a general shell no matter
+what `--disallowedTools` says. Measured, all three escaped a scratch worktree and modified
+tracked files in the real checkout; Codex, given the identical payload, failed closed from
+the kernel. So state the tier your provider can *enforce*, not the one your flags spell.
 
 > **An adapter may only claim a tier it can enforce.**
 
