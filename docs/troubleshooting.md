@@ -149,9 +149,16 @@ per-token bill instead of the subscription you're already paying for.
 
 | Cause | Tell | Fix |
 |---|---|---|
-| Reasoning ate the token budget | `stop_reason: "max_tokens"`, no text block | Raise `max_tokens` to 8000+ |
+| Reasoning ate the token budget | `stop_reason: "max_tokens"`, no text block | Raise `max_tokens` to **32000** |
 | Reading the wrong JSON field | Response body is non-empty | Select by `type=="text"`, never `content[0]` |
 | Provider refused silently | Zero bytes, non-zero exit | Check stderr; usually a flag |
+
+On the first row, **8000 is not a safe number** — this file used to say it was. `max_tokens`
+bounds thinking *and* output together and reasoning is spent first, so the harder the
+question the likelier the answer is empty. Measured on glm-5.3 with one analytical prompt:
+at 8000 it returned `stop_reason: max_tokens`, 8000 output tokens and **zero characters of
+text**; at 32000, `end_turn` and 20,077 characters. A canary probe that asks for one token
+passes at either setting, which is why this survived three audits.
 
 The middle one catches people constantly: on reasoning models `content[0]` is a *thinking*
 block, so `.content[0].text` is `null` and a perfectly good answer looks empty.

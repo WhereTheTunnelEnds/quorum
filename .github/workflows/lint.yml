@@ -35,6 +35,20 @@ jobs:
           # as a CLI that exits 0 with zero bytes, which is what this repo exists to catch.
           shellcheck -e SC2154,SC1091,SC2088,SC1090,SC2034 -S error scripts/quorum-* scripts/prep-image scripts/make-probe-image scripts/install.sh
           shellcheck -e SC2154,SC1091,SC2148,SC2034 -S error probes/*.sh
+          shellcheck -e SC2154,SC1091,SC2034 -S error tests/*.sh
+
+      - name: Test suite
+        run: |
+          # These tests deliberately need no credentials, no network and no vendor CLIs:
+          # they force every provider unreachable and serve their own hostile fake provider.
+          # That is the whole point — a suite that only runs on the author's machine is not
+          # a suite, and this repo's install path has already broken twice on machines that
+          # were not the author's.
+          for t in tests/*.sh; do
+            [ -e "$t" ] || continue
+            echo "--- $t"
+            bash "$t"
+          done
 
       - name: Agents and skills have valid frontmatter
         run: |
