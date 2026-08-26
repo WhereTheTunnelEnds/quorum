@@ -143,11 +143,20 @@ jobs:
           # "Tested and working. Use these exactly." Three sites shipped insecure while the
           # repo believed the problem was solved, which is why this is a gate and not a
           # memory. Comment lines are allowed so the danger can still be explained.
+          # docs/field-notes.md is excluded because its job is to quote past mistakes
+          # verbatim, so it necessarily contains the pattern this gate forbids. Same
+          # problem as the untrusted-output delimiter, which docs/adapter-contract.md also
+          # has to spell out in full. Nothing in field-notes.md is ever executed.
+          #
+          # NOTE: no backticks in the messages below. The first version of this gate wrote
+          # "it lands in argv and `ps` shows it" inside double quotes, and bash ran ps and
+          # spliced a process list into the middle of the error.
           if grep -rnE '^[^#]*-H "Authorization: Bearer' \
-               --include='*.md' --include='*.sh' --include='*.yml' . ; then
+               --include='*.md' --include='*.sh' --include='*.yml' \
+               --exclude=field-notes.md . ; then
             echo
-            echo "ERROR: API key on a curl command line — it lands in argv and `ps` shows it."
-            echo "       Write the header to a chmod 600 mktemp file and use -H @\"\$file\"."
+            echo 'ERROR: API key on a curl command line - it lands in argv, where ps shows it.'
+            echo '       Write the header to a chmod 600 mktemp file and use -H @"$file".'
             exit 1
           fi
           echo "no API keys on command lines"
