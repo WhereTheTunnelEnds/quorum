@@ -304,6 +304,7 @@ CODE=$(… curl -s -m 900 -o "$BODY" -w '%{http_code}' …)
 
 | Condition | status |
 |---|---|
+| `CODE` = `000` | `timeout` — curl never got a response; distinguish this from a real error |
 | `CODE` ≠ 200 | `error` |
 | `.error` present in body | `error` |
 | no block with `type=="text"` | `empty` — usually thinking-only; raise `max_tokens` |

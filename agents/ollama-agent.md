@@ -135,10 +135,18 @@ Capture body and HTTP status separately, then classify:
 
 | Condition | status |
 |---|---|
-| `RC` = 124 | `timeout` |
+| `RC` = 124 **or** `RC` = 28 | `timeout` — see below; 28 is the one you will actually see |
 | `RC` ≠ 0 (7 = server not running) | `error` |
 | `CODE` ≠ 200 (404 = model not pulled) | `error` |
 | `USED` ≥ `NEED` | `error` — **truncated**; the answer is about a fragment |
+
+**Why the timeout row names 28 and not just 124.** The invocation is
+`timeout 900 curl -sS -m 890`, so curl's own deadline fires **ten seconds before** the
+outer one, every time. Measured against a listener that accepts and never responds:
+`RC=28`, `http_code=000`, stderr *"Operation timed out"*. `timeout` never gets to send
+its signal, so a table checking only 124 has a `timeout` status that cannot occur — the
+run lands in `RC ≠ 0` and reports `error`, losing the distinction between *slow* and
+*broken* that the status exists to draw.
 | `TEXT` empty or whitespace only | `empty` — a failure, despite HTTP 200 |
 | otherwise | `ok` |
 

@@ -37,6 +37,38 @@ measurement command itself was piped through `tail`. Re-measured unpiped: exit 1
 > If you record only one thing from this document, record this one. It corrupts every
 > other measurement you take.
 
+### The `timeout` status that could never happen
+
+**Symptom.** Three of five adapters documented a `timeout` status that no run could ever
+produce. A slow provider was reported as a plain `error`, losing the *slow* vs *broken*
+distinction the status exists to draw.
+
+**Cause.** Nested deadlines, where the inner one always wins:
+
+| Adapter | Invocation | What actually happens |
+|---|---|---|
+| ollama | `timeout 900 curl -sS -m 890` | curl's deadline fires **10 s early** → `RC=28` |
+| antigravity | `timeout 900 agy --print-timeout 10m` | agy's fires first → `RC=1` + stderr `timeout waiting for response` |
+| glm | `curl` inside a pipe | no `RC` captured at all; a timeout surfaces as `http_code=000` |
+
+Each classification table checked only `RC = 124`, which is what the *outer* `timeout(1)`
+returns — and the outer one never got to send its signal. Measured against a listener that
+accepts and never responds: `RC=28`, `http_code=000`, stderr *"Operation timed out"*.
+
+Codex and Copilot were clean, and the reason is instructive: they wrap a bare
+`timeout 900 <cli>` with no inner deadline, so there is only one thing that can fire.
+
+**A second bug in the same place.** `agy`'s consult block passed `--print-timeout 10m` and
+its read-the-repo block omitted it — and the default is `5m0s`. The same mode ran with a
+600-second deadline or a 300-second one depending on which block you copied.
+
+**Fix.** Classify on the signature of whichever deadline actually fires, not the wrapper's.
+Write every nested deadline explicitly rather than inheriting a default.
+
+**The general lesson.** A status you document but cannot produce is worse than one you never
+claimed: it reads as coverage. When two timeouts are nested, the shorter one is your real
+timeout, and it is usually not the one you wrote in the adapter.
+
 ### A git worktree is not a sandbox
 
 **Symptom.** A provider runs in a detached scratch worktree, reports *"the tests pass"*, and

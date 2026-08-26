@@ -143,17 +143,33 @@ stderr denial into something shaped like an answer:
 
 ```bash
 OUT=$(mktemp); ERR=$(mktemp)
-timeout 900 agy --add-dir "$REPO" --disable-slash-commands -p "$PROMPT" >"$OUT" 2>"$ERR"
+timeout 900 agy --add-dir "$REPO" --disable-slash-commands \
+  --print-timeout 10m -p "$PROMPT" >"$OUT" 2>"$ERR"
 RC=$?
 ```
 
 | Condition | status |
 |---|---|
-| `RC` = 124 | `timeout` |
+| `ERR` matches `timeout waiting for response` | `timeout` — **this is the one you will see**, not 124 |
+| `RC` = 124 | `timeout` — only if `--print-timeout` is longer than the outer `timeout` |
 | `RC` ≠ 0 | `error` |
 | `ERR` matches `auto-denied\|no output produced` | `error` — a tool was blocked, the answer is missing |
 | `OUT` empty or whitespace only | `empty` — a failure, despite `RC` = 0 |
 | otherwise | `ok` |
+
+**Two deadlines, and the inner one always wins.** `agy` has its own `--print-timeout`
+(default **5m0s**, per `agy --help`) nested inside the outer `timeout 900`. Whichever is
+shorter fires first, and the inner one is — so `timeout` never gets to send its signal and
+`RC` is **1**, not 124. Measured on expiry: `rc=1`, 0 bytes stdout, and
+`Error: timeout waiting for response` on stderr. A table checking only 124 therefore has a
+`timeout` status that cannot occur, and a slow run is misreported as a plain `error`, losing
+exactly the *slow* vs *broken* distinction the status exists to draw.
+
+Both invocations in this file now pass `--print-timeout 10m` explicitly. They did not: the
+consult block set it and the read-the-repo block omitted it, so the same mode ran with a
+600 s deadline or a 300 s one depending on which block you copied. Never leave a nested
+deadline implicit — write it down, and classify on the inner tool's signature rather than on
+the wrapper's.
 
 Check the stderr marker **before** the emptiness test. Both are non-`ok`, but they need
 different advice: a denial means the question required a write or a shell command and consult
