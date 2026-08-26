@@ -219,7 +219,9 @@ adapters:
 
 - Codex without `--skip-git-repo-check` outside a trusted repo: **exit 1, zero bytes.**
 - Copilot with a malformed `--allow-tool` value: **exit 1, zero bytes on stdout**, message on stderr.
-- GLM with a bad model id: **HTTP 200**, with the error inside the JSON body.
+- GLM with a bad model id: **HTTP 400** (a bad key gives **401**) — but `curl` exits **0**
+  for both, so the *exit code* is what carries no information here, not the status. Capture
+  `%{http_code}` and read the body; do not infer either from `$?`.
 
 Not one of those is detectable by "did the command succeed?" Each needs a named check, and
 that check belongs in the adapter's classification table where the next person will find it.

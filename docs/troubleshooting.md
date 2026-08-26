@@ -151,7 +151,9 @@ Fix is in the adapter already — but if you're invoking `codex` by hand, add
 ```
 
 If it's set and still rejected, the key is expired — get a new one from z.ai. Note this
-arrives inside an **HTTP 200**, so `curl` exits 0 and nothing looks wrong from the outside.
+arrives with **`curl` exiting 0** — measured HTTP **401** for a bad key and **400** for a bad
+model id, but curl's exit status is 0 for all of them, so nothing looks wrong from the
+outside unless you capture `%{http_code}` yourself.
 
 ### `Not logged in` (Codex)
 
@@ -263,7 +265,31 @@ affects only that subprocess; your normal `claude` sessions are untouched.
 
 ### The delegate edited my working tree
 
-It shouldn't be able to. Every delegate runs in a throwaway worktree:
+It can, for every provider except Codex — this is measured behaviour, not a bug, and an
+earlier version of this entry wrongly told you to report it as one.
+
+A worktree changes the *working directory*. It is not a boundary. Anything running inside
+one resolves your real checkout in a single command, because a worktree shares its `.git`
+with the main repo. Measured: a `conftest.py` imported by pytest during collection modified
+a tracked file in the real tree while Copilot reported *"the tests pass"* and
+`git -C "$WT" diff --stat` came back empty.
+
+**What to actually do:**
+
+```bash
+MAIN=$(dirname "$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)")
+git -C "$MAIN" status --porcelain     # what reached your tree
+git -C "$MAIN" diff                   # what it changed
+git -C "$MAIN" config --list --local  # `git config --local` from a worktree writes HERE
+ls -la "$(git -C "$WT" rev-parse --path-format=absolute --git-path hooks)"
+```
+
+Check the hooks directory even after removing the worktree: it *is* the main repo's hooks
+directory, so a hook planted from inside survives `git worktree remove` and runs on your next
+ordinary commit. And note that no git command detects a write to `$HOME` or `/tmp`.
+
+**If you need this not to happen**, use `codex-agent`, whose sandbox is OS-enforced and held
+under the identical attack. See [safety-model.md](safety-model.md).
 
 ```bash
 git worktree list

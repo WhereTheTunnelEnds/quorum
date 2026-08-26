@@ -23,7 +23,7 @@ not.
 
 Every vendor CLI fails in its own silent way. Codex outside a trusted git repo exits 1 with
 **zero bytes** — relay that naively and it reads as "the model had nothing to say." Z.AI
-returns `modelCode: does not exist` inside an **HTTP 200**, so `curl` exits 0 and everything
+returns `modelCode: does not exist` with **`curl` exiting 0**, so the exit code says everything
 looks fine. A reasoning model's thinking can consume the entire token budget, returning a
 successful response with **no answer in it**. Copilot rejects a malformed flag on stderr —
 clean and detectable, right up until you capture with `2>&1` and it becomes something
@@ -196,13 +196,33 @@ which fails silently the first time it matters. Starting points for common shape
 
 ## Safety
 
-Three tiers, each enforced by a harness or the OS — never by asking a model to behave.
+Three tiers — and **only one of them is enforced by anything stronger than a convention.**
+That distinction is the most important thing on this page.
 
-| Tier | Read | Run commands | Write |
-|---|---|---|---|
-| **consult** | yes | no | no |
-| **verify** | yes | named commands only | no — scratch worktree |
-| **delegate** | yes | yes | **throwaway worktree only** |
+| Tier | Read | Run commands | Write | Enforced by |
+|---|---|---|---|---|
+| **consult** | yes | no | no | the provider's own sandbox / plan mode — real |
+| **verify** | yes | named commands only | **Codex: no. Copilot, GLM: yes, it can** | Codex: OS sandbox. Others: an allowlist |
+| **delegate** | yes | yes | yes | nothing, except Codex |
+
+**A git worktree is not a sandbox.** It gives you *reviewability* and *disposability*, both
+genuinely useful — it does not give you containment. Code running inside a worktree finds
+your real checkout in one command, because they share a `.git`:
+
+```bash
+dirname "$(git rev-parse --path-format=absolute --git-common-dir)"
+```
+
+Measured: Copilot, given the documented verify invocation with `--allow-tool 'shell(pytest)'
+--deny-tool write`, reported *"Yes, the tests pass"* while its pytest run modified a tracked
+file in the real checkout. `shell(pytest)` sounds narrow; pytest imports `conftest.py` during
+collection, so it is a grant to arbitrary repo-controlled code. Under the identical payload
+**Codex failed closed with a kernel `PermissionError`**, because its boundary is an OS
+sandbox rather than a check on the command string.
+
+So: route work to `codex-agent` when you need containment. Use the others the way you would
+run a stranger's build script — in a copy you are willing to lose. Full detail and the
+post-run checks that actually catch this: [docs/safety-model.md](docs/safety-model.md).
 
 Adapters hold `Bash, Read, Glob, Grep` and never `Write` or `Edit` — they relay text from
 other vendors' models that may have read repository files, GitHub issues, and PR

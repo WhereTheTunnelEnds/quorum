@@ -37,6 +37,32 @@ measurement command itself was piped through `tail`. Re-measured unpiped: exit 1
 > If you record only one thing from this document, record this one. It corrupts every
 > other measurement you take.
 
+### "Failures arrive as HTTP 200" — they do not, and five files said they did
+
+**What the repo claimed.** That z.ai returns failures inside an HTTP 200, so the status line
+is uninformative and you must classify on the body alone.
+
+**Measured, just now:**
+
+| Case | HTTP status | `curl` exit |
+|---|---|---|
+| bad model id (`glm-5.3[1m]`) | **400** | 0 |
+| bad/expired key | **401** | 0 |
+
+The status discriminates cleanly. What carries no information is **`curl`'s exit code**,
+which is 0 for both — and that is the real lesson the sentence was reaching for.
+
+**Why it mattered anywhere.** Runtime was unaffected: every adapter classifies on the body,
+which is correct either way. The cost was in
+`skills/build-adapter/reference/probe-checklist.md`, the table that teaches a *new* adapter
+author the four failure shapes. It taught one this provider does not produce — so an author
+following it would skip `%{http_code}` believing the status is useless, and lose the
+cheapest, most reliable discriminator they had.
+
+**The general lesson.** A wrong fact that costs nothing where it was written can still cost
+something where it is copied. Docs that teach a *method* are load-bearing in a way that docs
+describing a *symptom* are not.
+
 ### A check that fails when nothing is wrong
 
 **Symptom.** `quorum-flags` reported `GONE --help — not in --help any more` and exited 1 on
@@ -618,7 +644,7 @@ empty — the inverse of what you want.
 | 8000 | `max_tokens` | 8000 | **0 characters** |
 | 32000 | `end_turn` | 13,194 | 20,077 characters |
 
-**Fix.** 32000. This repo shipped 8000 as its documented default while its own adapter
+**Fix.** 64000, and detect rather than tune. This line said **32000**, which the entry above measures as truncating a 152 KB input at 360 s with the answer cut off mid-review — the same mistake as the `8000+` it replaced, one revision later. This repo shipped 8000 as its documented default while its own adapter
 described the failure mode — so every GLM consult on a hard question returned nothing, on
 the provider chosen specifically for hard questions over large inputs.
 

@@ -8,6 +8,17 @@
 
 set -uo pipefail
 
+# Resolve through symlinks: install.sh links this onto PATH, so `dirname "$0"` would give
+# ~/.local/bin rather than the repo. macOS has no `readlink -f`.
+_qsrc="$0"
+while [ -L "$_qsrc" ]; do
+  _qdir=$(cd -P "$(dirname "$_qsrc")" && pwd)
+  _qsrc=$(readlink "$_qsrc")
+  case "$_qsrc" in /*) ;; *) _qsrc="$_qdir/$_qsrc" ;; esac
+done
+# shellcheck source=/dev/null
+. "$(cd -P "$(dirname "$_qsrc")" && pwd)/quorum-lib.sh"
+
 json=0
 case "${1:-}" in
   -h|--help)
@@ -17,8 +28,16 @@ quorum-status — which providers are reachable right now.
   quorum-status         live-check every provider and print a table
   quorum-status --json  the same checks, as JSON on stdout
 
-This makes REAL calls; it does not test for binaries. Not every provider ships a
-command named after itself, so `command -v` proves nothing. See docs/field-notes.md.
+It makes a REAL call wherever a real call is the only evidence: GLM gets an API request,
+Ollama gets an /api/tags fetch, Claude gets a credential check.
+
+For codex, copilot and agy it checks that the command EXISTS. That is a presence check, not
+an auth check — a stub answering only --version reports OK here while `quorum-auth` correctly
+says "not logged in". Use quorum-auth for authentication and quorum-verify for "does it
+actually work".
+
+What it never does is infer ABSENCE from a missing binary: GLM ships no `glm` command at all.
+See docs/field-notes.md.
 
 Exit status: 0 if at least one provider is reachable, 1 if none are. A provider you
 do not use is a normal state, not a failure.
@@ -63,19 +82,7 @@ record() {
   # published the model, so this is remote-controlled text: sanitise here, once, rather
   # than trusting six call sites.
   #
-  # ALL C0 controls and DEL, not just tab/newline/CR. Newline-stripping alone stops a
-  # provider forging a whole status row, but ESC does not need a newline: `\033[A` moves
-  # the cursor up and overwrites the line above, so a model named for the purpose could
-  # repaint another provider's row as green OK. Bytes >= 0x80 are left alone so that
-  # non-ASCII model names survive intact.
-  # LC_ALL=C is load-bearing, not decoration. Under a UTF-8 locale — which is the normal
-  # case, LANG=en_US.UTF-8 — BSD tr aborts on the first byte that is not valid UTF-8 with
-  # "Illegal byte sequence" and emits only what it had read so far. Measured on input
-  # 41 9b 42: LC_ALL=C gives back 41 9b 42, the UTF-8 locale gives back 41. A provider
-  # returning any invalid byte in a model name would silently lose everything after it,
-  # and lose it differently on the author's machine than in CI. Under LC_ALL=C, tr works
-  # bytewise; multi-byte UTF-8 still survives intact because every byte of it is >= 0x80
-  # (verified: café-日本 round-trips unchanged).
+  # Sanitising lives in scrub(); see the rationale there.
   #
   # Length is NOT capped here, deliberately. Capping belongs in render_text, because a
   # byte-wise cut can split a multi-byte character in half, and feeding invalid UTF-8 to jq
@@ -120,7 +127,7 @@ fi
 # --- GLM / Z.AI -----------------------------------------------------------------
 # Note: there is no `glm` binary. Never test for one — see docs/field-notes.md.
 if [ -z "${Z_AI_API_KEY:-}" ]; then
-  bad glm "Z_AI_API_KEY not set  ->  export it from ~/.zshenv"
+  bad glm "Z_AI_API_KEY not set  ->  export it from $QUORUM_ENVFILE_SHORT"
 else
   # The key goes in a HEADER FILE, never on the command line. Measured: with
 # `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to any process running as
@@ -135,8 +142,18 @@ else
   # Failures arrive inside HTTP 200, so classify on the body, not the exit code.
   if printf '%s' "$body" | grep -q '"content"'; then
     ok glm "key accepted"
+  elif [ -z "$body" ]; then
+    # Handle an EMPTY body BEFORE jq sees it. `jq -r '.x // "default"'` on zero bytes emits
+    # ZERO BYTES and exits 0: the `//` never fires because there is no input to apply it to,
+    # and the `|| echo` never fires because jq succeeded. Measured — 0 bytes, rc=0.
+    #
+    # So no network, DNS failure, TLS failure, a dead proxy or a timeout all produced a bare
+    # "--  glm" with an EMPTY reason, followed by advice to get a fresh key: an outage
+    # diagnosed as a bad credential. --json propagated it as detail:"".
+    bad glm "no response from api.z.ai — network, DNS, proxy or timeout, NOT your key"
   else
-    msg=$(printf '%s' "$body" | jq -r '.error.message // "no response"' 2>/dev/null || echo "no response")
+    msg=$(printf '%s' "$body" | jq -r '.error.message // empty' 2>/dev/null || true)
+    [ -n "$msg" ] || msg="unrecognised response from api.z.ai (not valid JSON, or an unknown shape)"
     bad glm "$msg"
   fi
 fi
@@ -149,12 +166,28 @@ tags=$(curl -s -m 5 "$OLLAMA_BASE/api/tags" 2>/dev/null)
 if [ -z "$tags" ]; then
   bad ollama "no server at $OLLAMA_BASE  ->  run: ollama serve"
 else
-  count=$(printf '%s' "$tags" | jq -r '.models | length' 2>/dev/null || echo 0)
+  # Require .models to be an ARRAY, and count only entries that actually carry a .name.
+  #
+  # `jq '.models | length'` alone is not a model count, because length is polymorphic:
+  # measured, a string gives its character count ("not-a-list" -> 10), an object gives its
+  # key count ({"a":1,"b":2} -> 2), and a NUMBER gives its absolute value (12345 -> 12345).
+  # So four response shapes containing no models at all reported green, available:true and
+  # exit 0 — including "12345 model(s)". The `case` guard below passed them because they
+  # are all digits.
+  #
+  # The realistic trigger is not a hostile server, it is a schema rename: a body of
+  # [{"model":"x"},{"model":"y"}] is a well-formed array of two objects, so length is 2,
+  # while `[.models[].name]` yields two nulls and the detail reads "2 model(s): , ".
+  # Counting .name directly makes the count and the names agree by construction.
+  count=$(printf '%s' "$tags" \
+    | jq -r 'if (.models|type) == "array" then ([.models[] | select(.name? // empty)] | length) else 0 end' \
+      2>/dev/null || echo 0)
   case "$count" in ''|*[!0-9]*) count=0 ;; esac
   if [ "$count" -eq 0 ]; then
     bad ollama "server up, no model pulled  ->  run: ollama pull llama3.2:3b"
   else
-    names=$(printf '%s' "$tags" | jq -r '[.models[].name] | join(", ")' 2>/dev/null)
+    names=$(printf '%s' "$tags" \
+      | jq -r '[.models[] | select(.name? // empty) | .name] | join(", ")' 2>/dev/null)
     ok ollama "$count model(s): $names"
   fi
 fi
@@ -165,7 +198,7 @@ fi
 if command -v agy >/dev/null 2>&1; then
   ok agy "installed ($(agy --version 2>/dev/null | head -1))  ->  quorum-auth agy"
 elif [ -x "$HOME/.local/bin/agy" ]; then
-  bad agy "installed but NOT on PATH here  ->  add ~/.local/bin in ~/.zshenv"
+  bad agy "installed but NOT on PATH here  ->  add ~/.local/bin in $QUORUM_ENVFILE_SHORT"
 else
   bad agy "not installed"
 fi

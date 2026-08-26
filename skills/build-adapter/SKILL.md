@@ -48,7 +48,7 @@ adapters:
 |---|---|---|
 | **Agentic CLI** | Gemini CLI, Aider, Amp, Cursor CLI | the CLI's own headless/exec mode |
 | **HTTP endpoint, no CLI** | Z.AI, OpenRouter, a hosted API | `curl` |
-| **Local server** | MLX, Ollama, LM Studio, llama.cpp, vLLM | `curl` to localhost; see `docs/porting/` |
+| **Local server** | MLX, Ollama, LM Studio, llama.cpp, vLLM | `curl` to localhost; see the [porting guides](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/porting/) |
 
 [docs/providers.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/providers.md) lists the ones already known, including which
 binary each actually installs as. Then find the real entry point. **Do not assume a binary is named after its vendor** —
@@ -192,8 +192,11 @@ one for a provider nobody has covered yet is the most useful PR this repo can re
   OpenAI-compatible server on localhost, so consult is a `curl` adapter. They typically
   have **no agentic harness**, which means no native read-only mode and no verify or
   delegate tier. That is fine — say so rather than inventing one. Start from
-  `docs/porting/openai-compatible.md`.
+  [docs/porting/openai-compatible.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/porting/openai-compatible.md).
 - **Another vendor's coding CLI** — closest to the built-in three. Find its headless flag,
   its "don't ask the user" flag, and its sandbox flag, in that order.
-- **A hosted API** — mirror `agents/glm-agent.md`. Watch for providers that return errors
-  inside HTTP 200; classify on the body, not the status code.
+- **A hosted API** — mirror `agents/glm-agent.md`. Capture **both** `%{http_code}` and the
+  body, and classify on both. Some providers do return errors inside an HTTP 200, so the
+  status alone is not enough — but do not invert that into "the status is useless": measured
+  on z.ai, a bad model id gives **400** and a bad key **401**, which discriminate cleanly.
+  What carries no information is `curl`'s **exit code**, which is 0 for all of them.

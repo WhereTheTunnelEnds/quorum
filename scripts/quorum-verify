@@ -28,6 +28,9 @@ while [ -L "$_src" ]; do
   case "$_src" in /*) ;; *) _src="$_dir/$_src" ;; esac
 done
 HERE=$(cd -P "$(dirname "$_src")/.." && pwd)
+# shellcheck source=/dev/null
+. "$HERE/scripts/quorum-lib.sh"
+
 PROBE_DIR="${QUORUM_PROBE_DIR:-$HERE/probes}"
 CANARY="QUORUM_CANARY_OK"
 QUORUM_TIMEOUT="${QUORUM_VERIFY_TIMEOUT:-180}"
@@ -44,7 +47,7 @@ I() { printf '        %s\n' "$1"; }
 TIMEOUT_BIN=$(command -v timeout || command -v gtimeout || true)
 export TIMEOUT_BIN
 if [ -z "$TIMEOUT_BIN" ]; then
-  printf '  \033[33mWARN\033[0m  no timeout(1) on PATH — hang detection disabled (brew install coreutils)\n'
+  printf '  \033[33mWARN\033[0m  no timeout(1) on PATH — hang detection disabled (%s)\n' "$QUORUM_PKG_TIMEOUT"
 fi
 
 # Available to sourced probe files: run with the shared deadline when timeout(1) exists.

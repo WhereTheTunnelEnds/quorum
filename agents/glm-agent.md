@@ -316,7 +316,7 @@ Report worktree path, branch, and diffstat. **Do not merge, push, or remove the 
 Full spec: [docs/adapter-contract.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/adapter-contract.md) — background reading, not a dependency. **Everything you need is inlined below.** Do not go looking for that file: your working directory is the user's project, not the Quorum repo, so a relative path to it resolves to nothing.
 
 **Never relay the raw body as if it were a verified answer.** z.ai returns failures inside
-a **200 response** — `{"error":{"message":"token expired or incorrect"}}` and
+a **body you must parse** — `{"error":{"message":"token expired or incorrect"}}` and
 `modelCode: does not exist` both arrive as ordinary JSON, and a thinking-only response
 looks like success with an empty answer. Curl's exit code tells you nothing about any of
 these.
@@ -401,8 +401,13 @@ relay.**
   do not retry and do not answer from your own knowledge.
 - **`modelCode: does not exist`** — bad model ID (likely a `[1m]` suffix). Auth is fine;
   fix the model name.
-- **Empty text with `stop_reason: "max_tokens"`** — thinking ate the whole budget. Raise
-  `max_tokens` and retry once.
+- **Empty text with `stop_reason: "max_tokens"`** — thinking ate the whole budget. **Report
+  it. Do not quietly retry at a higher cap**, which is what this line used to say and what
+  the rest of this file now argues against: raising the number reduces how often this
+  happens and never removes the case. Measured, a 3.6 KB difference in input flipped the
+  same question from a complete answer to zero text at the same cap. If you do retry,
+  escalate once, say so in your diagnostics, and bound it by wall-clock rather than tokens —
+  a retry doubles a 570-second call and is the run most likely to cross the deadline.
 - **Empty result** — return the raw JSON so the caller can see what happened.
 - **Never substitute your own answer for GLM's.** A failed relay is a useful result; a
   silently self-authored one corrupts whatever decision it feeds.

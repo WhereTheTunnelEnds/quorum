@@ -200,7 +200,17 @@ jobs:
           # offline: the URL path must name a file that exists in this repo.
           python3 - <<'PY'
           import pathlib, re, sys
+          # Strip the anchor and any trailing punctuation before resolving. `[^\s)]+` alone
+          # swallows `#section` and a sentence-ending `.` or `>`, so this gate rejected
+          # CORRECT content: a deep link to docs/evidence.md#reproducible, and an autolink
+          # ending a sentence, both reported DANGLING. The sibling "Links to local files"
+          # gate ~100 lines below already does .split('#')[0]; this one did not.
+          #
+          # A gate that fails on valid input is the failure mode this repo cares most about,
+          # because it teaches people that red means nothing.
           pat = re.compile(r'https://github\.com/[\w-]+/quorum/blob/main/([^\s)]+)')
+          def norm(t):
+              return t.split('#')[0].rstrip('>.,;:!?\'"')
           bad = 0
           for f in pathlib.Path('.').rglob('*'):
               if not f.is_file() or '.git/' in str(f):
@@ -210,8 +220,9 @@ jobs:
               except Exception:
                   continue
               for m in pat.finditer(text):
-                  if not pathlib.Path(m.group(1)).exists():
-                      print(f"DANGLING {f} -> {m.group(1)}")
+                  target = norm(m.group(1))
+                  if target and not pathlib.Path(target).exists():
+                      print(f"DANGLING {f} -> {target}")
                       bad += 1
           print("no dangling canonical URLs" if not bad else f"{bad} dangling")
           sys.exit(1 if bad else 0)
@@ -225,9 +236,16 @@ jobs:
           python3 - <<'PY'
           import pathlib, re, sys
           # a markdown link whose target is a relative path into docs/
-          rel_link = re.compile(r'\]\((?!https?://)[^)]*docs/[a-z-]+\.md[^)]*\)')
-          # a bare backticked repo path, which reads as "open this file"
-          backticked = re.compile(r'`(?:\.{0,2}/)?docs/[a-z-]+\.md`')
+          # `[a-z-]+` could not cross a '/', and excluded digits and underscores — so
+          # docs/porting/mlx.md, docs/probe3-notes.md and docs/field_notes.md all slipped
+          # through. There was a LIVE violation in the tree this gate guards:
+          # skills/build-adapter/SKILL.md referenced `docs/porting/` and
+          # `docs/porting/openai-compatible.md` while the gate reported all clear.
+          PATH_RE = r'docs/[\w./-]+\.md'
+          rel_link = re.compile(r'\]\((?!https?://)[^)]*' + PATH_RE + r'[^)]*\)')
+          # a backticked repo path, which reads as "open this file" — with or without a
+          # trailing .md, since `docs/porting/` is the same instruction
+          backticked = re.compile(r'`(?:\.{0,2}/)?docs/[\w./-]*`')
           bad = 0
           for d in ('agents', 'skills'):
               for f in pathlib.Path(d).rglob('*'):

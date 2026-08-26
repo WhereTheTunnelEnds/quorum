@@ -99,7 +99,7 @@ of each.
 |---|---|---|
 | Non-zero exit, empty stdout | exit code | Codex outside a trusted repo: rc=1, 0 bytes |
 | Non-zero exit, message on stderr | exit code | Copilot bad `--allow-tool`: rc=1, 0 bytes stdout |
-| **Exit 0, error inside the body** | **error text** | z.ai bad model id: HTTP 200, `.error` in JSON |
+| **Exit 0, error inside the body** | **`%{http_code}` first, then error text** | z.ai bad model id: HTTP **400**, bad key: **401** — curl exits 0 for both |
 | Exit 0, empty output | **emptiness** | reasoning model whose thinking consumed `max_tokens` |
 
 Rows three and four are why `status: empty` and body-matching exist in the contract. An
