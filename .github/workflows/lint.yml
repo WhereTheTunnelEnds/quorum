@@ -73,6 +73,17 @@ jobs:
           fi
           echo "no stray files"
 
+      - name: Every adapter states the no-code-fence rule
+        run: |
+          # Two agents were observed wrapping the whole envelope in a code fence, which
+          # breaks any parser anchored on `status:` at the start of the response. The rule
+          # only helps if every adapter carries it.
+          fail=0
+          for f in agents/*-agent.md; do
+            grep -q 'Do not wrap the envelope in a code fence' "$f" || { echo "ERROR: $f missing the no-code-fence rule"; fail=1; }
+          done
+          exit $fail
+
       - name: Links to local files resolve
         run: |
           python3 - <<'PY'
