@@ -86,6 +86,54 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
+      - name: Quorum's own commands are guarded before use
+        run: |
+          # `/plugin marketplace add` installs the plugin WITHOUT running scripts/install.sh,
+          # so none of Quorum's own commands are on PATH on that route. Absence there does not
+          # fail loudly, which is the problem: measured live with quorum-sanitize missing, the
+          # GLM consult returned CODE=200, stop_reason=end_turn, TEXT="" — a real answer
+          # classified as `empty`, "the model had nothing to say". A missing quorum-claude-on
+          # in a delegate block is worse still: the provider never runs, the diff is clean,
+          # and that reads as "no changes were needed".
+          #
+          # One bad instance was found by a live call. This gate found eight more of the same
+          # shape, including quorum-sanitize itself in skills/model-panel/SKILL.md — missed
+          # when the adapters were fixed.
+          python3 - <<'PY'
+          import re, pathlib, sys
+          OWN = {'quorum-sanitize','prep-image','make-probe-image','quorum-claude-on',
+                 'quorum-flags','quorum-status','quorum-verify','quorum-auth','quorum-setup'}
+          bad = tot = 0
+          files = sorted(list(pathlib.Path('agents').glob('*.md')) +
+                         list(pathlib.Path('skills').rglob('*.md')))
+          for f in files:
+              s = f.read_text()
+              for m in re.finditer(r'```bash\n(.*?)```', s, re.S):
+                  block = m.group(1)
+                  # Comments mention these commands by name; only real invocations count.
+                  code = '\n'.join(l for l in block.splitlines()
+                                   if not l.lstrip().startswith('#'))
+                  g = re.search(r'for _q_need in ([^;]+);', code)
+                  guarded = set(g.group(1).split()) if g else set()
+                  body = code.replace(g.group(0), '') if g else code
+                  for c in sorted(OWN):
+                      if re.search(r'(^|[\s|(`$])' + re.escape(c) + r'\b', body):
+                          tot += 1
+                          if c not in guarded:
+                              line = s[:m.start()].count('\n') + 1
+                              print(f"{f}:{line}: invokes {c} with no guard")
+                              bad += 1
+          print(f"{tot} invocation(s) of Quorum's own commands, {bad} unguarded")
+          if bad:
+              print()
+              print("ERROR: add a guard to the top of the block:")
+              print("  for _q_need in <commands>; do")
+              print("    command -v \"$_q_need\" >/dev/null 2>&1 || {")
+              print("      echo \"status: error — $_q_need is not on PATH.\"; exit 1; }")
+              print("  done")
+          sys.exit(1 if bad else 0)
+          PY
+
       - name: Shell syntax
         run: |
           for f in scripts/* probes/*.sh; do

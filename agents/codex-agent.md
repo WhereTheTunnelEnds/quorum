@@ -171,6 +171,22 @@ reading stdin until it times out (observed: 240s hang, `exit=124`, zero output).
 pass the prompt through **stdin** with a trailing `-`:
 
 ```bash
+# These are Quorum's OWN commands, and they exist only if scripts/install.sh has run.
+# `/plugin marketplace add` installs the plugin WITHOUT running it, so on that path they are
+# absent — and absence here does not fail loudly. Measured against the live API with
+# quorum-sanitize missing: CODE=200, stop_reason=end_turn, TEXT="" — a real answer reported
+# as `empty`, "the model had nothing to say". A missing quorum-claude-on in a delegate block
+# is worse: the provider never runs and the diff is clean, which reads as "no changes needed".
+#
+# Refuse instead. A missing prerequisite must never be renderable as an ordinary result.
+for _q_need in prep-image; do
+  command -v "$_q_need" >/dev/null 2>&1 || {
+    echo "status: error — $_q_need is not on PATH."
+    echo "Run scripts/install.sh from the Quorum repo, then retry."
+    exit 1
+  }
+done
+
 IMG=$(prep-image "<original photo>")     # normalizes HEIC/oversized to JPEG
 echo "$QUESTION" | timeout 600 codex exec \
   --sandbox read-only --skip-git-repo-check \
@@ -212,19 +228,21 @@ The exit code is only trustworthy if you **don't pipe**: `codex ... | tail` repo
 Redirect to files and check `$?` directly, as below.
 
 ```bash
-# quorum-sanitize must exist. Without it this pipeline yields an EMPTY string, and the
-# table below then classifies a perfectly good HTTP 200 as `empty` -- "the model had nothing
-# to say". Measured against the live API: CODE=200, stop_reason=end_turn, TEXT="".
+# These are Quorum's OWN commands, and they exist only if scripts/install.sh has run.
+# `/plugin marketplace add` installs the plugin WITHOUT running it, so on that path they are
+# absent — and absence here does not fail loudly. Measured against the live API with
+# quorum-sanitize missing: CODE=200, stop_reason=end_turn, TEXT="" — a real answer reported
+# as `empty`, "the model had nothing to say". A missing quorum-claude-on in a delegate block
+# is worse: the provider never runs and the diff is clean, which reads as "no changes needed".
 #
-# This is not hypothetical. `/plugin marketplace add` installs the plugin WITHOUT running
-# scripts/install.sh, so on that path quorum-sanitize is not on PATH at all and every
-# consult would silently return empty. Refuse instead: relaying unsanitised provider text is
-# not an acceptable fallback, and neither is reporting a missing tool as a quiet answer.
-command -v quorum-sanitize >/dev/null 2>&1 || {
-  echo "status: error — quorum-sanitize is not on PATH."
-  echo "Run scripts/install.sh from the Quorum repo, then retry."
-  exit 1
-}
+# Refuse instead. A missing prerequisite must never be renderable as an ordinary result.
+for _q_need in quorum-sanitize; do
+  command -v "$_q_need" >/dev/null 2>&1 || {
+    echo "status: error — $_q_need is not on PATH."
+    echo "Run scripts/install.sh from the Quorum repo, then retry."
+    exit 1
+  }
+done
 
 OUT=$(mktemp); ERR=$(mktemp)
 cat "$PROMPT_FILE" | timeout 900 codex exec --sandbox read-only --skip-git-repo-check - \
@@ -270,19 +288,21 @@ cursor up and overwrites the line above — which is your `status:` line — and
 the current one. Neither is caught by a text substitution.
 
 ```bash
-# quorum-sanitize must exist. Without it this pipeline yields an EMPTY string, and the
-# table below then classifies a perfectly good HTTP 200 as `empty` -- "the model had nothing
-# to say". Measured against the live API: CODE=200, stop_reason=end_turn, TEXT="".
+# These are Quorum's OWN commands, and they exist only if scripts/install.sh has run.
+# `/plugin marketplace add` installs the plugin WITHOUT running it, so on that path they are
+# absent — and absence here does not fail loudly. Measured against the live API with
+# quorum-sanitize missing: CODE=200, stop_reason=end_turn, TEXT="" — a real answer reported
+# as `empty`, "the model had nothing to say". A missing quorum-claude-on in a delegate block
+# is worse: the provider never runs and the diff is clean, which reads as "no changes needed".
 #
-# This is not hypothetical. `/plugin marketplace add` installs the plugin WITHOUT running
-# scripts/install.sh, so on that path quorum-sanitize is not on PATH at all and every
-# consult would silently return empty. Refuse instead: relaying unsanitised provider text is
-# not an acceptable fallback, and neither is reporting a missing tool as a quiet answer.
-command -v quorum-sanitize >/dev/null 2>&1 || {
-  echo "status: error — quorum-sanitize is not on PATH."
-  echo "Run scripts/install.sh from the Quorum repo, then retry."
-  exit 1
-}
+# Refuse instead. A missing prerequisite must never be renderable as an ordinary result.
+for _q_need in quorum-sanitize; do
+  command -v "$_q_need" >/dev/null 2>&1 || {
+    echo "status: error — $_q_need is not on PATH."
+    echo "Run scripts/install.sh from the Quorum repo, then retry."
+    exit 1
+  }
+done
 
 # The provider's raw bytes NEVER enter the envelope. Pipe every capture through this:
 TEXT=$(quorum-sanitize < "$OUT")          # file capture

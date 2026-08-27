@@ -152,6 +152,11 @@ inject_every_bash_fenced_block_is_valid_bash() {
 revert_every_bash_fenced_block_is_valid_bash() {
   cp "$REPO/docs/troubleshooting.md" "$SANDBOX/docs/troubleshooting.md"; }
 
+inject_quorum_s_own_commands_are_guarded_before_use() {
+  printf '\n```bash\nIMG=$(prep-image "photo.png")\n```\n' >> "$SANDBOX/agents/ollama-agent.md"; }
+revert_quorum_s_own_commands_are_guarded_before_use() {
+  cp "$REPO/agents/ollama-agent.md" "$SANDBOX/agents/ollama-agent.md"; }
+
 inject_shell_syntax()              { printf '#!/usr/bin/env bash\nif [ 1 = 1 ; then\n' > "$SANDBOX/scripts/zz-bad"; }
 revert_shell_syntax()              { rm -f "$SANDBOX/scripts/zz-bad"; }
 

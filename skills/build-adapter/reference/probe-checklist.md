@@ -130,6 +130,22 @@ that to the user as the finding.
 Skip if the provider has no vision. Otherwise:
 
 ```bash
+# These are Quorum's OWN commands, and they exist only if scripts/install.sh has run.
+# `/plugin marketplace add` installs the plugin WITHOUT running it, so on that path they are
+# absent — and absence here does not fail loudly. Measured against the live API with
+# quorum-sanitize missing: CODE=200, stop_reason=end_turn, TEXT="" — a real answer reported
+# as `empty`, "the model had nothing to say". A missing quorum-claude-on in a delegate block
+# is worse: the provider never runs and the diff is clean, which reads as "no changes needed".
+#
+# Refuse instead. A missing prerequisite must never be renderable as an ordinary result.
+for _q_need in make-probe-image; do
+  command -v "$_q_need" >/dev/null 2>&1 || {
+    echo "status: error — $_q_need is not on PATH."
+    echo "Run scripts/install.sh from the Quorum repo, then retry."
+    exit 1
+  }
+done
+
 IMG=$(make-probe-image)   # bare name — see below
 ```
 
