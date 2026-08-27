@@ -175,8 +175,11 @@ inject_no_absolute_home_paths_or_personal_identifiers() {
 revert_no_absolute_home_paths_or_personal_identifiers() {
   cp "$REPO/docs/troubleshooting.md" "$SANDBOX/docs/troubleshooting.md"; }
 
+# Targets the PIPELINE, not the prose. The prose half was already enforced; the runnable
+# half was the one that was missing from every adapter while the gate reported all-clear.
 inject_every_adapter_neutralises_the_untrusted_output_delimiter() {
-  perl -0pi -e 's/Strip control characters/REMOVED BY TEST/' "$SANDBOX/agents/ollama-agent.md"; }
+  perl -0pi -e 's/\| quorum-sanitize//g; s/quorum-sanitize < "\$OUT"/cat "\$OUT"/g' \
+    "$SANDBOX/agents/ollama-agent.md"; }
 revert_every_adapter_neutralises_the_untrusted_output_delimiter() {
   cp "$REPO/agents/ollama-agent.md" "$SANDBOX/agents/ollama-agent.md"; }
 

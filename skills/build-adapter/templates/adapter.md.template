@@ -135,7 +135,7 @@ the current one. Neither is caught by a text substitution.
 
 ```bash
 # after substituting the markers, before the text enters the envelope
-LC_ALL=C tr -d '\000-\010\013-\037\177'   # keeps \t and \n, removes ESC, CR and the rest
+TEXT=$(quorum-sanitize < "$OUT")   # never put the raw capture in the envelope
 ```
 
 `LC_ALL=C` is required, not stylistic: under a UTF-8 locale `tr` aborts on the first byte

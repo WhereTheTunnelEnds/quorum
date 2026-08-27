@@ -145,10 +145,32 @@ closing marker plus a forged `status: ok` line on request.
 **So adapters MUST neutralise the marker before relaying:**
 
 ```bash
+TEXT=$(quorum-sanitize < "$OUT")
+```
+
+`quorum-sanitize` (on PATH after `scripts/install.sh`) replaced the hand-written pair below,
+which was the whole rule until two audits took it apart:
+
+```bash
+# SUPERSEDED — do not copy. Kept so the failure is legible.
 sed -e 's/--- END UNTRUSTED PROVIDER OUTPUT ---/[marker neutralised]/g' \
     -e 's/--- BEGIN UNTRUSTED PROVIDER OUTPUT/[marker neutralised]/g' "$OUT" \
 | LC_ALL=C tr -d '\000-\010\013-\037\177'
 ```
+
+Three measured problems, none visible by reading it:
+
+1. **It was in no adapter.** `grep -c 'sed -e' agents/*.md` returned 0 for all five. The
+   `sed` existed only here; the adapters carried the `tr` as a fragment with no input, no
+   output and no assignment, 95 to 313 lines below the line that captured the text.
+2. **The `tr` missed C1 controls.** `U+009B` is a single-character CSI, so the entire ANSI
+   repertoire is reachable without one byte the filter removed. Measured: a payload whose
+   adapter emitted `status: error` rendered as `status: ok` in GNU screen 4.00.03, the build
+   macOS ships. (tmux 3.6a renders it inert — this document previously reported that as
+   though it settled the question. It did not; one honouring emulator is enough.) Extending
+   the byte range naively corrupts legitimate text, so the fix has to decode UTF-8 first.
+3. **The `sed` matched one exact byte sequence.** A Cyrillic `Е`, a fullwidth `Ｅ`, a
+   zero-width space, or a marker split across two lines all passed through untouched.
 
 **The `tr` is not optional, and the `sed` alone was the whole rule until an audit pointed at
 the gap.** A text substitution catches text. The delimiter exists so a reader can see where

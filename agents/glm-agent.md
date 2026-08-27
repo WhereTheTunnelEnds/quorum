@@ -55,7 +55,8 @@ jq -n --rawfile p "$PROMPT_FILE" \
     -H "anthropic-version: 2023-06-01" \
     -H "content-type: application/json" \
     -d @- \
-| jq -r 'if .content then ([.content[] | select(.type=="text") | .text] | join("")) else (.error.message // tostring) end'
+| jq -r 'if .content then ([.content[] | select(.type=="text") | .text] | join("")) else (.error.message // tostring) end' \
+  | quorum-sanitize
 
 rm -f "$PROMPT_FILE" "$_hdr"
 ```
@@ -367,9 +368,23 @@ cursor up and overwrites the line above — which is your `status:` line — and
 the current one. Neither is caught by a text substitution.
 
 ```bash
-# after substituting the markers, before the text enters the envelope
-LC_ALL=C tr -d '\000-\010\013-\037\177'   # keeps \t and \n, removes ESC, CR and the rest
+# The provider's raw bytes NEVER enter the envelope. Pipe every capture through this:
+TEXT=$(quorum-sanitize < "$OUT")          # file capture
+TEXT=$(... | quorum-sanitize)             # pipeline capture
 ```
+
+`quorum-sanitize` is installed on PATH by `scripts/install.sh`. It does both halves in one
+pass: neutralises the fence markers — tolerant of case, spacing, dash count, Cyrillic and
+fullwidth homoglyphs, zero-width characters and markers split across lines — then strips C0
+**and C1** control characters while keeping tab, newline and all legitimate non-ASCII.
+`quorum-sanitize --help` explains each step, and the reasoning is in the script's header.
+
+It replaced an inline `sed` + `LC_ALL=C tr` pair that had a measured problem: an audit ran
+`grep -c 'sed -e' agents/*.md` and got **0 for every adapter**. The substitution half — the
+half the contract marks MUST — existed only as prose, and the `tr` half was quoted with no
+input, no output and no assignment, 95 to 313 lines below the line that captured the text.
+A rule that is not in the pipeline is not a rule, and adapters are meant to run on
+haiku-class models, which are the least able to rebuild a correct `sed` from a sentence.
 
 `LC_ALL=C` is required, not stylistic: under a UTF-8 locale `tr` aborts on the first byte
 that is not valid UTF-8 and silently drops everything after it. Measured on `41 9b 42` —

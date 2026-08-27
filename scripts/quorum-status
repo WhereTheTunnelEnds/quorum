@@ -133,13 +133,25 @@ else
 # `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to any process running as
 # you. curl reads @file and it never reaches argv.
   _hdr=$(mktemp); chmod 600 "$_hdr"
+  # Remove it on EVERY exit path, including a signal. Without this, each run left a
+  # plaintext key file in the shared temp dir forever: two independent audits counted 110
+  # and 241 of them on the author's machine, one per invocation, 130 of 130 runs. The file
+  # exists to keep the key out of argv -- which it does -- but it then outlived key
+  # rotation, landed in backups, and on Linux sits in /tmp until systemd-tmpfiles ages it
+  # out ~10 days later. The adapters and probes already did this; the two shipped scripts
+  # did not.
+  trap 'rm -f "$_hdr"' EXIT INT TERM HUP
   printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$_hdr"
-  body=$(curl -s -m 20 https://api.z.ai/api/anthropic/v1/messages \
+  body=$(curl -sS -m 20 https://api.z.ai/api/anthropic/v1/messages \
     -H @"$_hdr" \
     -H "anthropic-version: 2023-06-01" \
     -H "content-type: application/json" \
     -d '{"model":"glm-5.3","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}' 2>/dev/null)
-  # Failures arrive inside HTTP 200, so classify on the body, not the exit code.
+  rm -f "$_hdr"
+  # Classify on the BODY, not the exit code. (The comment here used to say failures arrive
+  # inside HTTP 200; docs/field-notes.md measures 400/401. The classifier was always right,
+  # the explanation was not -- and it is the same wrong sentence this repo removed from five
+  # other files.)
   if printf '%s' "$body" | grep -q '"content"'; then
     ok glm "key accepted"
   elif [ -z "$body" ]; then

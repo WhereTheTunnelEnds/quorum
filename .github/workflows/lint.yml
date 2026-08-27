@@ -191,10 +191,20 @@ jobs:
               || { echo "ERROR: $f missing the delimiter-neutralisation rule"; fail=1; }
             grep -q 'Strip control characters' "$f" \
               || { echo "ERROR: $f missing the control-character rule"; fail=1; }
-            grep -q "LC_ALL=C tr -d" "$f" \
-              || { echo "ERROR: $f names no LC_ALL=C strip command"; fail=1; }
+            # Require the command to appear in an actual PIPELINE, not merely to be named.
+            # The previous gate accepted the literal "LC_ALL=C tr -d" anywhere in the file,
+            # and every adapter satisfied it with a fragment that had no input, no output
+            # and no assignment, sitting ~100-300 lines below the capture. Meanwhile the
+            # substitution half was checked only as PROSE, and an audit measured the result:
+            # grep -c 'sed -e' agents/*.md returned 0 for all five. Half a MUST rule was in
+            # no runnable path anywhere in the repo while this gate printed all-clear.
+            grep -qE '\| *quorum-sanitize|quorum-sanitize *<' "$f" \
+              || { echo "ERROR: $f never pipes anything through quorum-sanitize"; fail=1; }
           done
-          [ "$fail" = 0 ] && echo "all adapters neutralise markers AND control characters"
+          # "carry the rule", not "neutralise" -- what this gate verifies is that five
+          # markdown files contain three strings and one pipeline. The neutralising is
+          # done by quorum-sanitize at runtime, and is tested by tests/test-sanitize.sh.
+          [ "$fail" = 0 ] && echo "all adapters carry the rule AND pipe through quorum-sanitize"
           exit $fail
 
       - name: No API key passed on a command line

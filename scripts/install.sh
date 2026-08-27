@@ -10,6 +10,22 @@
 # shells, where functions and aliases do not exist. A helper defined in ~/.zshrc is
 # invisible to every subagent that needs it. See docs/field-notes.md.
 
+# Must run UNDER bash, not merely be invoked as ./install.sh. On Alpine, `sh ./scripts/install.sh`
+# linked eight commands and exited 0 -- every one unrunnable, because each script begins
+# #!/usr/bin/env bash and the box has no bash. Reporting success for a wholly non-functional
+# install is precisely the failure this repo exists to catch. (busybox ash accepts
+# `set -o pipefail`, so nothing below would have stopped it.)
+if [ -z "${BASH_VERSION:-}" ]; then
+  if command -v bash >/dev/null 2>&1; then
+    echo "install.sh must run under bash:  bash ./scripts/install.sh" >&2
+  else
+    echo "install.sh needs bash, and this system has none." >&2
+    echo "Every Quorum script starts with #!/usr/bin/env bash, so installing them here would" >&2
+    echo "put unrunnable commands on your PATH. Install bash first." >&2
+  fi
+  exit 1
+fi
+
 set -euo pipefail
 
 # Resolve through symlinks so the shared lib is findable when installed the documented
@@ -26,7 +42,7 @@ done
 
 SRC=$(cd "$(dirname "$0")" && pwd)
 DEST="${1:-$HOME/.local/bin}"
-TOOLS="quorum-setup quorum-status quorum-auth quorum-flags quorum-claude-on quorum-verify prep-image make-probe-image"
+TOOLS="quorum-setup quorum-status quorum-auth quorum-flags quorum-claude-on quorum-verify quorum-sanitize prep-image make-probe-image"
 
 mkdir -p "$DEST"
 
@@ -39,8 +55,24 @@ case "$existing" in
        "$(dirname "$existing")" "$SRC" ;;
 esac
 
+# `ln -sf` over a REGULAR file deletes it without a word. Eight of these names are generic
+# -- prep-image, make-probe-image -- and the documented `./scripts/install.sh /usr/local/bin`
+# form aims them at a shared directory. Measured: a user's own ~/.local/bin/quorum-status was
+# replaced, its contents unrecoverable, with no warning of any kind in the output. The NOTE
+# above did not fire because `readlink` fails on a regular file, so `existing` was empty and
+# matched the "" case.
+#
+# Refuse instead. Destroying a file someone wrote is not a reasonable default, and there is
+# no way to undo it afterwards.
+clobber=0
 for t in $TOOLS; do
   if [ ! -f "$SRC/$t" ]; then echo "  MISSING  $t (skipped)"; continue; fi
+  if [ -e "$DEST/$t" ] && [ ! -L "$DEST/$t" ]; then
+    printf '  REFUSED  %s already exists and is not a symlink\n' "$DEST/$t"
+    printf '           it is not ours to overwrite. Move or delete it, then re-run.\n'
+    clobber=1
+    continue
+  fi
   chmod +x "$SRC/$t"
   ln -sf "$SRC/$t" "$DEST/$t"
   echo "  linked   $DEST/$t"
@@ -75,3 +107,11 @@ until you have added $DEST to PATH and opened a new terminal.
 EOM
   ;;
 esac
+
+# A refused link means the install is INCOMPLETE. Exiting 0 here would be the same defect
+# as every other one this repo has fixed: a partial result reported as success.
+if [ "$clobber" != 0 ]; then
+  echo
+  echo "install.sh: one or more commands were NOT installed (see REFUSED above)." >&2
+  exit 1
+fi
