@@ -1,5 +1,5 @@
 ---
-description: "Hand a whole task to Codex, Copilot, or GLM in an isolated worktree, then review the diff."
+description: "Hand a whole task to Codex, Copilot, or GLM in a throwaway worktree, then review the diff."
 argument-hint: "<the task> [to codex|copilot|glm]"
 ---
 

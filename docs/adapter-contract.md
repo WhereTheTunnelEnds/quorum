@@ -228,9 +228,17 @@ the kernel. So state the tier your provider can *enforce*, not the one your flag
 > **An adapter may only claim a tier it can enforce.**
 
 Enforcement means the *harness or the OS* refuses the action — an allowlist, a plan mode, a
-seccomp/sandbox boundary. It does not mean asking the model not to. If a provider has no
-harness-level read-only mode, its consult tier runs in a disposable worktree instead.
-**Degrade the mechanism, never the guarantee.**
+seccomp/sandbox boundary. It does not mean asking the model not to.
+
+If a provider has no harness-level read-only mode, **it does not get a consult tier.** Say
+so in the adapter, and let the caller decide whether to use it at all.
+
+This paragraph used to end "its consult tier runs in a disposable worktree instead — degrade
+the mechanism, never the guarantee", which contradicted §5 of this same document one hundred
+lines above: *the worktree a delegate runs in is not a boundary for anyone.* Both sentences
+shipped, and the `add-provider` flow was driven by the wrong one, so a provider whose
+read-only was merely advisory could be assigned a consult tier while the author was told the
+guarantee survived. It does not. The guarantee is exactly what degrades.
 
 ## 6. Document the failure shape, not just the happy path
 

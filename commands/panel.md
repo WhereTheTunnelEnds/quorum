@@ -8,7 +8,8 @@ Invoke the `model-panel` skill and follow it exactly.
 The question: $ARGUMENTS
 
 If no question was given, ask for one before dispatching anything — a panel on a vague
-question produces four vague answers and costs quota on three subscriptions to do it.
+question produces a vague answer from every panelist and spends quota on each subscription
+to do it.
 
 Reminders that are easy to skip under time pressure:
 

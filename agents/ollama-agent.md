@@ -139,6 +139,8 @@ Capture body and HTTP status separately, then classify:
 | `RC` ≠ 0 (7 = server not running) | `error` |
 | `CODE` ≠ 200 (404 = model not pulled) | `error` |
 | `USED` ≥ `NEED` | `error` — **truncated**; the answer is about a fragment |
+| `TEXT` empty or whitespace only | `empty` — a failure, despite HTTP 200 |
+| otherwise | `ok` |
 
 **Why the timeout row names 28 and not just 124.** The invocation is
 `timeout 900 curl -sS -m 890`, so curl's own deadline fires **ten seconds before** the
@@ -147,8 +149,11 @@ outer one, every time. Measured against a listener that accepts and never respon
 its signal, so a table checking only 124 has a `timeout` status that cannot occur — the
 run lands in `RC ≠ 0` and reports `error`, losing the distinction between *slow* and
 *broken* that the status exists to draw.
-| `TEXT` empty or whitespace only | `empty` — a failure, despite HTTP 200 |
-| otherwise | `ok` |
+
+(This paragraph used to sit *inside* the table, between the `USED` row and the `TEXT` row.
+Markdown ends a table at the first blank line, so the last two rows fell outside it and
+rendered as literal text — leaving a table that listed only failure conditions and had no
+`ok` row at all. Verified with python-markdown: 4 rows in the `<table>`, 2 orphaned.)
 
 Note the native endpoint's error field is a **flat string** (`.error`), not the nested
 `.error.message` that `/v1/chat/completions` returns. Read it defensively:

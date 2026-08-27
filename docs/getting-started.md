@@ -60,7 +60,9 @@ Missing anything:
 brew install jq git node coreutils
 
 # Debian / Ubuntu
-sudo apt install -y jq git curl coreutils
+<your package manager> install jq git curl coreutils   # quorum-setup prints the exact
+                                                       # command for THIS machine, with or
+                                                       # without sudo as appropriate
 # node: use nodejs.org or nvm
 ```
 

@@ -1,6 +1,12 @@
 # GLM — Z.AI Coding Plan.
 #
 # There is no `glm` binary; the consult path is a direct HTTPS call. Never test for one.
+#
+# What DOES decide whether this provider is set up here is the key. Without this, an unset
+# Z_AI_API_KEY surfaced as "no discriminator — broken and good calls are indistinguishable",
+# which blames the adapter for a missing credential.
+PROBE_PRECONDITION='[ -n "${Z_AI_API_KEY:-}" ]'
+PROBE_PRECONDITION_DESC='Z_AI_API_KEY is not set — run: quorum-auth glm --set-key'
 
 _glm_call() {  # $1 = model id, $2 = prompt file
   # The key goes in a header FILE, never on the command line. Measured: with

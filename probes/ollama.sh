@@ -10,6 +10,12 @@
 
 OLLAMA_BASE="${OLLAMA_BASE:-http://localhost:11434}"
 
+# Ollama ships no binary we invoke (we speak HTTP), so "not installed" could never be
+# reported. Reachability of the server is the real question. Without this, a machine with no
+# Ollama running showed a red FAIL, and — with the server down — three green PASSes beside it.
+PROBE_PRECONDITION='curl -sf -m 3 "$OLLAMA_BASE/api/tags" >/dev/null 2>&1'
+PROBE_PRECONDITION_DESC='no Ollama server responding at '"$OLLAMA_BASE"' — start it with: ollama serve'
+
 # Resolved lazily: sourcing this file must not depend on the server being up.
 _ollama_model() {
   if [ -n "${QUORUM_OLLAMA_MODEL:-}" ]; then printf '%s' "$QUORUM_OLLAMA_MODEL"; return 0; fi

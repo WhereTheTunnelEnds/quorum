@@ -46,19 +46,40 @@ PROMPT_EOF
 # with `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to every process running
 # as you, for the whole life of the call. curl reads `@file` and it never reaches argv.
 _hdr=$(mktemp); chmod 600 "$_hdr"
+REQ=$(mktemp); BODY=$(mktemp)
+trap 'rm -f "$PROMPT_FILE" "$REQ" "$BODY" "$_hdr"' EXIT INT TERM HUP
 printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$_hdr"
 
 jq -n --rawfile p "$PROMPT_FILE" \
-  '{model:"glm-5.3", max_tokens:64000, messages:[{role:"user", content:$p}]}' \
-| curl -s -m 900 https://api.z.ai/api/anthropic/v1/messages \
+  '{model:"glm-5.3", max_tokens:64000, messages:[{role:"user", content:$p}]}' > "$REQ"
+
+# -o + -w '%{http_code}', NOT a bare pipe. The status code and .stop_reason are the two
+# things the classification table below is written in terms of, and the previous version of
+# this block captured neither: it was a three-stage pipe straight into jq. Measured against
+# a mock endpoint, every one of these came back as exit 0 with the text on stdout, where
+# nothing downstream could tell them apart from an answer:
+#
+#   success          -> "REAL ANSWER"
+#   truncated        -> "partial review, cut off mid-sen"     <- table says `error`
+#   HTTP 401         -> "token expired or incorrect"          <- an auth failure, as prose
+#   HTTP 400         -> "modelCode: does not exist"           <- a config error, as prose
+#   connection refused -> ""                                  <- indistinguishable from
+#   thinking-only    -> ""                                       an empty answer
+#
+# skills/model-panel/SKILL.md already had it right; this file was the stale copy, and this
+# file is what runs when glm-agent is dispatched.
+CODE=$(curl -sS -m 900 -o "$BODY" -w '%{http_code}' https://api.z.ai/api/anthropic/v1/messages \
     -H @"$_hdr" \
     -H "anthropic-version: 2023-06-01" \
     -H "content-type: application/json" \
-    -d @- \
-| jq -r 'if .content then ([.content[] | select(.type=="text") | .text] | join("")) else (.error.message // tostring) end' \
-  | quorum-sanitize
+    -d @"$REQ")
 
-rm -f "$PROMPT_FILE" "$_hdr"
+TEXT=$(jq -r 'if .content then ([.content[] | select(.type=="text") | .text] | join("")) else "" end' "$BODY" \
+       | quorum-sanitize)
+STOP=$(jq -r '.stop_reason // ""' "$BODY")
+ERRMSG=$(jq -r '.error.message // ""' "$BODY")
+
+rm -f "$PROMPT_FILE" "$REQ" "$BODY" "$_hdr"
 ```
 
 **Do not use `.content[0].text`.** GLM is a reasoning model: `content[0]` is usually a
@@ -119,8 +140,10 @@ round of measurement on a different input size disproved it:
 
 Three things fall out, and none of them is the timeout:
 
-1. **98304 finished in 525 s.** It is not deadline-bound. The largest run at the largest
-   input — 152 KB at 64000 — took 579 s, still 321 s inside the deadline.
+1. **98304 finished in 525 s.** It is not deadline-bound. The slowest run in the table —
+   152 KB at 64000 — took 579 s, still 321 s inside the deadline. (Slowest, not largest: the
+   249 KB row two lines up is the largest input and it finished *faster*, in 570 s. This
+   sentence used to say "the largest run at the largest input", which its own table refutes.)
 2. **More budget bought a worse answer.** At 98304 the model spent 5,828 *more* tokens than
    at 64000 and returned *fewer* characters of text (36,567 vs 39,446). The extra allowance
    went to thinking. Demand expands to fill the budget, so raising the cap has diminishing
@@ -373,7 +396,7 @@ CODE=$(… curl -s -m 900 -o "$BODY" -w '%{http_code}' …)
 Report exactly this envelope:
 
 ```
-status: ok | error | empty
+status: ok | error | empty | timeout
 provider: glm
 http_code: <CODE>
 

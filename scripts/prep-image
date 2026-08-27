@@ -36,7 +36,36 @@ QUALITY=80
 
 mkdir -p "$OUTDIR"
 base=$(basename "$IN"); base="${base%.*}"
-OUT="${OUTDIR%/}/${base}-prepped.jpg"
+# The basename ALONE collided. Two different photos with the same name -- the ordinary
+# camera-roll case, IMG_1234.png from two cameras -- both resolved to one output path.
+# Measured: 15 of 15 rounds collapsed two distinct sources into a single file, and
+# prep-image printed that path as though it were each of them, so a before/after visual
+# panel judged the wrong photo. The downscale loop also rewrites OUT up to five times, so a
+# concurrent reader could catch an intermediate resolution.
+#
+# A short digest of the SOURCE PATH plus its size and mtime distinguishes them while
+# staying stable for the same input, so re-running does not pile up new files.
+#
+# The digest must not become a NEW hard dependency. The first version of this ran
+# `shasum || cksum` unconditionally, and on a system with neither the script died at 127
+# before it ever reached the converter check below -- turning a clear "you need ImageMagick"
+# into an obscure command-not-found. tests/test-prep-image-no-converter.sh caught it.
+# So: try the usual hashers, and fall back to something every POSIX shell can do.
+_stamp=""
+_seed="$IN|$(wc -c < "$IN" 2>/dev/null)|$(ls -ld "$IN" 2>/dev/null)"
+for _h in shasum md5sum md5 cksum sum; do
+  if command -v "$_h" >/dev/null 2>&1; then
+    _stamp=$(printf '%s' "$_seed" | "$_h" 2>/dev/null | tr -cd 'a-f0-9' | cut -c1-8)
+    [ -n "$_stamp" ] && break
+  fi
+done
+if [ -z "$_stamp" ]; then
+  # No hasher anywhere. The parent directory is what actually differs in the collision this
+  # guards against (two cameras, same filename), so use it -- sanitised and truncated.
+  _stamp=$(printf '%s' "$(basename "$(dirname "$IN")")" | tr -c 'a-zA-Z0-9' '-' | cut -c1-8)
+  [ -n "$_stamp" ] || _stamp="x"
+fi
+OUT="${OUTDIR%/}/${base}-${_stamp}-prepped.jpg"
 
 if command -v sips >/dev/null 2>&1; then
   ENGINE=sips

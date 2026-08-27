@@ -38,14 +38,14 @@ cited as if it could.
 | `quorum-verify` exits non-zero when it verified **nothing** | adapter-contract | `quorum-verify nosuchprovider; echo $?` |
 | The probe image really is red-circle / green-square / yellow-cross / blue-triangle | probe-checklist | `make-probe-image` then open it |
 | `prep-image` fails cleanly with no converter present | porting docs | `tests/test-prep-image-no-converter.sh` |
-| Ollama's `/v1` endpoint **discards** `options.num_ctx` while `/api/chat` honours it | field-notes | see the two-curl comparison in that entry |
+| Ollama's `/v1` endpoint **discards** `options.num_ctx` while `/api/chat` honours it | field-notes | the entry states the measurement (prompt_tokens 32768 via /v1 vs prompt_eval_count 48071 via /api/chat) but does not carry runnable commands — treat it as Observed until it does |
 | Antigravity's headless mode auto-denies `write_file` | safety-model, field-notes | `d=$(mktemp -d); cd "$d" && agy --add-dir "$d" -p "create a file test.txt containing X"` |
 | Adapters declare no write tools | safety-model | CI, or `grep '^tools:' agents/*.md` |
 | GLM reports a **truncated** answer as `error`, not `ok` | glm-agent, troubleshooting | ask GLM to count 1–400 at `max_tokens:600`; expect `stop_reason: max_tokens` with text |
 | GLM's 64000 / `-m 900` pair completes a 249 KB input | glm-agent | feed ~250 KB of source and ask for an exhaustive review; expect `end_turn` under 900 s |
 | `quorum-status --json` stays valid JSON under hostile provider text | quorum-status | `tests/test-quorum-status-json.sh` |
 | A command and a skill cannot share a name | field-notes | CI, or `for c in commands/*.md; do [ -d "skills/$(basename "$c" .md)" ] && echo COLLISION; done` |
-| No API key is ever passed on a curl command line | field-notes | CI job "No API key passed on a command line" in `.github/workflows/lint.yml` -- run `act -j lint`, or read the gate and run it |
+| No API key is ever passed on a curl command line | field-notes | CI job "No API key passed on a command line" in `.github/workflows/lint.yml` -- run `act -j validate`, or read the gate and run it |
 | This repo's git history contains no credential-shaped string | release checklist | `tests/test-history-has-no-secrets.sh` — scans every blob on every ref, and proves it can fail by planting one in a throwaway clone |
 | Every CI gate fires on the violation it claims to catch | field-notes, CONTRIBUTING | `tests/test-lint-gates.sh` — every gate but two, three-phase (clean / injected / reverted); the two it cannot exercise are named in its own output |
 

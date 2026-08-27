@@ -40,13 +40,21 @@ accounts for most first-day failures.
 
 ### I'm on Linux and the docs keep saying `~/.zshenv`
 
-**Use `~/.profile` instead.** This repo was written on macOS, where zsh is the default shell,
-and the file names throughout reflect that. The *reason* generalises; the filename does not.
+**Run `quorum-setup` and use the file it names.** This repo was written on macOS, where zsh
+is the default shell, and the file names throughout reflect that. The *reason* generalises;
+the filename does not — and "use `~/.profile` instead", which this entry used to say, is
+itself wrong for a large share of Linux users.
+
+bash reads only the **first** of `~/.bash_profile`, `~/.bash_login`, `~/.profile` that
+exists, and then stops. nvm, rvm, conda, pyenv and Homebrew-on-Linux all create
+`~/.bash_profile`, so on a typical developer machine `~/.profile` is never read at all.
+`scripts/quorum-lib.sh` resolves this against your actual filesystem; the docs cannot.
 
 | Shell | File | Why that one |
 |---|---|---|
 | **zsh** (macOS default) | `~/.zshenv` | zsh reads it on **every** invocation, and skips `~/.zshrc` when non-interactive — which is what agents get. On macOS this matters doubly: GUI-launched apps never go through a login shell at all. |
-| **bash** (most Linux) | `~/.profile` | Non-interactive bash reads **neither** `.bashrc` nor `.profile` per-invocation — it reads only `$BASH_ENV`, which is unset by default. But `.profile` is read at login and *exported*, so child processes and agents inherit it. |
+| **bash** (most Linux) | the first of `~/.bash_profile`, `~/.bash_login`, `~/.profile` that **exists** | Non-interactive bash reads **neither** `.bashrc` nor `.profile` per-invocation — it reads only `$BASH_ENV`, which is unset by default. But a login file is read at login and *exported*, so child processes and agents inherit it. bash stops at the first of the three it finds, so which one is a fact about your machine, not a default. |
+| **fish** | `~/.config/fish/conf.d/quorum.fish` | fish does not read `~/.profile` at all. It sources everything in `conf.d/` for every shell. `fish_add_path` and `set -gx` are its idiom. |
 
 `~/.bashrc` is the common guess and it is the wrong one: non-interactive bash skips it, which
 is precisely the failure the next entry describes.

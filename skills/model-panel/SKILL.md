@@ -22,7 +22,7 @@ Use it when the cost of being wrong exceeds the cost of four opinions:
 - Reviewing a risky diff before it merges
 - Inputs too large for a single context window (route to the 1M-context provider)
 
-Do **not** use it for routine work. Four models on a one-line fix is waste, and the
+Do **not** use it for routine work. A full panel on a one-line fix is waste, and the
 synthesis step costs more than the answer is worth.
 
 ## Routing Policy
@@ -116,7 +116,7 @@ verify mode when a claim is runnable.
 From real use; update as evidence accumulates. Yours may differ — these are observations,
 not benchmarks.
 
-- **GLM** — the most epistemically careful of the three. Spontaneously tags its own
+- **GLM** — the most epistemically careful of the panel. Spontaneously tags its own
   inferences (*"this is inferred, not a datasheet number — verify"*), and so far every such
   flag was correct while every unflagged claim held up. Also the strongest at finding
   silent-corruption bugs in someone else's plan. Cheapest to run and usually fastest.

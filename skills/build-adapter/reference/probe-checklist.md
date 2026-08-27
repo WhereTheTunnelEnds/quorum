@@ -130,7 +130,7 @@ that to the user as the finding.
 Skip if the provider has no vision. Otherwise:
 
 ```bash
-IMG=$(scripts/make-probe-image)
+IMG=$(make-probe-image)   # bare name — see below
 ```
 
 That is a 512×512 image with four quadrants: **red circle** (top-left), **green square**
@@ -161,7 +161,8 @@ a single-object test and fails this one.
 **Also record how the prompt is passed alongside the image** — this is where variadic flags
 bite (see probe 2). And note the constraints: accepted formats and the size cap. Most
 endpoints reject HEIC and cap around 5MB, which is under a typical phone photo;
-`scripts/prep-image` normalizes for this.
+`prep-image` normalizes for this. Use the bare name: this runs in the user's project, not
+in the Quorum repo, so a relative `scripts/` path resolves to nothing.
 
 ---
 

@@ -42,7 +42,12 @@ Add `--json` when the caller wants parseable JSONL rather than prose.
 For code review specifically, Codex ships a dedicated subcommand:
 
 ```bash
-codex exec review --sandbox read-only
+codex exec review -c sandbox_mode="read-only"
+# NOT `--sandbox read-only`. `codex exec review` is a separate subcommand from `codex exec`
+# and defines no --sandbox flag: measured, `codex exec review --sandbox read-only` exits 2
+# with "error: unexpected argument '--sandbox' found". It does take -c config overrides, so
+# the policy is set that way. Parse-verified here; the review call itself costs quota and
+# was not run.
 ```
 
 ### Verify — can run commands, in a scratch worktree
@@ -76,7 +81,7 @@ quietly discarding it, because it usually means the answer is wrong.
 
 Remove the scratch worktree when done: `git worktree remove --force "$WT"`.
 
-### Delegate — implementation, worktree-isolated
+### Delegate — implementation, OS-sandbox isolated (the worktree is for review)
 
 **Never run write mode in the user's working tree.**
 
@@ -111,7 +116,7 @@ if ! git worktree add -b "$BRANCH" "$WT"; then
   exit 1
 fi
 
-cat <<'PROMPT_EOF' | codex exec -C "$WT" --sandbox workspace-write -
+cat <<'PROMPT_EOF' | codex exec -C "$WT" --sandbox workspace-write --skip-git-repo-check -
 <the task>
 PROMPT_EOF
 

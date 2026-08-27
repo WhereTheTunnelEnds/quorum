@@ -41,7 +41,7 @@ built by walking into each of those failures first.
 |---|---|
 | **5 verified adapters** | `glm-agent`, `codex-agent`, `copilot-agent`, `ollama-agent`, `antigravity-agent` — every flag field-tested, every failure mode documented |
 | **`model-panel`** | Fan a question to every available provider in parallel, then synthesize consensus, splits, and outliers |
-| **`delegate-task`** | Hand over whole units of work; each runs in an isolated worktree you review as a diff |
+| **`delegate-task`** | Hand over whole units of work; each runs in a throwaway worktree you review as a diff |
 | **`add-provider`** | Your Claude probes a new provider and writes a verified adapter for it — MLX, Ollama, another CLI, anything |
 | **`quorum-verify`** | Re-runs the contract against live providers, so "verified" is a measurement, not a claim |
 | **`quorum-setup`** | Guided first run: prerequisites, PATH, provider choice, auth, then proof |
@@ -67,8 +67,12 @@ Then put the helper scripts on `PATH` and run the guided setup:
 ```bash
 git clone https://github.com/kourosh-forti-hands/quorum.git
 cd quorum && ./scripts/install.sh
-quorum-setup          # prerequisites -> providers -> auth -> a real call to each
+./scripts/quorum-setup     # prerequisites -> providers -> auth -> a real call to each
 ```
+
+Use the `./scripts/` prefix on that third line. `install.sh` cannot change the PATH of the
+shell that invoked it, so the bare name does not resolve until you open a new terminal —
+measured on a clean Debian container: `quorum-setup: command not found`, exit 127.
 
 `quorum-setup` walks you through it and stops at each thing you need to do yourself. It
 never asks for a key or an auth code — installs and logins are printed for **you** to run,
@@ -115,10 +119,12 @@ through it inside Claude Code.
 `quorum-status` makes a **real call** wherever a real call is the only evidence: GLM gets an
 API request, Ollama gets a `/api/tags` fetch, Claude gets a credential check.
 
-It does use `command -v` for the three providers that genuinely ship a binary named after
-themselves — `codex`, `copilot`, `agy` — so a stub implementing only `--version` will be
-reported as OK. That is a presence check, not an auth check, and the table says `installed`
-rather than `logged in` for `agy` for exactly that reason. Use `quorum-auth` for
+It does use `command -v` for the providers that genuinely ship a binary named after
+themselves. For `copilot` and `agy` that is all it is — a stub implementing only
+`--version` is reported as OK, which is a presence check rather than an auth check, and the
+table says `installed` rather than `logged in` for `agy` for exactly that reason.
+`codex` is the exception: it gets a real `codex login status` call. Measured with a stub
+answering only `--version`: copilot and agy report OK, codex reports `not logged in`. Use `quorum-auth` for
 authentication and `quorum-verify` for "does it actually work".
 
 What it never does is infer *absence* from a missing binary. GLM ships no `glm` command at
@@ -185,8 +191,10 @@ Probe 4 is the one everybody skips and the only one that makes an adapter trustw
 wrapper can demonstrate a working call.
 
 Probe 3 decides the safety tier, and the rule is strict: **an adapter may only claim a tier
-it can enforce.** If a provider's read-only mode turns out to be advisory, its consult tier
-gets a disposable worktree instead. Degrade the mechanism, never the guarantee.
+it can enforce.** If a provider's read-only mode turns out to be advisory, say so and drop
+the tier. A worktree is not a substitute: it buys reviewability and disposability, not
+containment — code inside one reaches the real checkout with a single `git rev-parse`, and
+shares its `.git`. Downgrade the claim, not just the mechanism.
 
 This is deliberately not a template you fill in from documentation. Any model can write a
 plausible-looking adapter for any CLI; the result is a wrapper whose flags were guessed,

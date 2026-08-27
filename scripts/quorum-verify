@@ -68,10 +68,33 @@ verify_one() {
   # Probe files declare: probe_consult, probe_broken, EXPECT_BROKEN_DESC.
   unset -f probe_consult probe_broken 2>/dev/null || true
   EXPECT_BROKEN_DESC=""; BROKEN_MATCH=""; PROBE_BINARY=""
+  PROBE_PRECONDITION=""; PROBE_PRECONDITION_DESC=""
   # shellcheck disable=SC1090
   . "$file"
 
   printf '\n\033[1m%s\033[0m\n' "$provider"
+
+  # NOT CONFIGURED is not the same as BROKEN. The 127 guard below covers providers that ship
+  # a binary; the two that do not -- glm (an API key) and ollama (a running server) -- had no
+  # way to say "you have not set this up", so a correct install showed two red FAILs on the
+  # first command the README tells you to run:
+  #
+  #   glm     FAIL  no discriminator — broken and good calls are indistinguishable
+  #   ollama  FAIL  reachability — zero bytes returned (rc=1)
+  #
+  # The glm headline blamed the adapter design; the real cause was an unset Z_AI_API_KEY,
+  # which quorum-status diagnoses correctly two commands earlier. It also fired two requests
+  # at api.z.ai carrying an empty bearer token.
+  #
+  # Worse, with the server down, ollama still recorded three PASSes -- including
+  # "discriminator: exit code", certifying that good and broken calls are distinguishable on
+  # a machine where neither call ever happened.
+  if [ -n "${PROBE_PRECONDITION:-}" ] && ! eval "$PROBE_PRECONDITION" >/dev/null 2>&1; then
+    W "not configured — skipped (${PROBE_PRECONDITION_DESC:-precondition not met})"
+    I "this is not a failure; the provider is optional and simply is not set up here"
+    skipped=$((skipped+1)); warned=$((warned-1))
+    return 0
+  fi
 
   PROMPT=$(mktemp); OUT=$(mktemp); ERR=$(mktemp)
   printf 'Reply with exactly this token and nothing else: %s\n' "$CANARY" > "$PROMPT"

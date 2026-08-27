@@ -59,8 +59,21 @@ either, and route them to `codex-agent`, `copilot-agent`, or `glm-agent`.
 # safety reason — a guard that cries wolf gets disabled, which is worse than no guard.
 SETTINGS="$HOME/.gemini/antigravity-cli/settings.json"
 if [ -f "$SETTINGS" ]; then
+  # The `\\(` anchor required a literal open-paren, so the BROADEST rules -- the ones with
+  # no argument list at all -- sailed through. Measured, rule by rule:
+  #
+  #   write_file(**)       REFUSE      command(rm -rf /)     REFUSE
+  #   command              ALLOWED     <- bare verb, grants everything
+  #   unsandboxed_command  ALLOWED     <- the exact wildcard spelling
+  #   *                    ALLOWED     <- allow-all
+  #   mcp__server__tool(x) ALLOWED     <- the conventional MCP spelling; only "mcp(" matched
+  #
+  # A guard that catches the narrow cases and waves through allow-all is worse than none,
+  # because consult then reports read-only with more confidence than it has earned.
+  #
+  # Match on the VERB, with the argument list optional, and treat a bare `*` as allow-all.
   RISKY=$(jq -r '[(.permissions.allow // [])[]
-                 | select(test("^(write_file|command|unsandboxed|mcp)\\("))]
+                 | select(test("^\\s*(\\*|write_file|edit_file|create_file|replace|command|run_command|unsandboxed[_a-z]*|shell|exec|mcp)([_a-z]*)?\\s*(\\(|$)"))]
                  | join(", ")' "$SETTINGS" 2>/dev/null) || RISKY="__unparseable__"
   if [ "$RISKY" = "__unparseable__" ]; then
     echo "status: error — cannot parse $SETTINGS; refusing to claim read-only on an unknown policy"
@@ -117,7 +130,8 @@ finding to report, not an obstacle to route around.
 Vision works, but there is **no image flag** — the image is read as a workspace file.
 
 ```bash
-IMG=$(scripts/prep-image "<original>")
+IMG=$(prep-image "<original>")   # bare name: adapters run in the USER'S project, where
+                                 # a relative scripts/ path resolves to nothing
 D=$(mktemp -d); cp "$IMG" "$D/probe.png"
 agy --add-dir "$D" --disable-slash-commands -p 'Look at probe.png in the workspace and describe it.'
 ```

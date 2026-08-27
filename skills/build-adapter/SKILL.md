@@ -131,11 +131,16 @@ This is the step where an adapter becomes trustworthy or merely optimistic.
 - **Probe 3 passed** (the harness refused the write) → the provider gets a real
   **consult** tier using that flag.
 - **Probe 3 failed** (the file appeared) → the mode is prompt-enforced. It is *not*
-  read-only. The consult tier runs in a **detached scratch worktree** instead.
+  read-only, and **there is no consult tier for this provider.** Say so in the adapter.
 
-> **Degrade the mechanism, never the guarantee.** An adapter may only claim a tier it can
-> enforce. Writing "read-only" over a mode that merely asks nicely is the one failure this
-> repo cannot tolerate, because every downstream user trusts that word.
+  A scratch worktree does not rescue it. That was this repo's advice for a while, and it was
+  wrong: a worktree gives reviewability and disposability, never containment — code inside
+  one reaches the real checkout with a single `git rev-parse` and shares its `.git`.
+
+> **An adapter may only claim a tier it can enforce**, and when it cannot, the guarantee is
+> what has to go — not just the mechanism. Writing "read-only" over a mode that merely asks
+> nicely is the one failure this repo cannot tolerate, because every downstream user trusts
+> that word.
 
 Same reasoning for **verify** (named-command allowlist, or a scratch worktree) and
 **delegate** (throwaway worktree on its own branch, always). See [docs/safety-model.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/safety-model.md).
@@ -180,8 +185,9 @@ that a well-formed envelope comes back — `status`, diagnostics, delimiters.
 ## Step 5 — Report what you actually established
 
 State plainly which tiers are enforced and by what mechanism, which probes passed, and what
-you could **not** verify. A provider with no harness-level read-only mode is still usable
-via worktree isolation — but the user needs to know that is what they have.
+you could **not** verify. A provider with no harness-level read-only mode **does not get a
+consult tier** — a worktree gives reviewability, not containment, so it cannot stand in for
+one. Report that the provider has no enforced read-only boundary and let the user decide.
 
 Offer to contribute it back: `CONTRIBUTING.md` covers submitting an adapter, and a verified
 one for a provider nobody has covered yet is the most useful PR this repo can receive.

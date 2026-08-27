@@ -31,7 +31,9 @@ quorum-status — which providers are reachable right now.
 It makes a REAL call wherever a real call is the only evidence: GLM gets an API request,
 Ollama gets an /api/tags fetch, Claude gets a credential check.
 
-For codex, copilot and agy it checks that the command EXISTS. That is a presence check, not
+For copilot and agy it checks that the command EXISTS. That is a presence check, not
+# an auth check. codex is different — it gets a real `codex login status` call, so a stub
+# answering only --version reports "not logged in" rather than OK. Measured.
 an auth check — a stub answering only --version reports OK here while `quorum-auth` correctly
 says "not logged in". Use quorum-auth for authentication and quorum-verify for "does it
 actually work".
