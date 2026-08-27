@@ -90,22 +90,51 @@ flags_used() {
 # trade — over-eagerness catches flags in examples and comments, which is where drift
 # actually hides — but it means universal flags have to be excluded by name.
 
-providers() {
+# Does this provider have a CLI with a --help surface AT ALL? This is a property of the
+# provider, not of this machine, so it must not be decided by running anything.
+#
+# It used to be: "help_for succeeded". That conflates two completely different things --
+# "this provider is a curl endpoint with no CLI" and "this provider has a CLI and you have
+# not installed it". Measured on a box with no vendor CLIs:
+#
+#   not checked (curl-based, no --help surface to drift): antigravity codex copilot glm ollama
+#   0 present, 0 missing, 0 unknown — across 0 of 5 adapters
+#   EXIT=0
+#
+# Codex, Copilot and Antigravity are exactly the three that CAN drift, and they were
+# reported as having nothing to drift. `quorum-flags && echo current` printed "current" on
+# a machine that checked nothing.
+has_cli() {
+  case "$1" in
+    codex|copilot|claude|agy|antigravity) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+providers() {          # has a CLI, and it is installed here
   for f in "$ROOT"/probes/*.sh; do
     [ -e "$f" ] || continue
     p=$(basename "$f" .sh)
-    help_for "$p" >/dev/null 2>&1 && echo "$p"
+    has_cli "$p" && help_for "$p" >/dev/null 2>&1 && echo "$p"
+  done
+}
+
+not_installed() {      # has a CLI, absent on this machine -- UNVERIFIED, not "nothing to check"
+  for f in "$ROOT"/probes/*.sh; do
+    [ -e "$f" ] || continue
+    p=$(basename "$f" .sh)
+    has_cli "$p" && ! help_for "$p" >/dev/null 2>&1 && echo "$p"
   done
 }
 
 # Adapters with no CLI to interrogate — curl-based providers have no --help surface, so
 # there are no flag names to drift. Say so explicitly: "13 present, 0 missing" over three
 # of five adapters reads as full coverage when it is not.
-uncovered() {
+uncovered() {          # genuinely has no CLI surface: a curl endpoint
   for f in "$ROOT"/probes/*.sh; do
     [ -e "$f" ] || continue
     p=$(basename "$f" .sh)
-    help_for "$p" >/dev/null 2>&1 || echo "$p"
+    has_cli "$p" || echo "$p"
   done
 }
 
@@ -155,8 +184,21 @@ case "${1:-check}" in
     if [ -n "${unc// }" ]; then
       printf 'not checked (curl-based, no --help surface to drift): %s\n' "$unc"
     fi
+    ni=$(not_installed | tr '\n' ' ')
+    if [ -n "${ni// }" ]; then
+      printf 'NOT CHECKED (CLI not installed here — these can drift and were not verified): %s\n' "$ni"
+    fi
     printf '%d present, %d missing, %d unknown — across %s of %s adapters\n' \
       "$pass" "$fail" "$warn" "$(providers | wc -l | tr -d ' ')" "$(ls "$ROOT"/probes/*.sh | wc -l | tr -d ' ')"
+    # "I checked nothing" must never exit 0. quorum-verify:215 already refuses this; there
+    # was no reason for quorum-flags to be the exception, and being the exception is how
+    # `quorum-flags && echo current` printed "current" having verified nothing at all.
+    if [ $((pass + fail + warn)) -eq 0 ]; then
+      echo
+      echo "quorum-flags: no flags were checked — no provider CLI is installed on this machine." >&2
+      echo "              This is not a pass. Install a provider CLI, or run this where one exists." >&2
+      exit 1
+    fi
     [ "$fail" -eq 0 ] || {
       echo
       echo "A missing flag does not fail loudly at runtime — it hangs, or returns nothing."

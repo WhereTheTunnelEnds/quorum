@@ -91,6 +91,13 @@ fi
 b "2. Helper scripts on PATH"
 if command -v quorum-verify >/dev/null 2>&1; then
   ok "quorum-* commands resolve"
+elif [ -x "$HOME/.local/bin/quorum-verify" ]; then
+  # `command -v` asks THIS shell, and install.sh cannot change the PATH of the shell that
+  # invoked it -- so a correctly installed machine showed a red X, was told to re-run the
+  # installer, and showed the same X again. Measured: two consecutive --check runs both
+  # exit 1 while a fresh login shell exits 0, with two contradictory status lines in one
+  # screen of output. Whether a NEW shell can find it is the visibility probe's job below.
+  ok "quorum-* installed in ~/.local/bin (not on THIS shell's PATH — open a new terminal)"
 else
   no "quorum-* not on PATH"
   notready=$((notready+1))
@@ -129,7 +136,12 @@ fi
 _visible=1
 _shname=$(basename "${SHELL:-sh}")
 case "$_shname" in
-  zsh)  env -i HOME="$HOME" zsh -c  'command -v quorum-verify' >/dev/null 2>&1 || _visible=0 ;;
+  # ZDOTDIR must be carried through. quorum-lib.sh writes to ${ZDOTDIR:-$HOME}/.zshenv, but
+  # `env -i HOME=...` dropped ZDOTDIR, so the probe read a DIFFERENT file than the one
+  # written. Measured on a ZDOTDIR user: a genuinely working machine reported "NOT visible"
+  # on every run, and since the append is offered each time, the export line accumulated
+  # without bound -- 1, 2, then 3 copies over three runs.
+  zsh)  env -i HOME="$HOME" ${ZDOTDIR:+ZDOTDIR="$ZDOTDIR"} zsh -c 'command -v quorum-verify' >/dev/null 2>&1 || _visible=0 ;;
   bash) env -i HOME="$HOME" bash -lc 'command -v quorum-verify' >/dev/null 2>&1 || _visible=0 ;;
   *)
     # Unknown shell: try a login shell, and fall back to inspecting the env file rather
@@ -147,8 +159,24 @@ else
   notready=$((notready+1))
   run "echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> $ENVFILE"
   if ask "append that line to $ENVFILE now?"; then
-    printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$ENVFILE"
-    ok "appended — open a new terminal for it to take effect"
+    # Check the write. Measured on a read-only ~/.bash_profile: the redirect printed
+    # "Permission denied", `ok` ran anyway, the file was still 0 bytes, and the tool
+    # reported "appended". A read-only login file is not exotic -- root-owned, immutable,
+    # full disk, or a parent directory that does not exist all land here.
+    #
+    # mkdir -p first: on fish the target is ~/.config/fish/conf.d/quorum.fish, and that
+    # directory does not exist on a machine where fish has never written a config.
+    # quorum-auth already did this; quorum-setup did not.
+    # Braces around the redirect: `printf ... >> f 2>/dev/null` silences printf, but the
+    # shell reports a FAILED REDIRECTION itself, before printf ever runs. Grouping puts the
+    # redirect inside the silenced region, so the only message is the honest one below.
+    if mkdir -p "$(dirname "$ENVFILE")" 2>/dev/null &&
+       { printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$ENVFILE"; } 2>/dev/null; then
+      ok "appended — open a new terminal for it to take effect"
+    else
+      no "could not write to $ENVFILE"
+      note "add the line above by hand, or fix the permissions and re-run"
+    fi
   fi
 fi
 

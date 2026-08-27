@@ -213,8 +213,13 @@ inference from what you pasted. When the answer needs checking, give it hands in
 throwaway worktree:
 
 ```bash
-WT="../.worktrees/glm-verify-$$"
-git worktree add --detach "$WT" 2>&1
+# Namespaced by repo, so two projects side by side cannot land in each other's worktree.
+REPO=$(git rev-parse --show-toplevel)
+WT="$(dirname "$REPO")/.worktrees/$(basename "$REPO")/glm-verify-$$"
+if ! git worktree add --detach "$WT"; then
+  echo "worktree add failed -- stop here and report it."
+  exit 1
+fi
 
 ( cd "$WT" && timeout 900 quorum-claude-on zai -p "<question>. Verify by running <exact command>; report the real output." \
     --allowedTools "Read,Glob,Grep,Bash" \
@@ -272,9 +277,35 @@ implementation work done without spending Claude subscription quota.
 **Never run this in the user's working tree.**
 
 ```bash
-BRANCH="glm/$(echo "$TASK_SLUG" | tr -c 'a-z0-9-' '-')"
-WT="../.worktrees/$BRANCH"
-git worktree add -b "$BRANCH" "$WT" 2>&1
+# A unique name per delegation. `$TASK_SLUG` was referenced here and defined NOWHERE in the
+# repo -- measured, it is the only occurrence of the name -- so it expanded to empty and
+# every delegation resolved to the same branch and the same path. Two concurrent
+# delegations: the second got "cannot lock ref: reference already exists", the exit status
+# was never checked, and both agents then worked in ONE tree on ONE branch. `diff --stat`
+# reported their combined work as a single result. skills/delegate-task/SKILL.md promised
+# the opposite: "Separate worktrees mean they cannot collide."
+#
+# Set TASK_SLUG yourself, or accept the default -- either way the name is made unique.
+SLUG=$(printf '%s' "${TASK_SLUG:-task}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' \
+       | sed -e 's/--*/-/g' -e 's/^-//' -e 's/-$//')
+# $$ is the PARENT's pid inside a subshell, and `date +%s` has one-second resolution --
+# measured: two delegations dispatched together still produced the identical name. mktemp -u
+# asks the OS for a name nothing else holds, which is the only one of the three that is
+# actually unique per call.
+UNIQ=$(basename "$(mktemp -u)" | tr -cd 'A-Za-z0-9' | tr 'A-Z' 'a-z')
+BRANCH="glm/${SLUG:-task}-$(date +%Y%m%d-%H%M%S)-$UNIQ"
+
+# Namespaced by repository. `../.worktrees/` is a SIBLING of the checkout, so every project
+# in the same parent directory shared one -- measured: a delegate in repoB landed inside
+# repoA's worktree, on repoA's branch, and wrote there.
+REPO=$(git rev-parse --show-toplevel)
+WT="$(dirname "$REPO")/.worktrees/$(basename "$REPO")/$BRANCH"
+
+# Check it. An unchecked `git worktree add` is how two agents end up in one tree.
+if ! git worktree add -b "$BRANCH" "$WT"; then
+  echo "worktree add failed -- stop here and report it. Do NOT run the provider."
+  exit 1
+fi
 
 ( cd "$WT" && quorum-claude-on zai -p "<the task>" --dangerously-skip-permissions )
 

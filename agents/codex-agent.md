@@ -52,14 +52,22 @@ most test runners (they write caches, coverage, build artifacts). So verificatio
 `workspace-write` — pointed at a throwaway worktree, never the user's tree:
 
 ```bash
-WT="../.worktrees/codex-verify-$$"
-git worktree add --detach "$WT" 2>&1
+# Namespaced by repo, so two projects side by side cannot land in each other's worktree.
+REPO=$(git rev-parse --show-toplevel)
+WT="$(dirname "$REPO")/.worktrees/$(basename "$REPO")/codex-verify-$$"
+if ! git worktree add --detach "$WT"; then
+  echo "worktree add failed -- stop here and report it."
+  exit 1
+fi
 
 cat <<'PROMPT_EOF' | codex exec -C "$WT" --sandbox workspace-write --skip-git-repo-check -
 <the question>. Verify by running <exact command> and report the real output.
 PROMPT_EOF
 
-git -C "$WT" --no-pager diff --stat   # expect empty; report it if not
+git -C "$WT" --no-pager diff --stat
+# --stat alone is NOT enough: it shows nothing for untracked files, and a run that
+# CREATES files -- the normal delegate outcome -- leaves it empty and looks clean.
+git -C "$WT" status --porcelain   # expect empty; report it if not
 ```
 
 The diffstat check matters: verification should leave no changes. If it produced a diff,
@@ -73,15 +81,44 @@ Remove the scratch worktree when done: `git worktree remove --force "$WT"`.
 **Never run write mode in the user's working tree.**
 
 ```bash
-BRANCH="codex/$(echo "$TASK_SLUG" | tr -c 'a-z0-9-' '-')"
-WT="../.worktrees/$BRANCH"
-git worktree add -b "$BRANCH" "$WT" 2>&1
+# A unique name per delegation. `$TASK_SLUG` was referenced here and defined NOWHERE in the
+# repo -- measured, it is the only occurrence of the name -- so it expanded to empty and
+# every delegation resolved to the same branch and the same path. Two concurrent
+# delegations: the second got "cannot lock ref: reference already exists", the exit status
+# was never checked, and both agents then worked in ONE tree on ONE branch. `diff --stat`
+# reported their combined work as a single result. skills/delegate-task/SKILL.md promised
+# the opposite: "Separate worktrees mean they cannot collide."
+#
+# Set TASK_SLUG yourself, or accept the default -- either way the name is made unique.
+SLUG=$(printf '%s' "${TASK_SLUG:-task}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-' \
+       | sed -e 's/--*/-/g' -e 's/^-//' -e 's/-$//')
+# $$ is the PARENT's pid inside a subshell, and `date +%s` has one-second resolution --
+# measured: two delegations dispatched together still produced the identical name. mktemp -u
+# asks the OS for a name nothing else holds, which is the only one of the three that is
+# actually unique per call.
+UNIQ=$(basename "$(mktemp -u)" | tr -cd 'A-Za-z0-9' | tr 'A-Z' 'a-z')
+BRANCH="codex/${SLUG:-task}-$(date +%Y%m%d-%H%M%S)-$UNIQ"
+
+# Namespaced by repository. `../.worktrees/` is a SIBLING of the checkout, so every project
+# in the same parent directory shared one -- measured: a delegate in repoB landed inside
+# repoA's worktree, on repoA's branch, and wrote there.
+REPO=$(git rev-parse --show-toplevel)
+WT="$(dirname "$REPO")/.worktrees/$(basename "$REPO")/$BRANCH"
+
+# Check it. An unchecked `git worktree add` is how two agents end up in one tree.
+if ! git worktree add -b "$BRANCH" "$WT"; then
+  echo "worktree add failed -- stop here and report it. Do NOT run the provider."
+  exit 1
+fi
 
 cat <<'PROMPT_EOF' | codex exec -C "$WT" --sandbox workspace-write -
 <the task>
 PROMPT_EOF
 
 git -C "$WT" --no-pager diff --stat
+# --stat alone is NOT enough: it shows nothing for untracked files, and a run that
+# CREATES files -- the normal delegate outcome -- leaves it empty and looks clean.
+git -C "$WT" status --porcelain
 ```
 
 `workspace-write` confines writes to the worktree. Report path, branch, and diffstat.

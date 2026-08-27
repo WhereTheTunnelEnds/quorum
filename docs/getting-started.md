@@ -362,7 +362,7 @@ tree. You get back a path, a branch, and a diffstat.
 
 ```bash
 git worktree list
-git -C ../.worktrees/<provider>/<slug> diff
+git -C ../.worktrees/<repo>/<provider>/<slug>-<pid>-<epoch> diff
 ```
 
 Two rules worth internalising:

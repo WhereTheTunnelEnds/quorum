@@ -79,15 +79,34 @@ for t in $TOOLS; do
 done
 
 echo
+# Print the command in the SYNTAX of the target file, and create its directory. quorum-lib.sh
+# resolves QUORUM_ENVFILE_SYNTAX and says "callers that WRITE must check this" -- this caller
+# did not. On fish the target is ~/.config/fish/conf.d/quorum.fish, a directory that does not
+# exist on a machine where fish has never written a config, so the printed command failed
+# outright: "No such file or directory", rc=1. It also printed posix `export` immediately
+# above a sentence explaining that fish wants `set -gx`.
 case ":$PATH:" in
   *":$DEST:"*) echo "$DEST is already on PATH." ;;
-  *) cat <<EOM
+  *)
+    if [ "$QUORUM_ENVFILE_SYNTAX" = fish ]; then
+      cat <<EOM
 $DEST is NOT on PATH. Add it in $QUORUM_ENVFILE_SHORT:
 
+  mkdir -p $(dirname "$QUORUM_ENVFILE")
+  echo 'fish_add_path $DEST' >> $QUORUM_ENVFILE
+
+$QUORUM_ENVFILE_WHY.
+EOM
+    else
+      cat <<EOM
+$DEST is NOT on PATH. Add it in $QUORUM_ENVFILE_SHORT:
+
+  mkdir -p $(dirname "$QUORUM_ENVFILE")
   echo 'export PATH="$DEST:\$PATH"' >> $QUORUM_ENVFILE
 
 $QUORUM_ENVFILE_WHY.
 EOM
+    fi
   ;;
 esac
 

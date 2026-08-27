@@ -309,7 +309,7 @@ Read the diff before believing anything it said.
 
 ```bash
 git worktree list
-git worktree remove ../.worktrees/<branch>
+git worktree remove ../.worktrees/<repo>/<branch>
 ```
 
 Quorum never removes them on its own — a discarded attempt is sometimes the one you want to

@@ -1,6 +1,6 @@
 ---
 name: model-panel
-description: Use when a decision is expensive to get wrong and a single model's opinion isn't enough - hard architecture calls, risky refactors, security-sensitive code, debugging that has resisted one line of attack, or any "am I sure about this?" moment. Fans the question out to GLM, Codex, and Copilot in parallel (read-only), then synthesizes the answers against Claude's own. For handing over whole tasks rather than questions, use delegate-task instead.
+description: Use when a decision is expensive to get wrong and a single model's opinion isn't enough - hard architecture calls, risky refactors, security-sensitive code, debugging that has resisted one line of attack, or any "am I sure about this?" moment. Fans the question out to GLM, Codex, Copilot, Antigravity and Ollama in parallel (read-only), then synthesizes the answers against Claude's own. For handing over whole tasks rather than questions, use delegate-task instead.
 ---
 
 # Model Panel
@@ -48,15 +48,23 @@ failure modes each one avoids are in each agent's own file.
 
 ```bash
 # CODEX — must run inside a git repo, or pass --skip-git-repo-check
-echo "$Q" | codex exec --sandbox read-only --skip-git-repo-check -
+echo "$Q" | codex exec --sandbox read-only --skip-git-repo-check - | quorum-sanitize
 
 # COPILOT
-copilot -p "$Q" --plan -s --no-ask-user --allow-tool "read"
+copilot -p "$Q" --plan -s --no-ask-user --allow-tool "read" | quorum-sanitize
 
 # GLM — no CLI exists; call the API directly. Do not check for a `glm` binary.
-jq -n --rawfile q prompt.txt \
-  '{model:"glm-5.3",max_tokens:64000,messages:[{role:"user",content:$q}]}' > body.json
-BODY=$(mktemp)
+# mktemp, NOT fixed names in the current directory. This block used to write `body.json`
+# and read `prompt.txt` relative to $PWD -- in the skill whose entire design is parallel
+# fan-out. Measured: two panelists run concurrently, 20 of 20 rounds had at least one sent
+# the OTHER panel's question, and it then synthesized an answer to a question it never
+# asked. Both files were also left behind in the user's repo, and body.json holds the whole
+# prompt at default 0644. agents/glm-agent.md already used mktemp; the skill was missed.
+PROMPT=$(mktemp); REQ=$(mktemp); BODY=$(mktemp)
+trap 'rm -f "$PROMPT" "$REQ" "$BODY"' EXIT INT TERM HUP
+printf '%s' "$Q" > "$PROMPT"
+jq -n --rawfile q "$PROMPT" \
+  '{model:"glm-5.3",max_tokens:64000,messages:[{role:"user",content:$q}]}' > "$REQ"
 # The key goes in a header FILE, never on the command line. With
 # -H "Authorization: Bearer $KEY" it sits in argv, where `ps auxww` shows it to every
 # process running as you for the whole life of the call. curl reads @file instead.
@@ -65,13 +73,13 @@ printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$HDR"
 CODE=$(curl -s -m 900 -o "$BODY" -w '%{http_code}' https://api.z.ai/api/anthropic/v1/messages \
   -H @"$HDR" \
   -H "anthropic-version: 2023-06-01" \
-  -H "content-type: application/json" -d @body.json)
+  -H "content-type: application/json" -d @"$REQ")
 rm -f "$HDR"
 # The `else` branch is load-bearing. Without it, a failing call makes jq say
 # "Cannot iterate over null" and emit ZERO BYTES — which reads as "the model had nothing
 # to say". Measured: bad model id -> HTTP 400, 0 bytes out. See docs/field-notes.md in the Quorum repo.
 jq -r 'if .content then ([.content[]|select(.type=="text")|.text]|join(""))
-       else (.error.message // tostring) end' "$BODY"
+       else (.error.message // tostring) end' "$BODY" | quorum-sanitize
 [ "$CODE" = 200 ] || echo "(http $CODE — this is an error, not an answer)" >&2
 # Truncation is NOT success. Measured: a 152 KB input at max_tokens=32000 returned
 # stop_reason=max_tokens with 17,648 chars cut off mid-review. Counting that as a vote

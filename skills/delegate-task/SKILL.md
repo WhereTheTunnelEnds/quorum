@@ -45,13 +45,25 @@ by the capability they actually have, not by novelty.
    more than doing it yourself.
 
 2. **Delegate in a worktree.** The agents handle this themselves in delegate mode; each
-   creates `../.worktrees/<provider>/<slug>` on its own branch. Never point a delegate at
+   creates `../.worktrees/<repo>/<provider>/<slug>-<pid>-<epoch>` on its own branch. The repo
+   name and the pid/epoch suffix are both load-bearing: without them every delegation for a
+   given provider resolved to one path, and projects sharing a parent directory resolved to
+   each other's. Never point a delegate at
    the working tree — an unreviewable diff mixed into live work is the failure mode this
    whole design exists to prevent. See [docs/safety-model.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/safety-model.md).
 
 3. **Run parallel attempts in one message.** If you're comparing approaches, dispatch the
-   agents as multiple Agent calls in a *single* message so they run concurrently. Separate
-   worktrees mean they cannot collide.
+   agents as multiple Agent calls in a *single* message so they run concurrently. Each gets
+   its own worktree and its own branch, named with the repo, the provider, the slug, a pid
+   and a timestamp.
+
+   That sentence used to end "Separate worktrees mean they cannot collide", and an audit
+   measured the opposite: the name derived from `$TASK_SLUG`, which was defined nowhere, so
+   every delegation resolved to one branch and one path. The second `git worktree add`
+   failed with "cannot lock ref: reference already exists", nothing checked its exit status,
+   and both agents worked in the same tree — with `diff --stat` reporting their combined
+   output as one result. The uniqueness is what makes the claim true; it was added because
+   the claim was made first.
 
 4. **Verify before you believe it.** This is the step that makes delegation safe:
 

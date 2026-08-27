@@ -51,12 +51,19 @@ case "$(basename "${SHELL:-/bin/sh}")" in
     QUORUM_ENVFILE_WHY="$QUORUM_ENVFILE_SHORT, not ~/.bashrc — non-interactive bash reads neither, but a login file is exported at login so child processes and agents inherit it; bash reads only the FIRST of .bash_profile, .bash_login, .profile that exists"
     ;;
   fish)
-    # fish parses neither `export X=y` nor ~/.profile. Writing POSIX syntax into a file
-    # fish does not read is the same bug twice over, so do not pretend: name the real
-    # location and the real syntax, and let the caller decide.
+    # fish does not read ~/.profile, so POSIX login files are the wrong target. It DOES
+    # understand `export X=y` -- fish ships an `export` function at
+    # /usr/share/fish/functions/export.fish, and a posix export line written into a
+    # conf.d file was measured working: `fish -c 'command -v quorum-verify'` resolved it,
+    # rc=0. An earlier version of this comment asserted fish "cannot parse export X=y",
+    # which is simply false, and the repo's own rule is that a wrong explanation beside
+    # working code still has to be corrected.
+    #
+    # `set -gx` and `fish_add_path` remain what we emit, because they are fish's idiom --
+    # not because the alternative fails.
     QUORUM_ENVFILE="$HOME/.config/fish/conf.d/quorum.fish"
     QUORUM_ENVFILE_SHORT="~/.config/fish/conf.d/quorum.fish"
-    QUORUM_ENVFILE_WHY="fish does not read ~/.profile and cannot parse \`export X=y\` — use \`set -gx NAME value\` in a file under ~/.config/fish/conf.d/, which fish sources for every shell"
+    QUORUM_ENVFILE_WHY="fish does not read ~/.profile — use a file under ~/.config/fish/conf.d/, which fish sources for every shell. \`fish_add_path\` and \`set -gx NAME value\` are fish's idiom (it does also understand \`export\`, via a shipped function)"
     QUORUM_ENVFILE_SYNTAX="fish"
     ;;
   *)

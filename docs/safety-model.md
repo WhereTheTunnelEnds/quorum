@@ -149,11 +149,14 @@ same thing by another name, since `Bash` is a superset of `Write` and `Edit`.
 Full tooling, full write access, **inside a disposable git worktree on its own branch.**
 
 ```bash
-BRANCH="glm/add-retry-logic"
-WT="../.worktrees/$BRANCH"
-git worktree add -b "$BRANCH" "$WT"
+UNIQ=$(basename "$(mktemp -u)" | tr -cd 'A-Za-z0-9' | tr 'A-Z' 'a-z')
+BRANCH="glm/add-retry-logic-$UNIQ"                # unique: two delegations must not collide
+REPO=$(git rev-parse --show-toplevel)
+WT="$(dirname "$REPO")/.worktrees/$(basename "$REPO")/$BRANCH"
+git worktree add -b "$BRANCH" "$WT" || exit 1    # unchecked, two agents share one tree
 # ... provider runs with -C "$WT" ...
 git -C "$WT" --no-pager diff --stat
+git -C "$WT" status --porcelain                  # --stat cannot see new files
 ```
 
 The worktree is what makes an otherwise alarming permission grant tolerable. It buys three

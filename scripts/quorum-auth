@@ -252,16 +252,30 @@ if wants glm; then
     else
       # $ENVFILE is resolved by quorum-lib.sh against the user's actual shell — for bash it
       # is whichever of .bash_profile / .bash_login / .profile that shell really reads.
-      if grep -qE '^(export Z_AI_API_KEY=|set -gx Z_AI_API_KEY )' "$ENVFILE" 2>/dev/null; then
+      # Leading whitespace is allowed, and `export` is optional. The old anchor demanded
+      # the line START with `export Z_AI_API_KEY=`, so a two-space-indented export -- which
+      # is ordinary formatting in a hand-edited profile -- was invisible to it. Measured:
+      # the guard stayed silent, a SECOND export was appended, and since the later
+      # assignment wins, the user's own value was silently shadowed by ours. Verified
+      # identical under BSD grep and ugrep; the pattern uses no GNU extensions.
+      if grep -qE '^[[:space:]]*((export|declare -x)[[:space:]]+)?Z_AI_API_KEY=|^[[:space:]]*set[[:space:]]+-gx[[:space:]]+Z_AI_API_KEY[[:space:]]' "$ENVFILE" 2>/dev/null; then
         echo "  $ENVFILE already exports Z_AI_API_KEY; leaving it alone." >&2
         echo "  Edit it by hand if you need to replace the key." >&2
       else
         umask 077
         if [ "$QUORUM_ENVFILE_SYNTAX" = fish ]; then
-          # fish cannot parse `export X=y`. Writing it produces a file fish reads and then
-          # errors on, which is worse than not writing at all.
+          # fish's own idiom. (It CAN in fact parse `export X=y` -- fish ships an `export`
+          # function at /usr/share/fish/functions/export.fish, measured -- so the old comment
+          # here claiming otherwise was wrong. `set -gx` is still the right thing to write;
+          # the reason is idiom, not incapacity.)
+          #
+          # Leading \n, and QUOTES around the value. Without the newline this glued the key
+          # onto whatever the previous line was when the file lacked a trailing newline --
+          # measured, it produced `set -gx EDITOR nvimset -gx Z_AI_API_KEY <value>`, so the
+          # key never got set and instead ended up inside an exported EDITOR. Without quotes,
+          # a value containing a space becomes a fish LIST, and a `#` starts a comment.
           mkdir -p "$(dirname "$ENVFILE")"
-          printf 'set -gx Z_AI_API_KEY %s\n' "$KEY" >> "$ENVFILE"
+          printf '\nset -gx Z_AI_API_KEY %s\n' "'$KEY'" >> "$ENVFILE"
         else
           printf '\nexport Z_AI_API_KEY=%q\n' "$KEY" >> "$ENVFILE"
         fi
@@ -273,6 +287,20 @@ if wants glm; then
         chmod 600 "$ENVFILE" 2>/dev/null || true
         echo "  wrote an export to $ENVFILE (now mode 600, was ${_oldmode:-new file})"
         echo "  open a new terminal for it to take effect"
+        # bash reads only the FIRST of .bash_profile / .bash_login / .profile that exists.
+        # If a tool later creates an earlier-priority file (nvm, conda, pyenv and
+        # Homebrew-on-Linux all create ~/.bash_profile), a second key can be written there
+        # and the older one is left behind at a path the user was never told about, and so
+        # never rotates. Precedence means nothing BREAKS -- which is exactly why it needs
+        # saying out loud.
+        for _other in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile" "${ZDOTDIR:-$HOME}/.zshenv"; do
+          [ "$_other" = "$ENVFILE" ] && continue
+          [ -f "$_other" ] || continue
+          if grep -qE '^[[:space:]]*((export|declare -x)[[:space:]]+)?Z_AI_API_KEY=' "$_other" 2>/dev/null; then
+            echo "  NOTE  $_other also sets Z_AI_API_KEY. That copy is now stale."
+            echo "        Remove it — otherwise it survives every key rotation you do here."
+          fi
+        done
         # THE KEY MUST BECOME VISIBLE TO THIS PROCESS TOO. Without this, the checks below
         # re-read $Z_AI_API_KEY from the current environment — which the write never touched
         # — so the SUCCESS path printed a red "Z_AI_API_KEY not set", named itself as its
