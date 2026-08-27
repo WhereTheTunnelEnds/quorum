@@ -73,9 +73,16 @@ copilot -p "<question>. Verify by running: <exact command>. Report what it outpu
 
 # diff --stat alone is NOT enough: it shows nothing for an untracked file, nothing for a
 # write outside the worktree, and nothing for anything under the shared .git.
+# TWO trees, not one. `--git-common-dir` resolves to the PRIMARY checkout, so if you
+# invoked Quorum from a linked worktree -- which this repo's own delegate flow encourages --
+# an escape into the tree you are actually working in is invisible to a $MAIN-only check.
+# Measured: user in a linked worktree, escape written there, `git -C "$MAIN" status
+# --porcelain` empty while `git -C "$REPO" status --porcelain` shows `?? escaped.txt`.
+# Found by codex reviewing this very change, then reproduced before acting on it.
 MAIN=$(dirname "$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)")
 git -C "$WT"   status --porcelain     # expect empty — catches untracked files too
-git -C "$MAIN" status --porcelain     # expect UNCHANGED — did it reach the real tree?
+git -C "$REPO" status --porcelain   # the tree you invoked from
+[ "$MAIN" != "$REPO" ] && git -C "$MAIN" status --porcelain     # expect UNCHANGED — did it reach the real tree?
 ls -la "$(git -C "$WT" rev-parse --path-format=absolute --git-path hooks)"
 git worktree remove --force "$WT"
 ```
@@ -179,9 +186,16 @@ copilot -p "<task>" \
   --no-ask-user \
   -s
 
+# TWO trees, not one. `--git-common-dir` resolves to the PRIMARY checkout, so if you
+# invoked Quorum from a linked worktree -- which this repo's own delegate flow encourages --
+# an escape into the tree you are actually working in is invisible to a $MAIN-only check.
+# Measured: user in a linked worktree, escape written there, `git -C "$MAIN" status
+# --porcelain` empty while `git -C "$REPO" status --porcelain` shows `?? escaped.txt`.
+# Found by codex reviewing this very change, then reproduced before acting on it.
 MAIN=$(dirname "$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)")
 git -C "$WT"   status --porcelain     # untracked files too — diff --stat hides new files
-git -C "$MAIN" status --porcelain     # expect UNCHANGED
+git -C "$REPO" status --porcelain   # the tree you invoked from
+[ "$MAIN" != "$REPO" ] && git -C "$MAIN" status --porcelain     # expect UNCHANGED
 ls -la "$(git -C "$WT" rev-parse --path-format=absolute --git-path hooks)"
 ```
 
@@ -272,6 +286,20 @@ Check the exit code **without piping** either: `copilot ... | tail` reports `tai
 status, not Copilot's. Redirect to separate files and test `$?` directly, as below.
 
 ```bash
+# quorum-sanitize must exist. Without it this pipeline yields an EMPTY string, and the
+# table below then classifies a perfectly good HTTP 200 as `empty` -- "the model had nothing
+# to say". Measured against the live API: CODE=200, stop_reason=end_turn, TEXT="".
+#
+# This is not hypothetical. `/plugin marketplace add` installs the plugin WITHOUT running
+# scripts/install.sh, so on that path quorum-sanitize is not on PATH at all and every
+# consult would silently return empty. Refuse instead: relaying unsanitised provider text is
+# not an acceptable fallback, and neither is reporting a missing tool as a quiet answer.
+command -v quorum-sanitize >/dev/null 2>&1 || {
+  echo "status: error — quorum-sanitize is not on PATH."
+  echo "Run scripts/install.sh from the Quorum repo, then retry."
+  exit 1
+}
+
 OUT=$(mktemp); ERR=$(mktemp)
 timeout 900 copilot -p "$PROMPT" --plan -s --no-ask-user --allow-tool "read" \
   >"$OUT" 2>"$ERR"
@@ -316,6 +344,20 @@ cursor up and overwrites the line above — which is your `status:` line — and
 the current one. Neither is caught by a text substitution.
 
 ```bash
+# quorum-sanitize must exist. Without it this pipeline yields an EMPTY string, and the
+# table below then classifies a perfectly good HTTP 200 as `empty` -- "the model had nothing
+# to say". Measured against the live API: CODE=200, stop_reason=end_turn, TEXT="".
+#
+# This is not hypothetical. `/plugin marketplace add` installs the plugin WITHOUT running
+# scripts/install.sh, so on that path quorum-sanitize is not on PATH at all and every
+# consult would silently return empty. Refuse instead: relaying unsanitised provider text is
+# not an acceptable fallback, and neither is reporting a missing tool as a quiet answer.
+command -v quorum-sanitize >/dev/null 2>&1 || {
+  echo "status: error — quorum-sanitize is not on PATH."
+  echo "Run scripts/install.sh from the Quorum repo, then retry."
+  exit 1
+}
+
 # The provider's raw bytes NEVER enter the envelope. Pipe every capture through this:
 TEXT=$(quorum-sanitize < "$OUT")          # file capture
 TEXT=$(... | quorum-sanitize)             # pipeline capture

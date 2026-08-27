@@ -479,5 +479,26 @@ PYX
 done
 
 echo
+# A MISSING quorum-sanitize must refuse, not return an empty answer. Found live: with the
+# tool absent, TEXT is "" while CODE is 200 and stop_reason is end_turn, so the table
+# classifies a perfectly good response as `empty`. `/plugin marketplace add` installs the
+# plugin without running install.sh, so that PATH is a real one, not a corner case.
+for prov in glm ollama codex copilot antigravity; do
+  case "$prov" in
+    glm)         B="$GLM_BLOCK" ;;
+    ollama)      B="$OLL_BLOCK" ;;
+    *)           B="$WORK/$prov.sh" ;;
+  esac
+  [ -f "$B" ] || continue
+  nos=$(env -i HOME="$WORK/fakehome" PATH="/usr/bin:/bin" bash "$B" 2>&1)
+  if printf '%s' "$nos" | grep -q 'quorum-sanitize is not on PATH'; then
+    ok "$prov refuses to run when quorum-sanitize is missing"
+  else
+    bad "$prov did not refuse without quorum-sanitize — it would report a good answer as empty"
+  fi
+done
+
+
+echo
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -41,7 +41,7 @@ cited as if it could.
 | Ollama's `/v1` endpoint **discards** `options.num_ctx` while `/api/chat` honours it | field-notes | the entry states the measurement (prompt_tokens 32768 via /v1 vs prompt_eval_count 48071 via /api/chat) but does not carry runnable commands — treat it as Observed until it does |
 | Antigravity's headless mode auto-denies `write_file` | safety-model, field-notes | `d=$(mktemp -d); cd "$d" && agy --add-dir "$d" -p "create a file test.txt containing X"` |
 | Adapters declare no write tools | safety-model | CI, or `grep '^tools:' agents/*.md` |
-| GLM reports a **truncated** answer as `error`, not `ok` | glm-agent, troubleshooting | ask GLM to count 1–400 at `max_tokens:600`; expect `stop_reason: max_tokens` with text. **Unverified at that exact cap** — glm-agent records 8000 returning zero characters of text, so 600 may yield thinking-only, i.e. `empty`. Raise the cap until text appears if it does |
+| GLM reports a **truncated** answer as `error`, not `ok` | glm-agent, troubleshooting | ask GLM to count 1–400 at `max_tokens:600`; expect `stop_reason: max_tokens` with text. **Measured live:** `stop_reason=max_tokens`, 915 characters of text, content types `[thinking, text]` |
 | GLM's 64000 / `-m 900` pair completes a 249 KB input | glm-agent | feed ~250 KB of source and ask for an exhaustive review; expect `end_turn` under 900 s |
 | `quorum-status --json` stays valid JSON under hostile provider text | quorum-status | `tests/test-quorum-status-json.sh` |
 | A command and a skill cannot share a name | field-notes | CI, or `for c in commands/*.md; do [ -d "skills/$(basename "$c" .md)" ] && echo COLLISION; done` |
@@ -52,6 +52,9 @@ cited as if it could.
 | Two delegations never share a worktree or branch | delegate-task, safety-model | the name carries repo, provider, slug, date and an `mktemp -u` suffix; 100 rapid draws produced 100 distinct names |
 | `install.sh` never destroys a file it did not create | field-notes | put a regular file at `~/.local/bin/quorum-status`, run `install.sh`, check its sha — it is REFUSED, and the install exits non-zero |
 | Every ```bash block in the repo is valid bash | CONTRIBUTING | CI job "Every bash-fenced block is valid bash", or `tests/test-lint-gates.sh` |
+| GLM's live response shapes match what the adapters classify on | glm-agent | measured against api.z.ai: success `content:[thinking,text]` + `end_turn`; bad model -> HTTP 400 with `.error.message`; `max_tokens:600` -> `stop_reason=max_tokens` with 915 chars of text |
+| `codex exec review -c sandbox_mode="read-only"` is accepted and takes effect | codex-agent | run it: codex's own banner prints `sandbox: read-only`, exit 0 |
+| An adapter refuses rather than reporting `empty` when `quorum-sanitize` is missing | field-notes | `tests/test-adapter-blocks.sh` — all five, run with a PATH that lacks it |
 | verify and delegate never write to the user's checkout, and surface it if the provider does | safety-model | `tests/test-worktree-tiers.sh` — all six blocks, with a shim that deliberately escapes the worktree |
 | A failed `git worktree add` stops a delegation before the provider runs | safety-model, delegate-task | same test — the worktree's parent is made a regular file so the add genuinely fails |
 | Each adapter's runnable block reaches the status its own table requires | adapter-contract, all adapters | `tests/test-adapter-blocks.sh` — extracts the real block from the adapter, runs it against a local mock across six outcomes, and applies the documented table |

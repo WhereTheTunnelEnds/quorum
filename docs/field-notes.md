@@ -1158,6 +1158,75 @@ scripts did not, so the repo's documentation of the fix was more correct than it
 
 **The general shape.** A mitigation introduces its own lifecycle. Moving a secret out of one
 place puts it in another, and the second place needs the same attention the first one got.
+### The escape check that checked the wrong tree
+
+**Symptom.** A delegate writes into the tree you are working in. The adapter reports a clean
+run.
+
+**Cause.** The escape check resolved the tree to inspect with:
+
+```bash
+MAIN=$(dirname "$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)")
+git -C "$MAIN" status --porcelain
+```
+
+`--git-common-dir` always points at the **primary** checkout. If you invoked Quorum from a
+*linked worktree* — which this repo's own delegate flow actively encourages — `$MAIN` is not
+the tree you are in. Measured, with the user sitting in a linked worktree and an escape
+written there:
+
+```
+git -C "$MAIN" status --porcelain   ->  (empty)
+git -C "$REPO" status --porcelain   ->  ?? escaped.txt
+```
+
+**Fix.** Check both, and skip the second when they are the same:
+
+```bash
+git -C "$REPO" status --porcelain
+[ "$MAIN" != "$REPO" ] && git -C "$MAIN" status --porcelain
+```
+
+**How it was found.** By running `codex exec review` — a live call made to verify the flag
+`-c sandbox_mode="read-only"`, since the previously documented `--sandbox read-only` exits 2
+on that subcommand. The review flagged the linked-worktree case in the very change being
+verified. The claim was then reproduced before anything was altered, because a confident
+model is still a hypothesis; this file has an entry about exactly that.
+
+It is worth naming what happened: the second-opinion mechanism this repo exists to provide
+found a real bug in the repo, in a code path added the same day, that six parallel auditors
+had not. That is the argument for the tool, made by the tool.
+
+**Measured.** `tests/test-worktree-tiers.sh` now runs every verify and delegate block twice —
+once from a primary checkout, once from a linked worktree. Reverting to the `$MAIN`-only
+check turns six assertions red.
+
+### A missing tool became an empty answer
+
+**Symptom.** GLM returns HTTP 200 with a real answer. The adapter reports `empty`.
+
+**Cause.** The consult pipeline ends `| quorum-sanitize`. With that command absent, the pipe
+yields an empty string, and the classification table maps empty text to `empty` — *"usually
+thinking-only; raise max_tokens"*. Measured live: `CODE=200`, `stop_reason=end_turn`,
+`TEXT=""`.
+
+The path that produces it is not exotic. **`/plugin marketplace add` installs the plugin
+without running `scripts/install.sh`**, so on that route `quorum-sanitize` is not on PATH at
+all, and *every* consult through *every* adapter returns empty with a plausible explanation
+attached.
+
+**Fix.** Refuse. Every block that pipes through it now checks first and exits with
+`status: error — quorum-sanitize is not on PATH`, naming the installer. Relaying unsanitised
+provider text is not an acceptable fallback, and neither is reporting a missing dependency
+as a quiet answer about the model.
+
+**Measured.** With the tool absent the block refuses and never reaches the API; with it
+present, `CODE=200 TEXT=PONG`. Asserted for all five adapters.
+
+**The general shape.** This is the same defect as `quorum-verify` reporting a broken probe as
+"not installed, this is normal", and as `quorum-flags` exiting 0 having checked nothing: a
+missing prerequisite rendered as an ordinary result. It keeps recurring because the empty
+value is always a *valid-looking* member of the result type.
 ---
 
 ## Adding an entry

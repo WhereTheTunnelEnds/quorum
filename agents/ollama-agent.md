@@ -56,6 +56,20 @@ like compliance; the filesystem is what settled it.
 > advisory one.
 
 ```bash
+# quorum-sanitize must exist. Without it this pipeline yields an EMPTY string, and the
+# table below then classifies a perfectly good HTTP 200 as `empty` -- "the model had nothing
+# to say". Measured against the live API: CODE=200, stop_reason=end_turn, TEXT="".
+#
+# This is not hypothetical. `/plugin marketplace add` installs the plugin WITHOUT running
+# scripts/install.sh, so on that path quorum-sanitize is not on PATH at all and every
+# consult would silently return empty. Refuse instead: relaying unsanitised provider text is
+# not an acceptable fallback, and neither is reporting a missing tool as a quiet answer.
+command -v quorum-sanitize >/dev/null 2>&1 || {
+  echo "status: error — quorum-sanitize is not on PATH."
+  echo "Run scripts/install.sh from the Quorum repo, then retry."
+  exit 1
+}
+
 BASE="${OLLAMA_BASE:-http://localhost:11434}"
 MODEL="${QUORUM_OLLAMA_MODEL:-$(curl -sS -m 10 "$BASE/api/tags" | jq -r '.models[0].name // empty')}"
 [ -n "$MODEL" ] || { echo "status: error — no model pulled. Run: ollama pull llama3.2:3b"; exit 1; }
@@ -198,6 +212,20 @@ cursor up and overwrites the line above — which is your `status:` line — and
 the current one. Neither is caught by a text substitution.
 
 ```bash
+# quorum-sanitize must exist. Without it this pipeline yields an EMPTY string, and the
+# table below then classifies a perfectly good HTTP 200 as `empty` -- "the model had nothing
+# to say". Measured against the live API: CODE=200, stop_reason=end_turn, TEXT="".
+#
+# This is not hypothetical. `/plugin marketplace add` installs the plugin WITHOUT running
+# scripts/install.sh, so on that path quorum-sanitize is not on PATH at all and every
+# consult would silently return empty. Refuse instead: relaying unsanitised provider text is
+# not an acceptable fallback, and neither is reporting a missing tool as a quiet answer.
+command -v quorum-sanitize >/dev/null 2>&1 || {
+  echo "status: error — quorum-sanitize is not on PATH."
+  echo "Run scripts/install.sh from the Quorum repo, then retry."
+  exit 1
+}
+
 # The provider's raw bytes NEVER enter the envelope. Pipe every capture through this:
 TEXT=$(quorum-sanitize < "$OUT")          # file capture
 TEXT=$(... | quorum-sanitize)             # pipeline capture

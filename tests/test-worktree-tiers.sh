@@ -77,6 +77,18 @@ newrepo() {
   echo "$d"
 }
 
+# The user working inside a LINKED WORKTREE, which this repo's own delegate flow encourages.
+# `git rev-parse --git-common-dir` points at the PRIMARY checkout from here, so an escape
+# into the tree the user is actually in is invisible to a check that only consults $MAIN.
+newlinked() {
+  base="$WORK/lp$1"; rm -rf "$base" "$WORK/lw$1"; mkdir -p "$base"
+  ( cd "$base" && git init -q . \
+      && echo original > tracked.txt && git add tracked.txt \
+      && git -c user.email=t@example -c user.name=t commit -q -m init \
+      && git worktree add -q "$WORK/lw$1" -b wb$1 ) >/dev/null 2>&1
+  echo "$WORK/lw$1"
+}
+
 extract() {  # extract <file> <substring>
   python3 - "$1" "$2" <<'PY'
 import re, sys, pathlib
@@ -185,6 +197,21 @@ printf '%s\n' "$BLOCKS" | while IFS='|' read -r prov tier file needle; do
     bad "ran the provider even though the worktree could not be created"
   else
     ok "a failed worktree add stops it before the provider runs"
+  fi
+
+  # --- 5b: the same, with the user sitting in a LINKED WORKTREE ---------------------------
+  L=$(newlinked "${prov}${tier}")
+  if [ -d "$L" ]; then
+    : > "$SHIMLOG"
+    outL=$( cd "$L" && env PATH="$SHIM:$ROOT/scripts:$PATH" QUORUM_MAIN_REPO="$L" \
+            QUORUM_SHIM_LOG="$SHIMLOG" QUORUM_SHIM_ESCAPE=1 bash "$BLK" 2>&1 )
+    if [ ! -f "$L/escaped.txt" ]; then
+      bad "linked-worktree escape simulation was inert"
+    elif printf '%s' "$outL" | grep -q 'escaped.txt'; then
+      ok "escape is surfaced when invoked from a LINKED worktree too"
+    else
+      bad "escape into the invoking linked worktree is NOT surfaced (only \$MAIN is checked)"
+    fi
   fi
 
   # --- 5: an escape must be surfaced by the block's own output ---------------------------
