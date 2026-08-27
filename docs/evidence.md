@@ -33,7 +33,7 @@ cited as if it could.
 | Antigravity's broken call is **rc=1, 0 bytes stdout** | field-notes | `quorum-verify antigravity` |
 | Every flag the adapters use still exists | model-panel, adapters | `quorum-flags` |
 | `quorum-flags` exits 0 on a healthy machine and 1 on a real drift | field-notes | `quorum-flags; echo $?`, then invent a flag in an adapter and re-run |
-| The setup wizard completes without hanging | getting-started | `tests/drive-setup.exp n` |
+| The setup wizard completes without hanging | getting-started | `tests/drive-setup.exp n` — **spends quota**: quorum-setup always reaches quorum-auth, which makes a live z.ai call plus `copilot -p` and `agy --print` |
 | `quorum-status` exits 0 when a provider is reachable, 1 when none are | — | `quorum-status; echo $?` |
 | `quorum-verify` exits non-zero when it verified **nothing** | adapter-contract | `quorum-verify nosuchprovider; echo $?` |
 | The probe image really is red-circle / green-square / yellow-cross / blue-triangle | probe-checklist | `make-probe-image` then open it |
@@ -41,7 +41,7 @@ cited as if it could.
 | Ollama's `/v1` endpoint **discards** `options.num_ctx` while `/api/chat` honours it | field-notes | the entry states the measurement (prompt_tokens 32768 via /v1 vs prompt_eval_count 48071 via /api/chat) but does not carry runnable commands — treat it as Observed until it does |
 | Antigravity's headless mode auto-denies `write_file` | safety-model, field-notes | `d=$(mktemp -d); cd "$d" && agy --add-dir "$d" -p "create a file test.txt containing X"` |
 | Adapters declare no write tools | safety-model | CI, or `grep '^tools:' agents/*.md` |
-| GLM reports a **truncated** answer as `error`, not `ok` | glm-agent, troubleshooting | ask GLM to count 1–400 at `max_tokens:600`; expect `stop_reason: max_tokens` with text |
+| GLM reports a **truncated** answer as `error`, not `ok` | glm-agent, troubleshooting | ask GLM to count 1–400 at `max_tokens:600`; expect `stop_reason: max_tokens` with text. **Unverified at that exact cap** — glm-agent records 8000 returning zero characters of text, so 600 may yield thinking-only, i.e. `empty`. Raise the cap until text appears if it does |
 | GLM's 64000 / `-m 900` pair completes a 249 KB input | glm-agent | feed ~250 KB of source and ask for an exhaustive review; expect `end_turn` under 900 s |
 | `quorum-status --json` stays valid JSON under hostile provider text | quorum-status | `tests/test-quorum-status-json.sh` |
 | A command and a skill cannot share a name | field-notes | CI, or `for c in commands/*.md; do [ -d "skills/$(basename "$c" .md)" ] && echo COLLISION; done` |

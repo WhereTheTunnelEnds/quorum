@@ -100,6 +100,11 @@ tests/drive-setup.exp            # yes to everything
 tests/drive-setup.exp n          # no to everything
 ```
 
+**This one costs quota.** `quorum-setup` always reaches `quorum-auth`, which makes a live
+call to z.ai plus `copilot -p` and `agy --print`. Every other test in `tests/` is free,
+offline and credential-less; this is the exception, and it is worth knowing before you run
+it on a metered plan.
+
 That test exists because driving the wizard under a real pty found a hang that produced no
 output and had to be killed at 400s. It was invisible in review: both code paths read fine.
 
