@@ -10,7 +10,7 @@
     {
       "name": "quorum",
       "source": "./",
-      "description": "Consult and delegate to GLM, Codex, Copilot, and any provider you add yourself — under three enforced safety tiers.",
+      "description": "Consult and delegate to GLM, Codex, Copilot, Antigravity, Ollama, and any provider you add yourself. Three safety tiers, each documented with exactly what it does and does not enforce.",
       "version": "0.1.0",
       "category": "augmentation"
     }

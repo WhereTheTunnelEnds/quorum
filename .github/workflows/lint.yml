@@ -19,6 +19,30 @@ jobs:
             jq empty "$f"
           done
 
+      - name: Manifests name every adapter that ships
+        run: |
+          # The marketplace blurb is the widest-read text in the repo and the least reviewed.
+          # It said "Consult and delegate to GLM, Codex, Copilot ... under three enforced
+          # safety tiers" while five adapters shipped and docs/safety-model.md said, of
+          # tier 2, "for two of the three the honest answer is yes, it can" write to your
+          # tree. Same class as the model-panel skill describing three providers when it
+          # drove five: a list that silently becomes a subset.
+          #
+          # Checks the user-facing DESCRIPTIONS, not the whole file -- the keywords array
+          # already contains every provider name, so grepping the file would pass vacuously
+          # and this gate would be decoration.
+          descs=$( jq -r '.description' .claude-plugin/plugin.json
+                   jq -r '.description, .plugins[].description' .claude-plugin/marketplace.json )
+          fail=0
+          for f in agents/*-agent.md; do
+            [ -e "$f" ] || continue
+            n=$(basename "$f" -agent.md)
+            printf '%s' "$descs" | grep -qi "$n" \
+              || { echo "ERROR: no manifest description mentions '$n', but agents/$n-agent.md ships"; fail=1; }
+          done
+          [ "$fail" = 0 ] && echo "every shipped adapter is named in a manifest description"
+          exit $fail
+
       - name: Shell syntax
         run: |
           for f in scripts/* probes/*.sh; do

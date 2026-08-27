@@ -138,6 +138,11 @@ run_gate() {  # run_gate <slug> ; echoes rc
 inject_validate_json_manifests()   { printf 'not json' > "$SANDBOX/.claude-plugin/zz-bad.json"; }
 revert_validate_json_manifests()   { rm -f "$SANDBOX/.claude-plugin/zz-bad.json"; }
 
+inject_manifests_name_every_adapter_that_ships() {
+  printf -- '---\nname: zzprov-agent\n---\nbody\n' > "$SANDBOX/agents/zzprov-agent.md"; }
+revert_manifests_name_every_adapter_that_ships() {
+  rm -f "$SANDBOX/agents/zzprov-agent.md"; }
+
 inject_shell_syntax()              { printf '#!/usr/bin/env bash\nif [ 1 = 1 ; then\n' > "$SANDBOX/scripts/zz-bad"; }
 revert_shell_syntax()              { rm -f "$SANDBOX/scripts/zz-bad"; }
 

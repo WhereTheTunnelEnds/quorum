@@ -112,7 +112,7 @@ for t in tests/*.sh; do bash "$t"; done
 
 ### If you add a CI gate, add the proof that it fires
 
-CI runs seventeen gates, and each one exists because something got through. A gate nobody
+Every gate in `.github/workflows/lint.yml` exists because something got through. A gate nobody
 has watched fail is not evidence — it is a green check mark asserting a property nobody
 tested. This repo has shipped three gates that could not fail and one that fired on valid
 input, and the API-key gate carried two separate bugs that were invisible on the page: a
@@ -128,7 +128,7 @@ permanently-red one.
 one, the harness prints your gate as `NO INJECTION DEFINED — this gate is unproven` and
 says so in its own summary line. It will not quietly count it as covered.
 
-Three injections have to assemble their forbidden string at runtime, because written out
+Some injections have to assemble their forbidden string at runtime, because written out
 whole they would trip the gate they test. That is the system working: the gates match on
 content, not on a path allowlist.
 

@@ -1047,9 +1047,12 @@ and executes each one three times: clean tree must exit 0, injected violation mu
 non-zero, and after the revert it must exit 0 again. The third run is what distinguishes a
 working gate from a permanently-red one — without it, the `--` bug passes.
 
-15 of 17 gates pass all three. The two that are not exercised are named in the output, not
-omitted: the `shellcheck` step installs a package, and the `Test suite` step runs
+Every gate but two passes all three. The two are named in the harness output rather than
+quietly omitted: the `shellcheck` step installs a package, and the `Test suite` step runs
 `tests/*.sh`, which includes that file — exercising it would recurse.
+
+A count would go stale the next time a gate is added, which is why the harness prints its
+own, and prints `NO INJECTION DEFINED` for anything unproven.
 
 ### Reproduce in the environment you are reproducing
 
