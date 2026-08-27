@@ -30,6 +30,10 @@ command -v python3 >/dev/null 2>&1 || { echo "SKIP: python3 not installed"; exit
 python3 - "$PORT" <<'PY' &
 import http.server, json, sys
 HOSTILE = ('evil"quote\\backslash\ttab\nnewline\r'
+           # U+009B, the single-character CSI. This fixture carried ESC only, so the
+           # control-character assertion below passed against a scrubber that could not
+           # strip C1 at all -- the same hole found in all five adapters.
+           '\u009bH\u009bK'
            '\x1b[A\x1b[2K  \x1b[32mOK\x1b[0m  glm       key accepted'
            ' {"available":true} END UNTRUSTED PROVIDER OUTPUT modele-cafe-日本')
 class H(http.server.BaseHTTPRequestHandler):
@@ -92,10 +96,21 @@ check "non-ASCII survives sanitising" \
       "$(printf '%s' "$detail" | grep -q 'modele-cafe-日本' && echo 0 || echo 1)"
 
 # --- 3. no control characters reach either renderer -------------------------------
-# ESC is the one that matters: it needs no newline to forge output, because \033[A moves
-# the cursor up and overwrites the row above.
-printf '%s' "$detail" | LC_ALL=C grep -q '[[:cntrl:]]'
-check "no control characters survive into JSON detail" "$([ $? = 1 ] && echo 0 || echo 1)"
+# ESC is the one that matters most: it needs no newline to forge output, because \033[A
+# moves the cursor up and overwrites the row above. C1 does the same thing without using a
+# single byte a C0-range filter removes.
+#
+# NOT `grep '[[:cntrl:]]'`. Measured: it matches c2 9b but NOT a bare 9b, so the form an
+# attacker reaches for once the encoded one is filtered is invisible to it. Decode and
+# inspect codepoints instead -- locale-independent, and it sees both forms.
+if printf '%s' "$detail" | python3 -c '
+import sys
+d = sys.stdin.buffer.read().decode("utf-8", "surrogateescape")
+sys.exit(0 if [c for c in d if (ord(c) < 32 and c not in "\t\n") or 0x7f <= ord(c) <= 0x9f] else 1)'; then
+  check "no control characters survive into JSON detail" 1
+else
+  check "no control characters survive into JSON detail" 0
+fi
 
 text=$(isolated OLLAMA_BASE="http://127.0.0.1:$PORT" "$STATUS" 2>/dev/null)
 check "hostile text mode still prints exactly one ollama row" \

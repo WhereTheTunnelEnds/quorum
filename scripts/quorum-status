@@ -75,7 +75,27 @@ scrub() {
   # author's machine than in CI. Under LC_ALL=C, tr works bytewise, and multi-byte UTF-8
   # still survives because every one of its bytes is >= 0x80 — verified, café-日本
   # round-trips unchanged.
-  printf '%s' "$1" | LC_ALL=C tr '\000-\037\177' ' '
+  #
+  # SECOND PASS, for C1. The byte range above covers C0 and DEL and nothing else, so a
+  # UTF-8-encoded C1 control walked straight through it -- measured, `41 c2 9b 48 42` came
+  # out unchanged. U+009B is the single-character CSI: every byte after it is printable
+  # ASCII, so `CSI H` + `CSI K` repaints the rows above without using one byte the first
+  # pass removes. Exactly the hole that was found in the adapters; this file had it too.
+  #
+  # The two-byte C1 forms are precisely c2 80 .. c2 9f, and `c2` is only ever a UTF-8 LEAD
+  # byte (continuation bytes are 80..bf, and no other multi-byte sequence begins with c2),
+  # so a bytewise match cannot corrupt anything else. Verified: é (c3 a9), 日本, an emoji
+  # and NBSP (c2 a0 -- adjacent to the range, deliberately kept) all round-trip unchanged.
+  #
+  # sed, not perl or jq: text mode must keep working on a box with neither. jq is optional
+  # here and only --json requires it.
+  #
+  # A BARE 0x9b is left alone. It is invalid UTF-8, so removing it bytewise would risk
+  # mangling adjacent characters, and it was measured INERT in both tmux 3.6a and GNU
+  # screen 4.00.03 -- only the encoded form actually repainted the display.
+  printf '%s' "$1" \
+    | LC_ALL=C tr '\000-\037\177' ' ' \
+    | LC_ALL=C sed "s/$(printf '\302')[$(printf '\200')-$(printf '\237')]//g"
 }
 
 record() {

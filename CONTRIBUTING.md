@@ -115,6 +115,21 @@ provider unreachable and serves its own hostile fake provider. Run it:
 for t in tests/*.sh; do bash "$t"; done
 ```
 
+### If you add or change an adapter, run the block test
+
+`agents/*.md` are executed by a **model**, not by a shell, and nothing in CI can run a real
+provider. `tests/test-adapter-blocks.sh` closes most of that gap: it extracts each adapter's
+invocation block *out of the adapter itself* — not a copy, which would drift — points it at
+a local mock, and drives six outcomes through it (success, truncation, auth failure, bad
+request, empty, and a hostile payload). It then applies the adapter's own classification
+table and asserts the resulting status.
+
+That test exists because the GLM block could not classify anything: it captured neither the
+HTTP status nor `.stop_reason`, so six distinct outcomes came back identical. Every other
+check in this repo passed the whole time, because every other check reads the file.
+
+If you change a block, run it. If you add an adapter, add it to that test.
+
 ### If you add a CI gate, add the proof that it fires
 
 Every gate in `.github/workflows/lint.yml` exists because something got through. A gate nobody

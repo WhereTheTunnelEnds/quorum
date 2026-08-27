@@ -52,6 +52,8 @@ cited as if it could.
 | Two delegations never share a worktree or branch | delegate-task, safety-model | the name carries repo, provider, slug, date and an `mktemp -u` suffix; 100 rapid draws produced 100 distinct names |
 | `install.sh` never destroys a file it did not create | field-notes | put a regular file at `~/.local/bin/quorum-status`, run `install.sh`, check its sha — it is REFUSED, and the install exits non-zero |
 | Every ```bash block in the repo is valid bash | CONTRIBUTING | CI job "Every bash-fenced block is valid bash", or `tests/test-lint-gates.sh` |
+| Each adapter's runnable block reaches the status its own table requires | adapter-contract, all adapters | `tests/test-adapter-blocks.sh` — extracts the real block from the adapter, runs it against a local mock across six outcomes, and applies the documented table |
+| A hostile provider response cannot forge a status line through any adapter | field-notes, safety-model | same test — the fence marker and C1 controls must be gone from `$TEXT` in all five pipelines |
 | Every CI gate fires on the violation it claims to catch | field-notes, CONTRIBUTING | `tests/test-lint-gates.sh` — every gate but two, three-phase (clean / injected / reverted); the two it cannot exercise are named in its own output |
 
 ## Observed — reported, not reproducible from this repo
