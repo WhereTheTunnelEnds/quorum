@@ -46,6 +46,7 @@ cited as if it could.
 | `quorum-status --json` stays valid JSON under hostile provider text | quorum-status | `tests/test-quorum-status-json.sh` |
 | A command and a skill cannot share a name | field-notes | CI, or `for c in commands/*.md; do [ -d "skills/$(basename "$c" .md)" ] && echo COLLISION; done` |
 | No API key is ever passed on a curl command line | field-notes | CI job "No API key passed on a command line" in `.github/workflows/lint.yml` -- run `act -j lint`, or read the gate and run it |
+| This repo's git history contains no credential-shaped string | release checklist | `tests/test-history-has-no-secrets.sh` — scans every blob on every ref, and proves it can fail by planting one in a throwaway clone |
 | Every CI gate fires on the violation it claims to catch | field-notes, CONTRIBUTING | `tests/test-lint-gates.sh` — every gate but two, three-phase (clean / injected / reverted); the two it cannot exercise are named in its own output |
 
 ## Observed — reported, not reproducible from this repo

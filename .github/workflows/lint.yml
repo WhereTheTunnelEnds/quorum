@@ -11,6 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history, because tests/test-history-has-no-secrets.sh scans every blob
+          # ever committed -- which is what going public actually exposes. The default
+          # shallow checkout gives it one commit, and it would then report "clean" having
+          # examined almost nothing. It says so when shallow, but an honest vacuous check
+          # is still a vacuous check. 62 commits costs nothing to fetch.
+          fetch-depth: 0
 
       - name: Validate JSON manifests
         run: |
