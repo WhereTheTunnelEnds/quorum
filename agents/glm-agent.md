@@ -333,7 +333,11 @@ fi
 ( cd "$WT" && quorum-claude-on zai -p "<the task>" --dangerously-skip-permissions )
 
 git -C "$WT" --no-pager diff --stat
-git status --porcelain          # in the REAL tree — the diffstat above cannot show escapes
+git -C "$WT" status --porcelain # untracked files: `diff --stat` shows NOTHING for a file the
+                                # delegate CREATED, which is the normal outcome. Without this
+                                # the report said "clean" for a run that wrote three new files.
+MAIN=$(dirname "$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)")
+git -C "$MAIN" status --porcelain  # the REAL tree — the diffstat above cannot show escapes
 ```
 
 `quorum-claude-on` is an executable on `PATH`, not a shell function, so it resolves in

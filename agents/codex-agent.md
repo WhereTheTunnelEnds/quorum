@@ -72,7 +72,15 @@ PROMPT_EOF
 git -C "$WT" --no-pager diff --stat
 # --stat alone is NOT enough: it shows nothing for untracked files, and a run that
 # CREATES files -- the normal delegate outcome -- leaves it empty and looks clean.
-git -C "$WT" status --porcelain   # expect empty; report it if not
+git -C "$WT" status --porcelain
+
+# And check the REAL checkout. A worktree is not a boundary -- code inside one reaches the
+# original with a single `git rev-parse` and shares its `.git`. What this repo guarantees is
+# that an escape is DETECTED, and this block could not detect one: it inspected only $WT, so
+# a provider that wrote into the user's tree was reported as a clean run. copilot and glm
+# both had this line; codex did not. Measured with a shim that writes outside the worktree.
+MAIN=$(dirname "$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)")
+git -C "$MAIN" status --porcelain     # expect UNCHANGED — did it reach the real tree?   # expect empty; report it if not
 ```
 
 The diffstat check matters: verification should leave no changes. If it produced a diff,
@@ -124,6 +132,14 @@ git -C "$WT" --no-pager diff --stat
 # --stat alone is NOT enough: it shows nothing for untracked files, and a run that
 # CREATES files -- the normal delegate outcome -- leaves it empty and looks clean.
 git -C "$WT" status --porcelain
+
+# And check the REAL checkout. A worktree is not a boundary -- code inside one reaches the
+# original with a single `git rev-parse` and shares its `.git`. What this repo guarantees is
+# that an escape is DETECTED, and this block could not detect one: it inspected only $WT, so
+# a provider that wrote into the user's tree was reported as a clean run. copilot and glm
+# both had this line; codex did not. Measured with a shim that writes outside the worktree.
+MAIN=$(dirname "$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)")
+git -C "$MAIN" status --porcelain     # expect UNCHANGED — did it reach the real tree?
 ```
 
 `workspace-write` confines writes to the worktree. Report path, branch, and diffstat.

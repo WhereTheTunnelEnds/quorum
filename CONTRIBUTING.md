@@ -130,6 +130,21 @@ check in this repo passed the whole time, because every other check reads the fi
 
 If you change a block, run it. If you add an adapter, add it to that test.
 
+### The verify and delegate blocks have their own test
+
+`tests/test-worktree-tiers.sh` covers the two tiers that run commands and write files. For
+each of the six blocks it asserts what `docs/safety-model.md` claims: a worktree is created
+with a name two concurrent runs cannot share, a failed `git worktree add` stops it *before*
+the provider runs, the provider is pointed at the worktree rather than the checkout, the
+report shows newly-created files (which `diff --stat` hides), and — the important one — an
+escape into the real checkout is **surfaced by the block's own output**.
+
+That last property is the one worth being careful about. A worktree is not a boundary; a
+provider reaches the original checkout with one `git rev-parse`. What this repo guarantees
+is that an escape is *detected*, so the test simulates one and requires the block to reveal
+it. Writing this test found that codex's verify and delegate blocks inspected only the
+worktree — a provider that wrote into the user's tree was reported as a clean run.
+
 ### If you add a CI gate, add the proof that it fires
 
 Every gate in `.github/workflows/lint.yml` exists because something got through. A gate nobody
