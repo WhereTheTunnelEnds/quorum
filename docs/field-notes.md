@@ -1073,6 +1073,91 @@ and exited 0 — looking like a gate that does not fire, when in CI it does.
 after, with no change to any gate. A test environment that does not match the one being
 reproduced produces confident wrong answers — and here it produced three of them at once.
 
+### A rule that is not in the pipeline is not a rule
+
+**Symptom.** Five adapters each carried the untrusted-output rule, a CI gate confirmed all
+five carried it, and the rule ran in none of them.
+
+**Cause.** The rule had two halves. The substitution half existed only as prose —
+*"Substitute both markers out of the provider's stdout"* — with the concrete `sed` living in
+`docs/adapter-contract.md`, which the adapters link to but do not inline. Measured:
+
+```
+grep -c 'sed -e' agents/*.md   ->  0 for all five
+```
+
+The strip half shipped as a literal command, but as a *fragment* with no input, no output
+and no assignment, 95 to 313 lines below the line that captured the text:
+
+```bash
+# after substituting the markers, before the text enters the envelope
+LC_ALL=C tr -d '\000-\010\013-\037\177'
+```
+
+The gate checked that each adapter *contained the string* `LC_ALL=C tr -d`. It did, so the
+gate printed **"all adapters neutralise markers AND control characters"** — a sentence about
+behaviour, backed by a check on text.
+
+**Fix.** `scripts/quorum-sanitize`, on PATH, piped into every capture. One command, in the
+pipe, testable. The gate now requires the command in an actual pipeline, and
+`tests/test-sanitize.sh` runs 30 hostile fixtures through it.
+
+**Measured.** Every fixture in that test is a payload that beat the old implementation.
+
+**The general shape.** The audience for an adapter is a model, and the contract says to run
+them on haiku-class models — the ones least able to reconstruct a correct `sed` from a
+sentence. Anything you would be unhappy for a model to improvise belongs in a command, not
+in prose beside one.
+
+### One honouring terminal is enough
+
+**Symptom.** An adapter emitted `status: error`. The user's screen said `status: ok`.
+
+**Cause.** `U+009B` is the single-character CSI. Every byte after it is printable ASCII, so
+the whole ANSI repertoire is reachable without using one byte the filter removed. The
+filter was a byte-range `tr`, and `c2 9b` — the UTF-8 encoding — is not in any byte range it
+covered, in any locale:
+
+```
+41 c2 9b 42   LC_ALL=C      -> 41 c2 9b 42    survives
+              en_US.UTF-8   -> 41 c2 9b 42    survives
+```
+
+`docs/adapter-contract.md` had recorded this honestly and got it wrong anyway: *"a
+UTF-8-encoded C1 control passes through — tmux renders it inert, but that was the only
+emulator available to test."* A second emulator was tested. GNU screen 4.00.03 — the build
+macOS ships at `/usr/bin/screen` — honours it. `CSI H` homes the cursor, `CSI K` erases the
+line, and the forged `status: ok` lands on top of the real one.
+
+**Fix.** Strip `U+0080`–`U+009F` after decoding. Decoding is not optional: extending the
+byte range to `\200-\237` turns `e6 97 a5 e6 9c ac` into `e6 a5 e6 ac` — it corrupts every
+multi-byte character it touches.
+
+**Measured.** Rendered via `screen -X hardcopy`, so nothing reached the auditing terminal.
+Before the fix, line 1 read `status: ok`; after, `status: error`.
+
+**The general shape.** "I could only test one implementation" is a result, not a conclusion.
+The honest hedge was recorded and then quietly leaned on as though it settled the question.
+
+### The temp file that solved one problem and created another
+
+**Symptom.** 110 files in the shared temp directory, each containing the live API key.
+
+**Cause.** `quorum-status` and `quorum-auth` wrote the key to a `mktemp` header file
+specifically to keep it out of `argv`, where `ps auxww` would show it. That part worked. The
+file was then never deleted — no `rm`, no `trap`, on any path. One new file per invocation,
+measured at 130 of 130 runs by one auditor and 241 files by another.
+
+The adapters, the probes and the porting docs all cleaned up correctly. Only the two shipped
+scripts did not, so the repo's documentation of the fix was more correct than its code.
+
+**Fix.** `rm` after the call, plus `trap ... EXIT INT TERM HUP` — `probes/glm.sh` had the
+`rm` and still leaked one when interrupted mid-request.
+
+**Measured.** Five runs before: five new files. Five runs after: zero.
+
+**The general shape.** A mitigation introduces its own lifecycle. Moving a secret out of one
+place puts it in another, and the second place needs the same attention the first one got.
 ---
 
 ## Adding an entry

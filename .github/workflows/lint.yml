@@ -50,6 +50,42 @@ jobs:
           [ "$fail" = 0 ] && echo "every shipped adapter is named in a manifest description"
           exit $fail
 
+      - name: Every bash-fenced block is valid bash
+        run: |
+          # A ```bash block is an instruction to run something. Eight of them across agents/,
+          # skills/ and docs/ did not parse -- placeholders like `<cli> --help` and
+          # `timeout 120 <invocation>` read as redirections, so `bash -n` failed with
+          # "syntax error near unexpected token". They are templates, not commands, and are
+          # now fenced as ```text.
+          #
+          # This matters because the audience is a MODEL. A block labelled bash, under a
+          # heading reading "Tested and working. Use these exactly.", is something it will
+          # copy and run. `bash -n` on scripts/ has existed all along; the markdown -- which
+          # is where every adapter's actual instructions live -- was never checked.
+          python3 - <<'PY'
+          import pathlib, re, subprocess, sys
+          bad = tot = 0
+          for f in sorted(pathlib.Path('.').rglob('*.md')):
+              if '.git/' in str(f):
+                  continue
+              s = f.read_text()
+              for m in re.finditer(r'```bash\n(.*?)```', s, re.S):
+                  tot += 1
+                  r = subprocess.run(['bash', '-n'], input=m.group(1),
+                                     capture_output=True, text=True)
+                  if r.returncode:
+                      line = s[:m.start()].count('\n') + 1
+                      err = (r.stderr.strip().splitlines() or [''])[0]
+                      print(f"{f}:{line}: {err}")
+                      bad += 1
+          print(f"{tot} bash-fenced blocks checked, {bad} do not parse")
+          if bad:
+              print()
+              print("ERROR: a ```bash block that is not valid bash. If it is a template,")
+              print("       fence it as ```text so nobody -- and no model -- runs it.")
+          sys.exit(1 if bad else 0)
+          PY
+
       - name: Shell syntax
         run: |
           for f in scripts/* probes/*.sh; do

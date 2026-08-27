@@ -143,6 +143,15 @@ inject_manifests_name_every_adapter_that_ships() {
 revert_manifests_name_every_adapter_that_ships() {
   rm -f "$SANDBOX/agents/zzprov-agent.md"; }
 
+# The real failure shape: a placeholder read as two consecutive redirections. An earlier
+# version of this injection used `if [ 1 = 1 ; then echo hi; fi` -- which PARSES, because the
+# missing `]` is a runtime error, not a syntax one. The gate correctly reported no problem
+# and the harness correctly reported the gate did not fire.
+inject_every_bash_fenced_block_is_valid_bash() {
+  printf '\n```bash\ntimeout 120 <invocation> >"$OUT" 2>"$ERR"\n```\n' >> "$SANDBOX/docs/troubleshooting.md"; }
+revert_every_bash_fenced_block_is_valid_bash() {
+  cp "$REPO/docs/troubleshooting.md" "$SANDBOX/docs/troubleshooting.md"; }
+
 inject_shell_syntax()              { printf '#!/usr/bin/env bash\nif [ 1 = 1 ; then\n' > "$SANDBOX/scripts/zz-bad"; }
 revert_shell_syntax()              { rm -f "$SANDBOX/scripts/zz-bad"; }
 

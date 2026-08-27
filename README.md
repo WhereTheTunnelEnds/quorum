@@ -204,8 +204,11 @@ which fails silently the first time it matters. Starting points for common shape
 
 ## Safety
 
-Three tiers — and **only one of them is enforced by anything stronger than a convention.**
-That distinction is the most important thing on this page.
+Three tiers, and what enforces each one differs sharply — including *between providers*
+within the same tier. **consult** is genuinely enforced everywhere. **verify** is enforced
+by an OS sandbox on Codex and by an allowlist elsewhere, which is not the same thing.
+**delegate** is enforced by nothing at all except on Codex. Read the table, not the tier
+name; the tier name is a label, and the Enforced-by column is the claim.
 
 | Tier | Read | Run commands | Write | Enforced by |
 |---|---|---|---|---|

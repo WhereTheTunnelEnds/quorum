@@ -44,6 +44,37 @@ SRC=$(cd "$(dirname "$0")" && pwd)
 DEST="${1:-$HOME/.local/bin}"
 TOOLS="quorum-setup quorum-status quorum-auth quorum-flags quorum-claude-on quorum-verify quorum-sanitize prep-image make-probe-image"
 
+# --- uninstall -----------------------------------------------------------------------------
+# There was no way to undo an install, and nothing said so. A user who wanted out had to work
+# out unaided that it means: symlinks in ~/.local/bin, a PATH line in one of five possible
+# shell files, an export line in the same file, ~/.config/quorum/, and optionally copies
+# under ~/.claude/. Reusing $TOOLS here means this list cannot drift from what was installed.
+#
+# Removes ONLY symlinks that resolve into THIS clone. A same-named file belonging to someone
+# else is left exactly where it is -- the mirror of the install path refusing to overwrite it.
+if [ "${1:-}" = "--uninstall" ]; then
+  DEST="${2:-$HOME/.local/bin}"
+  removed=0; skipped=0
+  for t in $TOOLS; do
+    [ -L "$DEST/$t" ] || { [ -e "$DEST/$t" ] && { echo "  kept     $DEST/$t (not a symlink — not ours)"; skipped=$((skipped+1)); }; continue; }
+    target=$(readlink "$DEST/$t")
+    case "$target" in
+      "$SRC/$t") rm -f "$DEST/$t"; echo "  removed  $DEST/$t"; removed=$((removed+1)) ;;
+      *) echo "  kept     $DEST/$t -> $target (points at a different clone)"; skipped=$((skipped+1)) ;;
+    esac
+  done
+  echo
+  echo "$removed removed, $skipped left alone."
+  echo
+  echo "NOT removed, because they may hold things you want — check them by hand:"
+  echo "  $QUORUM_ENVFILE_SHORT        a PATH line, and possibly an exported API key"
+  echo "  ~/.config/quorum/            endpoint presets"
+  echo "  ~/.claude/agents, skills, commands/quorum   if you copied them there"
+  echo
+  echo "This clone is still at $SRC — delete it separately if you want it gone."
+  exit 0
+fi
+
 mkdir -p "$DEST"
 
 # Warn if these symlinks already point at a DIFFERENT clone. Silently repointing them is

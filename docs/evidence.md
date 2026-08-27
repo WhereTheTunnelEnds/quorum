@@ -47,6 +47,11 @@ cited as if it could.
 | A command and a skill cannot share a name | field-notes | CI, or `for c in commands/*.md; do [ -d "skills/$(basename "$c" .md)" ] && echo COLLISION; done` |
 | No API key is ever passed on a curl command line | field-notes | CI job "No API key passed on a command line" in `.github/workflows/lint.yml` -- run `act -j validate`, or read the gate and run it |
 | This repo's git history contains no credential-shaped string | release checklist | `tests/test-history-has-no-secrets.sh` — scans every blob on every ref, and proves it can fail by planting one in a throwaway clone |
+| `quorum-sanitize` neutralises forged fence markers and strips C0/C1 | adapter-contract, all adapters | `tests/test-sanitize.sh` — 30 fixtures, each one a payload that defeated the previous implementation |
+| The key is never left on disk after a call | field-notes | count files in `$TMPDIR` whose first line begins `Authorization: Bearer`, run `quorum-status`, count again — delta 0 |
+| Two delegations never share a worktree or branch | delegate-task, safety-model | the name carries repo, provider, slug, date and an `mktemp -u` suffix; 100 rapid draws produced 100 distinct names |
+| `install.sh` never destroys a file it did not create | field-notes | put a regular file at `~/.local/bin/quorum-status`, run `install.sh`, check its sha — it is REFUSED, and the install exits non-zero |
+| Every ```bash block in the repo is valid bash | CONTRIBUTING | CI job "Every bash-fenced block is valid bash", or `tests/test-lint-gates.sh` |
 | Every CI gate fires on the violation it claims to catch | field-notes, CONTRIBUTING | `tests/test-lint-gates.sh` — every gate but two, three-phase (clean / injected / reverted); the two it cannot exercise are named in its own output |
 
 ## Observed — reported, not reproducible from this repo

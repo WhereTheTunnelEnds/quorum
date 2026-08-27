@@ -51,7 +51,13 @@ failure modes each one avoids are in each agent's own file.
 echo "$Q" | codex exec --sandbox read-only --skip-git-repo-check - | quorum-sanitize
 
 # COPILOT
-copilot -p "$Q" --plan -s --no-ask-user --allow-tool "read" | quorum-sanitize
+copilot -p "$Q" --plan -s --no-ask-user --allow-tool "read" --allow-tool 'shell(git)' \
+  | quorum-sanitize
+# Matches agents/copilot-agent.md exactly. This block omitted the shell(git) grant, so a
+# panelist here could not read repo history while the same "verified" invocation in the
+# adapter could. Two spellings of one call means one of them is stale; the adapter is the
+# one that was corrected (it documents the broken `shell:git *` form and why it fails).
+# `--plan` is what keeps this safe: it hard-blocks edits and mutating shell in the harness.
 
 # GLM — no CLI exists; call the API directly. Do not check for a `glm` binary.
 # mktemp, NOT fixed names in the current directory. This block used to write `body.json`
@@ -88,8 +94,12 @@ jq -r 'if .content then ([.content[]|select(.type=="text")|.text]|join(""))
   && echo "(TRUNCATED — partial answer, do not count as a complete vote)" >&2
 ```
 
-**Dispatch every selected panelist in ONE message** so they run in parallel. Use `run_in_background: true`;
-a full panel takes 2–10 minutes. Sequential dispatch triples wall-clock for no benefit.
+**Dispatch every selected panelist in ONE message** so they run in parallel — that is,
+several Agent calls in a single response, which is how step 2 below describes it. A full
+panel takes 2–10 minutes; sequential dispatch multiplies wall-clock for no benefit.
+
+(This used to say "Use `run_in_background: true`". That is a **Bash** tool parameter, not an
+Agent one, so following it literally passes an unknown parameter to the wrong tool.)
 
 **Mind the background-wait ceiling.** A real panel run was terminated mid-synthesis at 600s
 with *"Background tasks still running after 600s; terminating."* Two panelists had answered

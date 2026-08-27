@@ -315,7 +315,7 @@ Read the diff before believing anything it said.
 
 ### Worktrees are piling up
 
-```bash
+```text
 git worktree list
 git worktree remove ../.worktrees/<repo>/<branch>
 ```
@@ -331,7 +331,7 @@ look at again.
 field note claimed Copilot printed a usage error to stdout; measurement showed stderr with
 an empty stdout. The docs were wrong.
 
-```bash
+```text
 OUT=$(mktemp); ERR=$(mktemp)
 <the invocation> >"$OUT" 2>"$ERR"; RC=$?
 echo "rc=$RC stdout=$(wc -c <"$OUT") stderr=$(wc -c <"$ERR")"
@@ -377,7 +377,7 @@ in the [model-panel skill](../skills/model-panel/SKILL.md).
 
 Open an issue with:
 
-```bash
+```text
 quorum-status
 quorum-verify <provider>
 <provider-cli> --version

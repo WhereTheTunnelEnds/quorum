@@ -47,6 +47,7 @@ unavailable, and that is a normal, working state — not an error.
 ## 1. Prerequisites
 
 ```bash
+bash --version     # the one hard requirement — every Quorum script is #!/usr/bin/env bash
 node --version     # v18+  (for the Codex and Copilot CLIs)
 git --version
 jq --version
@@ -387,3 +388,31 @@ Nothing is merged, pushed, or deleted without you asking.
 | What each tier can touch | [safety-model.md](safety-model.md) |
 | Why this isn't a proxy | [why-delegation-not-proxying.md](why-delegation-not-proxying.md) |
 | Every failure found the hard way | [field-notes.md](field-notes.md) |
+
+## Uninstalling
+
+```bash
+./scripts/install.sh --uninstall
+```
+
+It removes only the symlinks that point into this clone. A same-named file that belongs to
+something else is reported and left alone, and so is a symlink pointing at a different
+Quorum clone.
+
+It deliberately does **not** touch three things, and names them so you can decide:
+
+- the PATH line, and any `Z_AI_API_KEY` export, in whichever shell file was used
+- `~/.config/quorum/` — endpoint presets
+- anything you copied into `~/.claude/agents`, `~/.claude/skills` or `~/.claude/commands/quorum`
+
+The clone itself stays where it is; delete it separately.
+
+**A note on that last one:** the manual copy documented above uses `cp -r`, which
+**overwrites same-named files without warning and takes no backup**. `model-panel` and
+`delegate-task` are generic enough to collide with skills you already have. Check first:
+
+```bash
+ls ~/.claude/skills ~/.claude/agents 2>/dev/null
+```
+
+and use `cp -rn` if you want existing files left alone.

@@ -61,7 +61,7 @@ Establish the invocation the vendor actually documents, then confirm it by runni
 
 Before probing, dump the complete help and read all of it:
 
-```bash
+```text
 <cli> --help
 <cli> <subcommand> --help     # exec, chat, run — wherever the real work happens
 ```
@@ -114,7 +114,7 @@ and write down exactly what comes back.
 **Measure unpiped.** `provider ... | tail` reports `tail`'s exit status, which is how a
 failing call gets recorded as a working one. Redirect to separate files:
 
-```bash
+```text
 OUT=$(mktemp); ERR=$(mktemp)
 timeout 120 <invocation> >"$OUT" 2>"$ERR"; RC=$?
 echo "rc=$RC stdout=$(wc -c <"$OUT") stderr=$(wc -c <"$ERR")"
@@ -164,7 +164,7 @@ Copy the templates, then fill them from your notes — never from memory of the 
 
 ## Step 4 — Prove it
 
-```bash
+```text
 quorum-verify <name>              # does it work?
 quorum-flags                      # do the flags it depends on still exist?
 ```

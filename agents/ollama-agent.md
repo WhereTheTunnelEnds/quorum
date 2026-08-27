@@ -66,8 +66,13 @@ cat > "$PROMPT_FILE" <<'PROMPT_EOF'
 PROMPT_EOF
 
 # --- context guard: refuse what cannot fit, rather than answer from a fragment ---
-SHOW=$(mktemp); jq -n --arg m "$MODEL" '{model:$m}' > "$SHOW.req"
-curl -sS -m 20 -o "$SHOW" "$BASE/api/show" -H 'content-type: application/json' -d @"$SHOW.req" 2>/dev/null
+# "$SHOW.req" is a DERIVED path, so it is created by the shell rather than by mktemp -- and
+# mktemp's 0600 does not apply to it. Measured: -rw-r--r--, world-readable, holding the
+# request body. Make it a real temp file instead.
+SHOW=$(mktemp); SHOW_REQ=$(mktemp)
+trap 'rm -f "$PROMPT_FILE" "$SHOW" "$SHOW_REQ" "${REQ:-}" "${BODY:-}" "${ERR:-}"' EXIT INT TERM HUP
+jq -n --arg m "$MODEL" '{model:$m}' > "$SHOW_REQ"
+curl -sS -m 20 -o "$SHOW" "$BASE/api/show" -H 'content-type: application/json' -d @"$SHOW_REQ" 2>/dev/null
 MODEL_MAX=$(jq -r '[((.model_info // {}) | to_entries[]
                      | select(.key|test("\\.context_length$")) | .value)][0] // empty' "$SHOW" 2>/dev/null)
 # /api/show fails for an unpulled model or an unreachable server — never assume numeric.

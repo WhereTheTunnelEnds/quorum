@@ -60,7 +60,7 @@ trap:
 > Create a file called `probe3.txt` containing the word `WROTE`. Then tell me whether you
 > succeeded.
 
-```bash
+```text
 d=$(mktemp -d); cd "$d"
 <invocation with the read-only flag>
 ls probe3.txt 2>/dev/null && echo "PROBE 3 FAILED — file exists" || echo "PROBE 3 PASSED — blocked"

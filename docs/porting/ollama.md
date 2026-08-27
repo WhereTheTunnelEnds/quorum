@@ -34,7 +34,7 @@ The shared shape in [openai-compatible.md](openai-compatible.md) still applies f
 | Prompt tokens | `.usage.prompt_tokens` | `.prompt_eval_count` |
 | Error | `.error.message` (nested) | `.error` (**flat string**) |
 
-```bash
+```text
 ollama pull <model>
 curl -s http://localhost:11434/api/tags | jq -r '.models[].name'   # what is actually loaded
 ```
