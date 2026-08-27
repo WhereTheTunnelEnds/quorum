@@ -184,17 +184,31 @@ The asymmetry is what made this worth fixing: `quorum-status` strips control byt
 third-party GitHub issue text — with `ESC` intact. The larger attack surface had the weaker
 filter.
 
-`LC_ALL=C` is required. Under a UTF-8 locale, `tr` aborts on the first byte that is not
-valid UTF-8 and silently drops everything after it — measured on `41 9b 42`: `LC_ALL=C`
-returns all three bytes, `en_US.UTF-8` returns only `41`. The ranges keep `\t` and `\n`, so
-multi-line answers survive, and bytes ≥ 0x80 pass untouched so non-ASCII does too.
+`LC_ALL=C` was required for the superseded `tr`, and the reason given for it was
+BSD-specific while being stated as universal. Measured on `41 9b 42`: BSD `tr` under
+`en_US.UTF-8` reports *"Illegal byte sequence"* and truncates to `41`; GNU `tr` — which is
+what this repo's CI runs — returns all three bytes under either locale, so the described
+failure never occurs there.
 
-**Known limits, stated rather than papered over.** The `sed` above is byte-exact, so
-lowercase, altered spacing, a different number of dashes, or an em-dash all survive it. And
-bytes ≥ 0x80 are deliberately preserved, which means a UTF-8-encoded C1 control (U+009B, the
-single-character CSI, encoding as `c2 9b`) passes through — tmux renders it inert, but that
-was the only emulator available to test. Treat the delimiter as a convention that raises the
-cost of confusion, never as a parser boundary. The rule that actually holds is the one below
+**Known limits, stated rather than papered over.** `quorum-sanitize` now catches everything
+the old byte-exact `sed` did not — lowercase, altered spacing, any dash count, em-dashes,
+Cyrillic and Greek homoglyphs, fullwidth forms, zero-width characters inside the marker, and
+markers split across lines. Each of those is a fixture in `tests/test-sanitize.sh`, and each
+defeated the previous implementation.
+
+Two limits remain, and neither is fixable by filtering:
+
+- **The marker is still forgeable in principle.** A neutralised marker renders as
+  `[marker neutralised]`, which is visible rather than silent — that is the whole gain. It
+  is not a parser boundary and must never be used as one.
+- **A model that decides to obey instructions it read inside the fence** is not something a
+  filter can prevent.
+
+An earlier version of this paragraph said a UTF-8-encoded C1 control "passes through — tmux
+renders it inert, but that was the only emulator available to test." A second emulator was
+tested. GNU screen 4.00.03, the build macOS ships, honours it, and a payload whose adapter
+emitted `status: error` rendered as `status: ok`. The hedge was honest and was then leaned
+on as though it settled the question. The rule that actually holds is the one below
 it: **never emit a `status:` line that came from the provider.**
 
 **And callers must not treat post-delimiter text as authoritative by position alone.** A

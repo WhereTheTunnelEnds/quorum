@@ -334,10 +334,20 @@ input, no output and no assignment, 95 to 313 lines below the line that captured
 A rule that is not in the pipeline is not a rule, and adapters are meant to run on
 haiku-class models, which are the least able to rebuild a correct `sed` from a sentence.
 
-`LC_ALL=C` is required, not stylistic: under a UTF-8 locale `tr` aborts on the first byte
-that is not valid UTF-8 and silently drops everything after it. Measured on `41 9b 42` —
-`LC_ALL=C` returns all three bytes, `en_US.UTF-8` returns only the first. Bytes ≥ 0x80 pass
-either way, so non-ASCII answers survive intact.
+That pair is no longer the mechanism, so do not reconstruct it. `quorum-sanitize` decodes
+UTF-8 first and works on characters, which is what makes stripping C1 possible at all
+without destroying multi-byte text.
+
+For the record, the old `LC_ALL=C` advice was also **platform-specific and stated as
+universal**. On `41 9b 42`:
+
+| | `LC_ALL=C` | `en_US.UTF-8` |
+|---|---|---|
+| **BSD `tr`** (macOS) | `41 9b 42` | `tr: Illegal byte sequence`, output truncated to `41` |
+| **GNU `tr`** (Linux, and CI) | `41 9b 42` | `41 9b 42` — no abort |
+
+The documented failure simply does not happen on GNU, so the reason given for the flag was
+wrong on the platform the repo's own CI runs.
 
 **Emit these lines as plain text. Do not wrap the envelope in a code fence.** The block
 above shows the *shape*; the backticks are this document's formatting, not part of the
