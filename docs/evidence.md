@@ -38,7 +38,7 @@ cited as if it could.
 | `quorum-verify` exits non-zero when it verified **nothing** | adapter-contract | `quorum-verify nosuchprovider; echo $?` |
 | Codex names all four quadrants correctly when asked for the BACKGROUND colour | codex-agent, probe-checklist | 5 of 5 runs with the disambiguated prompt; the ambiguous form yields `white` or the quadrant colour, and both are correct |
 | `prep-image` preserves colour through the PNG -> JPEG conversion | field-notes | decode the prepped JPEG (`sips -s format png`) and count distinct RGB values — the four probe colours survive |
-| The probe image really is red-circle / green-square / yellow-cross / blue-triangle | probe-checklist | `make-probe-image` then open it |
+| Each quadrant is a coloured BACKGROUND with a WHITE shape: red/circle TL, green/square TR, yellow/cross BR, blue/triangle BL | probe-checklist | `tests/test-probe-image.sh` — decodes the PNG and asserts every shape centre is (255,255,255) and every quadrant corner is the named RGB. Proven to fail on a recoloured shape, a swapped quadrant, and docs reverting to the ambiguous wording |
 | `prep-image` fails cleanly with no converter present | porting docs | `tests/test-prep-image-no-converter.sh` |
 | Ollama's `/v1` endpoint **discards** `options.num_ctx` while `/api/chat` honours it | field-notes | the entry states the measurement (prompt_tokens 32768 via /v1 vs prompt_eval_count 48071 via /api/chat) but does not carry runnable commands — treat it as Observed until it does |
 | Antigravity's headless mode auto-denies `write_file` | safety-model, field-notes | `d=$(mktemp -d); cd "$d" && agy --add-dir "$d" -p "create a file test.txt containing X"` |
