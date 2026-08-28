@@ -66,6 +66,15 @@ for _q_need in quorum-sanitize; do
   }
 done
 
+# `command -v` proves a file exists, not that it RUNS. quorum-sanitize needs perl, and with
+# perl absent it exits 127, the pipe yields "", and a good answer is classified `empty` --
+# the same bug one layer down. Measured on a stub PATH with no perl. Prove it works.
+printf . | quorum-sanitize >/dev/null 2>&1 || {
+  echo "status: error — quorum-sanitize is present but does not run (is perl installed?)."
+  echo "Try: printf . | quorum-sanitize    — it should print a single dot."
+  exit 1
+}
+
 # Precondition: read-only here is enforced by headless auto-deny, which a GLOBAL allow-rule
 # can override. That file is machine-wide, so a rule added for an unrelated project silently
 # weakens this consult. Check it — do not assume it.
@@ -205,6 +214,15 @@ for _q_need in quorum-sanitize; do
   }
 done
 
+# `command -v` proves a file exists, not that it RUNS. quorum-sanitize needs perl, and with
+# perl absent it exits 127, the pipe yields "", and a good answer is classified `empty` --
+# the same bug one layer down. Measured on a stub PATH with no perl. Prove it works.
+printf . | quorum-sanitize >/dev/null 2>&1 || {
+  echo "status: error — quorum-sanitize is present but does not run (is perl installed?)."
+  echo "Try: printf . | quorum-sanitize    — it should print a single dot."
+  exit 1
+}
+
 OUT=$(mktemp); ERR=$(mktemp)
 timeout 900 agy --add-dir "$REPO" --disable-slash-commands \
   --print-timeout 10m -p "$PROMPT" >"$OUT" 2>"$ERR"
@@ -284,6 +302,15 @@ for _q_need in quorum-sanitize; do
     exit 1
   }
 done
+
+# `command -v` proves a file exists, not that it RUNS. quorum-sanitize needs perl, and with
+# perl absent it exits 127, the pipe yields "", and a good answer is classified `empty` --
+# the same bug one layer down. Measured on a stub PATH with no perl. Prove it works.
+printf . | quorum-sanitize >/dev/null 2>&1 || {
+  echo "status: error — quorum-sanitize is present but does not run (is perl installed?)."
+  echo "Try: printf . | quorum-sanitize    — it should print a single dot."
+  exit 1
+}
 
 # The provider's raw bytes NEVER enter the envelope. Pipe every capture through this:
 TEXT=$(quorum-sanitize < "$OUT")          # file capture

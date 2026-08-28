@@ -53,6 +53,15 @@ for _q_need in quorum-sanitize; do
   }
 done
 
+# `command -v` proves a file exists, not that it RUNS. quorum-sanitize needs perl, and with
+# perl absent it exits 127, the pipe yields "", and a good answer is classified `empty` --
+# the same bug one layer down. Measured on a stub PATH with no perl. Prove it works.
+printf . | quorum-sanitize >/dev/null 2>&1 || {
+  echo "status: error — quorum-sanitize is present but does not run (is perl installed?)."
+  echo "Try: printf . | quorum-sanitize    — it should print a single dot."
+  exit 1
+}
+
 PROMPT_FILE=$(mktemp)
 cat > "$PROMPT_FILE" <<'PROMPT_EOF'
 <the question, with file contents inlined>
@@ -519,6 +528,15 @@ for _q_need in quorum-sanitize; do
     exit 1
   }
 done
+
+# `command -v` proves a file exists, not that it RUNS. quorum-sanitize needs perl, and with
+# perl absent it exits 127, the pipe yields "", and a good answer is classified `empty` --
+# the same bug one layer down. Measured on a stub PATH with no perl. Prove it works.
+printf . | quorum-sanitize >/dev/null 2>&1 || {
+  echo "status: error — quorum-sanitize is present but does not run (is perl installed?)."
+  echo "Try: printf . | quorum-sanitize    — it should print a single dot."
+  exit 1
+}
 
 # The provider's raw bytes NEVER enter the envelope. Pipe every capture through this:
 TEXT=$(quorum-sanitize < "$OUT")          # file capture

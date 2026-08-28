@@ -79,6 +79,23 @@ for c in git curl jq; do
 done
 command -v node >/dev/null 2>&1 && ok "node $(node --version 2>/dev/null)" \
   || hm "node missing — needed only for the Codex and Copilot CLIs"
+# quorum-sanitize is what keeps provider output from forging a status line, and it needs
+# perl. This is a hard requirement, not a nicety: without it every adapter refuses to run.
+# It is checked FUNCTIONALLY rather than with `command -v`, because the failure that matters
+# is "the file exists but does not run" -- measured, that yields an empty answer that the
+# classification tables read as `empty`.
+if printf . | quorum-sanitize >/dev/null 2>&1; then
+  ok "quorum-sanitize works (provider output can be sanitised)"
+elif command -v quorum-sanitize >/dev/null 2>&1; then
+  no "quorum-sanitize is installed but does not run — is perl present?"
+  run "$QUORUM_PKG_INSTALL perl"
+  notready=$((notready+1))
+else
+  no "quorum-sanitize not on PATH — adapters will refuse to run"
+  run "$ROOT/scripts/install.sh"
+  notready=$((notready+1))
+fi
+
 if command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; then
   ok "timeout"
 else

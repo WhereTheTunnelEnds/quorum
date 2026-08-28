@@ -496,6 +496,24 @@ for prov in glm ollama codex copilot antigravity; do
   else
     bad "$prov did not refuse without quorum-sanitize — it would report a good answer as empty"
   fi
+
+  # PRESENT BUT BROKEN is the harder case, and `command -v` cannot see it. quorum-sanitize
+  # needs perl; without perl it exits 127, the pipe yields "", and the table says `empty`.
+  NOPERL="$WORK/noperl"; mkdir -p "$NOPERL"
+  for u in bash sh jq curl sed tr grep printf mktemp cat head wc env dirname basename rm date; do
+    src=$(command -v "$u" 2>/dev/null) && ln -sf "$src" "$NOPERL/$u"
+  done
+  ln -sf "$ROOT/scripts/quorum-sanitize" "$NOPERL/quorum-sanitize"
+  if env -i PATH="$NOPERL" sh -c 'command -v perl' >/dev/null 2>&1; then
+    bad "$prov: could not build a perl-free PATH, so the check below would be inert"
+  else
+    brk=$(env -i HOME="$WORK/fakehome" PATH="$NOPERL" bash "$B" 2>&1)
+    if printf '%s' "$brk" | grep -q 'does not run'; then
+      ok "$prov refuses when quorum-sanitize is present but perl is missing"
+    else
+      bad "$prov ran with a broken quorum-sanitize — a good answer becomes 'empty'"
+    fi
+  fi
 done
 
 

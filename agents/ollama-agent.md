@@ -72,6 +72,15 @@ for _q_need in quorum-sanitize; do
   }
 done
 
+# `command -v` proves a file exists, not that it RUNS. quorum-sanitize needs perl, and with
+# perl absent it exits 127, the pipe yields "", and a good answer is classified `empty` --
+# the same bug one layer down. Measured on a stub PATH with no perl. Prove it works.
+printf . | quorum-sanitize >/dev/null 2>&1 || {
+  echo "status: error — quorum-sanitize is present but does not run (is perl installed?)."
+  echo "Try: printf . | quorum-sanitize    — it should print a single dot."
+  exit 1
+}
+
 BASE="${OLLAMA_BASE:-http://localhost:11434}"
 MODEL="${QUORUM_OLLAMA_MODEL:-$(curl -sS -m 10 "$BASE/api/tags" | jq -r '.models[0].name // empty')}"
 [ -n "$MODEL" ] || { echo "status: error — no model pulled. Run: ollama pull llama3.2:3b"; exit 1; }
@@ -229,6 +238,15 @@ for _q_need in quorum-sanitize; do
     exit 1
   }
 done
+
+# `command -v` proves a file exists, not that it RUNS. quorum-sanitize needs perl, and with
+# perl absent it exits 127, the pipe yields "", and a good answer is classified `empty` --
+# the same bug one layer down. Measured on a stub PATH with no perl. Prove it works.
+printf . | quorum-sanitize >/dev/null 2>&1 || {
+  echo "status: error — quorum-sanitize is present but does not run (is perl installed?)."
+  echo "Try: printf . | quorum-sanitize    — it should print a single dot."
+  exit 1
+}
 
 # The provider's raw bytes NEVER enter the envelope. Pipe every capture through this:
 TEXT=$(quorum-sanitize < "$OUT")          # file capture

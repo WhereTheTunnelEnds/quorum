@@ -134,6 +134,23 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
+      - name: README documents every command that gets installed
+        run: |
+          # install.sh puts nine commands on the user's PATH. The README documented six.
+          # quorum-sanitize was missing -- the one every adapter now refuses to run without --
+          # along with quorum-claude-on, which is how GLM's verify and delegate tiers work at
+          # all, and make-probe-image. A command a user has but cannot find out about is
+          # indistinguishable from one that does not exist.
+          fail=0
+          tools=$(grep '^TOOLS=' scripts/install.sh | sed 's/TOOLS="//; s/"$//')
+          for t in $tools; do
+            grep -q -- "$t" README.md || { echo "ERROR: install.sh installs '$t' and README.md never mentions it"; fail=1; }
+          done
+          # And the way back out. There was no uninstall at all until an audit asked for one.
+          grep -qi 'uninstall' README.md || { echo "ERROR: README.md does not say how to uninstall"; fail=1; }
+          [ "$fail" = 0 ] && echo "every installed command is documented, and so is removal"
+          exit $fail
+
       - name: Shell syntax
         run: |
           for f in scripts/* probes/*.sh; do

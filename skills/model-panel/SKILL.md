@@ -63,6 +63,15 @@ for _q_need in quorum-sanitize; do
   }
 done
 
+# `command -v` proves a file exists, not that it RUNS. quorum-sanitize needs perl, and with
+# perl absent it exits 127, the pipe yields "", and a good answer is classified `empty` --
+# the same bug one layer down. Measured on a stub PATH with no perl. Prove it works.
+printf . | quorum-sanitize >/dev/null 2>&1 || {
+  echo "status: error — quorum-sanitize is present but does not run (is perl installed?)."
+  echo "Try: printf . | quorum-sanitize    — it should print a single dot."
+  exit 1
+}
+
 # CODEX — must run inside a git repo, or pass --skip-git-repo-check
 echo "$Q" | codex exec --sandbox read-only --skip-git-repo-check - | quorum-sanitize
 

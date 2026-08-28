@@ -48,6 +48,7 @@ unavailable, and that is a normal, working state — not an error.
 
 ```bash
 bash --version     # the one hard requirement — every Quorum script is #!/usr/bin/env bash
+perl --version     # used by quorum-sanitize; ships with macOS and mainstream Linux
 node --version     # v18+  (for the Codex and Copilot CLIs)
 git --version
 jq --version

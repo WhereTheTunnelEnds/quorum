@@ -157,6 +157,11 @@ inject_quorum_s_own_commands_are_guarded_before_use() {
 revert_quorum_s_own_commands_are_guarded_before_use() {
   cp "$REPO/agents/ollama-agent.md" "$SANDBOX/agents/ollama-agent.md"; }
 
+inject_readme_documents_every_command_that_gets_installed() {
+  perl -0pi -e 's/quorum-sanitize/REDACTED-BY-TEST/g' "$SANDBOX/README.md"; }
+revert_readme_documents_every_command_that_gets_installed() {
+  cp "$REPO/README.md" "$SANDBOX/README.md"; }
+
 inject_shell_syntax()              { printf '#!/usr/bin/env bash\nif [ 1 = 1 ; then\n' > "$SANDBOX/scripts/zz-bad"; }
 revert_shell_syntax()              { rm -f "$SANDBOX/scripts/zz-bad"; }
 

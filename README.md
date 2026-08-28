@@ -47,6 +47,9 @@ built by walking into each of those failures first.
 | **`quorum-setup`** | Guided first run: prerequisites, PATH, provider choice, auth, then proof |
 | **`quorum-auth`** | Diagnoses what's unauthenticated and gives the one command that fixes each |
 | **`quorum-flags`** | Checks every flag the adapters depend on still exists in the live CLI |
+| **`quorum-sanitize`** | Neutralises the untrusted-output fence and strips control characters from provider text. Every adapter pipes through it and refuses to run without it |
+| **`quorum-claude-on`** | Points Claude Code at a non-Anthropic endpoint, which is how GLM's verify and delegate tiers get a real tool loop |
+| **`prep-image`, `make-probe-image`** | Normalise a photo to something every vision endpoint accepts; generate a known-content probe image |
 | **[Field notes](docs/field-notes.md)** | The failure catalogue, in symptom → cause → fix form |
 
 ## Install
@@ -116,6 +119,22 @@ quorum-status
 Anything missing? `quorum-auth` names the exact fix for each, and `/quorum:auth` walks you
 through it inside Claude Code.
 
+**Both halves really are needed.** Installing only the plugin leaves Quorum's own commands
+off your `PATH`, and the adapters refuse to run without them — deliberately. That refusal
+exists because the silent version was worse: with `quorum-sanitize` missing, a perfectly good
+HTTP 200 came back with empty text and got classified `empty`, *"the model had nothing to
+say."* Measured against the live API. See [field-notes.md](docs/field-notes.md).
+
+To remove everything later:
+
+```bash
+./scripts/install.sh --uninstall
+```
+
+It unlinks only the symlinks pointing into this clone, leaves anything it did not create
+alone, and names what it deliberately does not touch — your shell env line, `~/.config/quorum/`,
+and anything you copied into `~/.claude/`.
+
 `quorum-status` makes a **real call** wherever a real call is the only evidence: GLM gets an
 API request, Ollama gets a `/api/tags` fetch, Claude gets a credential check.
 
@@ -148,8 +167,13 @@ documented: [docs/providers.md](docs/providers.md).
 | Antigravity | `agy` CLI, one browser login (Antigravity subscription). **Consult only** |
 | anything else | build it with `/quorum:add-provider` |
 
-Plus `jq`, `curl`, `git`, and `bash`. `timeout(1)` is used for hang detection — macOS needs
-`brew install coreutils`.
+Plus `jq`, `curl`, `git`, `bash`, and `perl`. `timeout(1)` is used for hang detection — macOS
+needs `brew install coreutils`.
+
+`perl` is what `quorum-sanitize` uses to strip control characters from provider output
+without corrupting non-ASCII text; it ships with macOS and every mainstream Linux, so this
+is normally a non-event. It is listed because it is not optional: without it the adapters
+refuse to run rather than relay unsanitised text.
 
 **Nothing else is required.** Image normalization (`prep-image`, needed only if you send
 images to a panel) uses `sips`, which ships with macOS. ImageMagick is the fallback for
