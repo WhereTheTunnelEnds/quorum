@@ -1268,48 +1268,54 @@ Three things fall out of that, none of which was known before:
 **Fix.** Nothing to fix in the plugin itself — it installs and every component resolves. The
 lesson is procedural: *"we cannot test that because the repo is private"* was an assumption,
 not a measurement, and it survived several rounds of auditing unchallenged.
-### A probe that decides a tier, scored once, on a coin flip
+### I scored a correct answer as a failure
 
-**Symptom.** Probe 6 says a provider's vision works. Run it again and it fails. Nothing
-changed — not the image, not the prompt, not the flags.
+**Symptom.** The vision probe looked non-deterministic. Codex named the quadrant colours
+correctly on 7 runs out of 11 and answered `white` for all four on the other 4. Same image,
+same md5, same prompt, same flags.
 
-**Measured.** Codex, `make-probe-image` output through `prep-image`, the checklist's exact
-prompt, the same file with the same md5 every time:
+**Cause, and it was not the model.** The probe image is four **coloured quadrant
+backgrounds, each with a WHITE shape drawn on it**. `scripts/make-probe-image` says so, in
+the docstring of the function that draws them:
 
+```python
+"""White shape inside each quadrant: circle, square, triangle, cross."""
 ```
-run 1  CORRECT     run 4  CORRECT
-run 2  CORRECT     run 5  CORRECT
-run 3  white       run 6  CORRECT
-```
 
-Across every run today: **7 of 11 correct, 4 of 11 all-white.** In all four failures the
-shape and the quadrant were right for every one of the four; only the colour was wrong, and
-it was wrong the same way each time — `white` for red, green, yellow and blue alike.
+So the checklist's prompt — *"answer in the form `top-left: <colour> <shape>`"* — never said
+**which** colour, and both answers were right:
 
-**Cause.** Not determined, and worth saying so. What was ruled out, by measurement:
+- `white circle` — the colour of the *shape*
+- `red circle` — the colour of the *quadrant*, the shorthand the rest of the docs use
 
-- the source PNG really is coloured — five distinct RGB values, 78% of pixels non-white
-- `prep-image` preserves it — the JPEG actually sent decodes to the same four colours
-- it is not the file format — raw PNG and prepped JPEG both produce both outcomes
-- it is not the prompt — my own wording and the checklist's wording both produce both
+I picked one reading, scored the other as a failure, and published a one-in-three failure
+rate that did not exist. What exposed it was another provider answering more precisely than
+either: antigravity said *"White circle on a red background."*
 
-So the variance is downstream of anything this repo controls.
+**Fix.** Disambiguate the prompt. Do not run it five times.
 
-**Fix.** Score probe 6 as a **majority of at least five runs**, and record the rate rather
-than the outcome. A single run at a one-in-three failure rate is a coin flip presented as a
-measurement: it will fail a provider whose vision works, or pass one that a second run would
-have caught. `agents/codex-agent.md` previously said *"Verified working"* on the strength of
-one observation; it now carries the rate.
+> Each quadrant has a coloured BACKGROUND with a white SHAPE drawn on it. For each quadrant
+> answer on its own line in the form `top-left: <background colour> <shape>`.
 
-**The general shape.** This is the first probe in the set whose result is not deterministic,
-and the checklist had no concept of running anything twice. Every other probe answers a
-structural question — does the flag exist, does the file appear, what is the exit code — and
-those do not vary. A probe that asks a *model* a question is a different kind of instrument,
-and it needs to be read like one.
+**Measured:** 5 of 5 correct with the disambiguated prompt, against 7 of 11 with the
+ambiguous one. The variance is gone because it was never in the model.
 
-Note also what a weaker test would have concluded. "Can the provider see the image at all?"
-scores 11 out of 11. The failure is only visible because the probe demands a specific,
-checkable answer with known ground truth.
+**What actually went wrong.** The measurements were sound — same file, same md5, counted
+runs, ruled out the file format, ruled out `prep-image`, decoded the JPEG to confirm the
+pixels really were coloured. Every one of those was true and none of them was the question.
+I scored the answers against a ground truth I had assumed from a table in the docs, when the
+program that generates the image states it in a docstring. Careful measurement of the wrong
+quantity is still wrong, and the rigour around it makes it more persuasive, not less.
+
+The previous version of this entry claimed a 36% vision failure rate and changed the
+checklist to require a majority of five runs. Both were wrong; both are reverted. This file
+records what was believed and not only what turned out to be true, so the retraction stays
+here rather than being quietly deleted.
+
+**The finding that does survive.** A probe whose prompt admits two correct answers cannot be
+scored, and running it more times does not fix that — it launders the ambiguity into a rate.
+Check ground truth against the thing that *generates* it, not against prose describing it.
+
 ---
 
 ## Adding an entry

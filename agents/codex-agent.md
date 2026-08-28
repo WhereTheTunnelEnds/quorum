@@ -197,16 +197,13 @@ Run `prep-image` first for anything off a phone. Normalizing also keeps every pa
 looking at the *same* image — otherwise a difference in their answers might just be a
 difference in what they were shown.
 
-**Verified working, with a caveat that matters:** it names all four quadrants of
-`make-probe-image`'s output — *"Red — circle / Green — square / Yellow — plus / Blue —
-triangle"* — but **not reliably.** Measured across 11 runs on the same image: 7 correct, and
-4 in which every shape and position was right and every colour came back `white`. Six
-consecutive runs on one fixed file (same md5) went correct, correct, white, correct, correct,
-correct.
+**Verified working.** Named all four quadrants of `make-probe-image`'s output correctly —
+background colour and shape — on 5 of 5 runs.
 
-Geometry was right in all 11. Only colour collapses, and it collapses uniformly. So: do not
-rely on a single vision answer for anything colour-dependent, and if a run reports a
-suspiciously uniform palette, ask again before believing it.
+Ask for the *background* colour explicitly. The shapes are white on coloured quadrants, so
+"name the colour" has two correct answers; an earlier version of this file recorded a 36%
+failure rate that was really that ambiguity being scored as error. See
+[field-notes.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/field-notes.md).
 
 ## Useful flags
 

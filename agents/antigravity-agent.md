@@ -173,13 +173,17 @@ done
 
 IMG=$(prep-image "<original>")   # bare name: adapters run in the USER'S project, where
                                  # a relative scripts/ path resolves to nothing
-D=$(mktemp -d); cp "$IMG" "$D/probe.png"
-agy --add-dir "$D" --disable-slash-commands -p 'Look at probe.png in the workspace and describe it.'
+D=$(mktemp -d); trap 'rm -rf "$D"' EXIT
+# Keep prep-image's own filename. It emits .jpg; naming the copy probe.png hands the model a
+# JPEG under a PNG extension and invites a decoder to refuse it on the mismatch.
+N=$(basename "$IMG"); cp "$IMG" "$D/$N"
+agy --add-dir "$D" --disable-slash-commands -p "Look at $N in the workspace and describe it."
 ```
 
 **Verified working:** given the four-quadrant probe image it named red circle (top-left),
 green square (top-right), yellow plus (bottom-right), blue triangle (bottom-left) — all four
-shapes in the correct quadrants.
+shapes in the correct quadrants, and it was the only provider to volunteer that the shapes
+are *white on* those backgrounds, which is what exposed the ambiguity in the probe prompt.
 
 > **`-i` is `--prompt-interactive`, not `--image`.** On this CLI it starts an interactive
 > session, which in a tool call hangs until the deadline. There is no short flag for images

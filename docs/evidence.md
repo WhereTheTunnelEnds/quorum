@@ -36,7 +36,7 @@ cited as if it could.
 | The setup wizard completes without hanging | getting-started | `tests/drive-setup.exp n` — **spends quota**: quorum-setup always reaches quorum-auth, which makes a live z.ai call plus `copilot -p` and `agy --print` |
 | `quorum-status` exits 0 when a provider is reachable, 1 when none are | — | `quorum-status; echo $?` |
 | `quorum-verify` exits non-zero when it verified **nothing** | adapter-contract | `quorum-verify nosuchprovider; echo $?` |
-| Codex's vision reports correct shapes but wrong colours in ~1 run in 3 | codex-agent, probe-checklist | run the probe-6 prompt five times against one `prep-image` output; expect a mix of correct and all-`white` answers |
+| Codex names all four quadrants correctly when asked for the BACKGROUND colour | codex-agent, probe-checklist | 5 of 5 runs with the disambiguated prompt; the ambiguous form yields `white` or the quadrant colour, and both are correct |
 | `prep-image` preserves colour through the PNG -> JPEG conversion | field-notes | decode the prepped JPEG (`sips -s format png`) and count distinct RGB values — the four probe colours survive |
 | The probe image really is red-circle / green-square / yellow-cross / blue-triangle | probe-checklist | `make-probe-image` then open it |
 | `prep-image` fails cleanly with no converter present | porting docs | `tests/test-prep-image-no-converter.sh` |

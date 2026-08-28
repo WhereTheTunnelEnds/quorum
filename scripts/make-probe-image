@@ -2,14 +2,20 @@
 # make-probe-image — generate the four-quadrant image used to probe a provider's vision.
 #
 #   IMG=$(make-probe-image)
-#   <provider vision invocation> "$IMG" "For each quadrant answer on its own line in the
-#     form 'top-left: <colour> <shape>'. Use exactly these labels: top-left, top-right,
-#     bottom-right, bottom-left."
+#   <provider vision invocation> "$IMG" "Each quadrant has a coloured BACKGROUND with a
+#     white SHAPE drawn on it. For each quadrant answer on its own line in the form
+#     'top-left: <background colour> <shape>'. Use exactly these labels: top-left,
+#     top-right, bottom-right, bottom-left."
 #
 # Ask for LABELS, never "four lines clockwise" — the latter supplies the ordering yourself,
 # so a model that scrambles positions still scores full marks.
 #
-# Expected answer:
+# Say BACKGROUND colour. Every shape drawn here is white on a coloured quadrant, so a bare
+# "name the colour" has two correct answers and the probe cannot be scored. Measured: that
+# ambiguity alone produced an apparent 36% vision failure rate for codex, which vanished
+# when the prompt was disambiguated. See docs/field-notes.md.
+#
+# Expected answer (background colour, then shape — the shapes are all white):
 #   top-left      red     circle
 #   top-right     green   square
 #   bottom-right  yellow  cross

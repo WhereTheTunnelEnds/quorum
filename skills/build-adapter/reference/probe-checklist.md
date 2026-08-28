@@ -149,30 +149,25 @@ done
 IMG=$(make-probe-image)   # bare name — see below
 ```
 
-That is a 512×512 image with four quadrants: **red circle** (top-left), **green square**
-(top-right), **yellow cross** (bottom-right), **blue triangle** (bottom-left).
+That is a 512×512 image with four quadrants. Each quadrant is a **coloured background** with
+a **white shape** drawn on it: red/circle (top-left), green/square (top-right), yellow/cross
+(bottom-right), blue/triangle (bottom-left).
 
-**Ask.** Use labels, not ordering:
+**Ask.** Use labels, not ordering — and say which colour you mean:
 
-> For each quadrant answer on its own line in the form `top-left: <colour> <shape>`. Use
-> exactly these four labels: top-left, top-right, bottom-right, bottom-left.
+> Each quadrant has a coloured BACKGROUND with a white SHAPE drawn on it. For each quadrant
+> answer on its own line in the form `top-left: <background colour> <shape>`. Use exactly
+> these four labels: top-left, top-right, bottom-right, bottom-left.
 
-**Pass.** All four labels present, each with the right colour and shape — **in a majority of
-at least five runs.**
+**Pass.** All four labels present, each with the right background colour and shape.
 
-**Run it more than once. This probe is not deterministic.** Measured on codex, same image,
-same md5, same prompt: **7 of 11 runs correct, 4 of 11 returned the right shape and position
-for all four quadrants and the colour `white` for every one of them.** Six consecutive runs
-on one fixed file went correct, correct, white, correct, correct, correct.
-
-That matters because a single run decides a tier. At roughly a one-in-three failure rate,
-scoring probe 6 once gives you a coin-flip dressed as a measurement — it will fail a provider
-whose vision works, or (worse) it would have passed one on a lucky draw. Record the rate you
-observed, not the outcome of one attempt.
-
-Note the failure's shape: it is not the model inventing things. Geometry and position were
-perfect every time; only colour collapsed, and it collapsed uniformly to white. A test that
-only asked "can it see the image" would score all 11 runs as a pass.
+**Name the background explicitly — every shape is white.** The earlier version of this probe
+asked for `<colour>` without saying which one, so `white circle` and `red circle` were *both*
+correct and the probe could not be scored. Measured on codex: 7 of 11 with the ambiguous
+prompt, 5 of 5 with the one above. The apparent 36% failure rate was entirely the ambiguity
+being marked as error — see
+[field-notes.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/field-notes.md).
+If a probe can be answered two ways, fix the prompt; do not average over more runs.
 
 **Demand the labels — do not accept four ordered lines.** Asking for "four lines clockwise
 from top-left" reads as a spatial test and is not one: the caller supplies the ordering, so
@@ -207,7 +202,7 @@ probe 2 non-interactive   PASS  rc=0 (needs --no-ask-user; without it rc=124)
 probe 3 read-only         FAIL  probe3.txt was created — mode is advisory
 probe 4 failure shape     rc=1, 0 bytes stdout, 73 bytes stderr
 probe 5 discriminator     exit code
-probe 6 vision            PASS  5/6 runs named all four quadrants WITH colours
+probe 6 vision            PASS  all four quadrants, background colour and shape
 ```
 
 Probe 3 above is the interesting one: that adapter's consult tier must use a scratch
