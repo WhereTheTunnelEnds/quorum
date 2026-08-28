@@ -151,6 +151,28 @@ all, and `command -v glm` returning nothing has already caused a working provide
 reported as missing. See the
 [field notes](docs/field-notes.md#a-missing-binary-proves-nothing-about-a-provider).
 
+## What it costs you in context
+
+Measured with `claude plugin details quorum@quorum` on a real install:
+
+| | |
+|---|---|
+| **Always-on** | **~1,510 tokens**, added to every session, whether or not you use Quorum |
+| On invoke | `glm-agent` ~12.7k · `copilot-agent` ~9k · `antigravity-agent` ~8.1k · `codex-agent` ~7.5k · `model-panel` ~6.7k · `ollama-agent` ~6.5k · `build-adapter` ~4.5k |
+| Commands | ~240–590 each |
+
+The always-on figure is the frontmatter of 14 components; the on-invoke figures are the
+adapter bodies, paid each time one fires. A full five-provider panel therefore spends roughly
+**45k tokens on adapter definitions alone** before a single provider is called. That is the
+real price of adapters that document every flag and every failure mode, and it is stated here
+rather than left for you to discover.
+
+Re-check it yourself after installing:
+
+```bash
+claude plugin details quorum@quorum
+```
+
 ## Requirements
 
 Only what you actually intend to use — every provider is optional.

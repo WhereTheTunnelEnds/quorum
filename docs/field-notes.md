@@ -1227,6 +1227,47 @@ present, `CODE=200 TEXT=PONG`. Asserted for all five adapters.
 "not installed, this is normal", and as `quorum-flags` exiting 0 having checked nothing: a
 missing prerequisite rendered as an ordinary result. It keeps recurring because the empty
 value is always a *valid-looking* member of the result type.
+### The install path nobody had run
+
+**Symptom.** None — which was the problem. `/plugin marketplace add` is the first command in
+the README and it had never been executed, on the grounds that the repository is private.
+
+**Cause.** That reasoning was wrong. `claude plugin marketplace add` takes **a path**, not
+only a URL, so the whole route was testable from a local clone the entire time. It was also
+briefly hidden by an alias: `claude` on this machine expands to
+`claude --dangerously-skip-permissions …`, so `claude plugin --help` was being handled as a
+*prompt* by a nested session rather than as a CLI invocation. `type -P claude` gives the real
+binary and the subcommands appear.
+
+**Measured**, from a fresh clone, install, inspect, then removed again:
+
+```
+Component inventory
+  Skills (9)  add-provider, auth, build-adapter, delegate, delegate-task,
+              model-panel, panel, setup, status
+  Agents (5)  glm-agent, codex-agent, antigravity-agent, copilot-agent, ollama-agent
+  Hooks (0)   MCP servers (0)   LSP servers (0)
+
+Projected token cost
+  Always-on:  ~1,510 tok   added to every session
+```
+
+Three things fall out of that, none of which was known before:
+
+1. **The namespace merge is real and visible.** Nine "Skills" is three skills plus six
+   commands. Claude Code lists them together, which is exactly why a command and a skill
+   sharing a name makes one unreachable — the failure this repo already has a gate for, now
+   confirmed from the outside rather than inferred.
+2. **The plugin ships no `scripts/`.** `command -v quorum-sanitize` finds nothing after a
+   plugin-only install. That is the route that produced the empty-answer bug, and it is
+   confirmed to be a route real users take.
+3. **Quorum costs ~1,510 tokens of always-on context**, and a five-provider panel spends
+   roughly 45k on adapter bodies before calling anything. Worth stating plainly: thorough
+   adapters are not free, and the README now says so.
+
+**Fix.** Nothing to fix in the plugin itself — it installs and every component resolves. The
+lesson is procedural: *"we cannot test that because the repo is private"* was an assumption,
+not a measurement, and it survived several rounds of auditing unchallenged.
 ---
 
 ## Adding an entry

@@ -52,6 +52,10 @@ cited as if it could.
 | Two delegations never share a worktree or branch | delegate-task, safety-model | the name carries repo, provider, slug, date and an `mktemp -u` suffix; 100 rapid draws produced 100 distinct names |
 | `install.sh` never destroys a file it did not create | field-notes | put a regular file at `~/.local/bin/quorum-status`, run `install.sh`, check its sha — it is REFUSED, and the install exits non-zero |
 | Every ```bash block in the repo is valid bash | CONTRIBUTING | CI job "Every bash-fenced block is valid bash", or `tests/test-lint-gates.sh` |
+| The plugin installs and every component is discovered | README | `claude plugin marketplace add <clone> && claude plugin install quorum@quorum && claude plugin details quorum@quorum` — expect Agents (5) and Skills (9) |
+| Commands and skills share one namespace: 9 = 3 skills + 6 commands | field-notes | same command — Claude Code lists them together under "Skills" |
+| The plugin route does NOT put Quorum's commands on PATH | field-notes | after installing the plugin only, `command -v quorum-sanitize` finds nothing; the adapters then refuse rather than returning empty |
+| Quorum costs ~1,510 tokens of always-on context | README | `claude plugin details quorum@quorum` |
 | GLM's live response shapes match what the adapters classify on | glm-agent | measured against api.z.ai: success `content:[thinking,text]` + `end_turn`; bad model -> HTTP 400 with `.error.message`; `max_tokens:600` -> `stop_reason=max_tokens` with 915 chars of text |
 | `codex exec review -c sandbox_mode="read-only"` is accepted and takes effect | codex-agent | run it: codex's own banner prints `sandbox: read-only`, exit 0 |
 | An adapter refuses rather than reporting `empty` when `quorum-sanitize` is missing | field-notes | `tests/test-adapter-blocks.sh` — all five, run with a PATH that lacks it |
