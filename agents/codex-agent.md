@@ -197,8 +197,16 @@ Run `prep-image` first for anything off a phone. Normalizing also keeps every pa
 looking at the *same* image — otherwise a difference in their answers might just be a
 difference in what they were shown.
 
-**Verified working:** named all four quadrants of `make-probe-image`'s output correctly —
-"Red — circle / Green — square / Yellow — plus / Blue — triangle".
+**Verified working, with a caveat that matters:** it names all four quadrants of
+`make-probe-image`'s output — *"Red — circle / Green — square / Yellow — plus / Blue —
+triangle"* — but **not reliably.** Measured across 11 runs on the same image: 7 correct, and
+4 in which every shape and position was right and every colour came back `white`. Six
+consecutive runs on one fixed file (same md5) went correct, correct, white, correct, correct,
+correct.
+
+Geometry was right in all 11. Only colour collapses, and it collapses uniformly. So: do not
+rely on a single vision answer for anything colour-dependent, and if a run reports a
+suspiciously uniform palette, ask again before believing it.
 
 ## Useful flags
 

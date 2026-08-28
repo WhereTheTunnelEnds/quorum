@@ -240,6 +240,12 @@ EOF
 # ── 4. authenticate ─────────────────────────────────────────────────────────────
 b "4. Authentication"
 if command -v quorum-auth >/dev/null 2>&1; then AUTH=quorum-auth; else AUTH="$ROOT/scripts/quorum-auth"; fi
+# `|| true` is a DECISION, not an oversight, and `notready` is deliberately not touched
+# here. Every provider is optional, so an unauthenticated one -- or an exhausted monthly
+# quota -- does not make the INSTALL unready. quorum-auth prints its own "N item(s) need
+# attention" for the provider; this step's verdict is about whether Quorum itself is set up.
+# Without this note the next person reads a bare `|| true` as swallowed error handling and
+# "fixes" it into a check that fails on any provider the user does not own.
 "$AUTH" || true
 echo
 echo "  Anything marked above needs YOU to run its fix: logins open a browser and bind your"

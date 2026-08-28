@@ -1268,6 +1268,48 @@ Three things fall out of that, none of which was known before:
 **Fix.** Nothing to fix in the plugin itself — it installs and every component resolves. The
 lesson is procedural: *"we cannot test that because the repo is private"* was an assumption,
 not a measurement, and it survived several rounds of auditing unchallenged.
+### A probe that decides a tier, scored once, on a coin flip
+
+**Symptom.** Probe 6 says a provider's vision works. Run it again and it fails. Nothing
+changed — not the image, not the prompt, not the flags.
+
+**Measured.** Codex, `make-probe-image` output through `prep-image`, the checklist's exact
+prompt, the same file with the same md5 every time:
+
+```
+run 1  CORRECT     run 4  CORRECT
+run 2  CORRECT     run 5  CORRECT
+run 3  white       run 6  CORRECT
+```
+
+Across every run today: **7 of 11 correct, 4 of 11 all-white.** In all four failures the
+shape and the quadrant were right for every one of the four; only the colour was wrong, and
+it was wrong the same way each time — `white` for red, green, yellow and blue alike.
+
+**Cause.** Not determined, and worth saying so. What was ruled out, by measurement:
+
+- the source PNG really is coloured — five distinct RGB values, 78% of pixels non-white
+- `prep-image` preserves it — the JPEG actually sent decodes to the same four colours
+- it is not the file format — raw PNG and prepped JPEG both produce both outcomes
+- it is not the prompt — my own wording and the checklist's wording both produce both
+
+So the variance is downstream of anything this repo controls.
+
+**Fix.** Score probe 6 as a **majority of at least five runs**, and record the rate rather
+than the outcome. A single run at a one-in-three failure rate is a coin flip presented as a
+measurement: it will fail a provider whose vision works, or pass one that a second run would
+have caught. `agents/codex-agent.md` previously said *"Verified working"* on the strength of
+one observation; it now carries the rate.
+
+**The general shape.** This is the first probe in the set whose result is not deterministic,
+and the checklist had no concept of running anything twice. Every other probe answers a
+structural question — does the flag exist, does the file appear, what is the exit code — and
+those do not vary. A probe that asks a *model* a question is a different kind of instrument,
+and it needs to be read like one.
+
+Note also what a weaker test would have concluded. "Can the provider see the image at all?"
+scores 11 out of 11. The failure is only visible because the probe demands a specific,
+checkable answer with known ground truth.
 ---
 
 ## Adding an entry
