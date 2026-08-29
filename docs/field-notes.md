@@ -1268,6 +1268,56 @@ Three things fall out of that, none of which was known before:
 **Fix.** Nothing to fix in the plugin itself — it installs and every component resolves. The
 lesson is procedural: *"we cannot test that because the repo is private"* was an assumption,
 not a measurement, and it survived several rounds of auditing unchallenged.
+### The rule was applied to one channel out of four
+
+**Symptom.** None. Every test passed, a live quota failure classified correctly as `error`,
+and the panel named the failed provider and carried on — exactly as designed. The question
+that found this was a plain one: *"are those failures handled gracefully?"*
+
+**Cause.** `TEXT` — the provider's stdout, the thing inside the fence — went through
+`quorum-sanitize` in all five adapters. Nothing else did. The stderr tail that fills
+`diagnostics:` was raw. GLM's `.error.message` was raw, on the line directly *below* the
+sanitised `TEXT` beside it. Ollama's `.error` was raw. `quorum-verify` printed a raw tail of
+provider stderr through helpers that scrubbed nothing.
+
+**And the raw channels were the dangerous ones.** `diagnostics:` sits *outside* the
+`BEGIN/END UNTRUSTED PROVIDER OUTPUT` markers — in the region a reader takes to be the
+adapter's own words. Text injected inside the fence is at least labelled as the provider's.
+Text injected above it is not labelled at all. The whole apparatus was guarding the half that
+was already marked untrusted.
+
+**Measured.** A stderr carrying `U+009B` — the single-character C1 CSI, cursor-up plus
+erase-line, containing **no ESC byte anywhere**, so a filter that strips `\033` never sees it:
+
+```
+status: error          rendered as        status: ok
+exit_code: 1                              exit_code: 0
+```
+
+A quota-exhausted provider that returned nothing rendered as a successful answer, which a
+panel counts as a vote. The one failure mode the status envelope exists to prevent.
+
+Not a theoretical input class: **`copilot -p` writes 24-bit SGR colour codes to stderr on
+every ordinary run.** Real provider stderr carries control characters today.
+
+**Fix.** Sanitise every provider-controlled string that reaches a human, and classify on the
+sanitised text so the classifier and the renderer cannot disagree. Enforced by
+`tests/test-diagnostics-sanitized.sh`, including a proof that the payload really does forge a
+status line on unsanitised input — otherwise the whole file could pass while testing nothing.
+
+**The general shape, and it is the useful part.** A security rule gets written against the
+channel that prompted it, then quietly means "that channel" forever. The audit that found
+the C1 hole in `TEXT` fixed `TEXT` in five files and never asked *what else does a provider
+control?* Ask that question about every mitigation: not "is the rule applied here?" but
+"enumerate the places this rule must hold, then check each one." Three of the four sites had
+been read many times during this campaign, by me and by six parallel auditors, and the raw
+`tail "$ERR"` was sitting in plain sight in each of them.
+
+While fixing it I wrote a gate matching `(tail|cat|head)` unanchored, which fired on
+`appliCATion/json` in Ollama's curl line. A gate that fires on valid input teaches people to
+bypass it — the anchored version is asserted both ways, that it still catches a real
+`tail "$ERR"` and that it no longer fires on the false positive.
+
 ### I scored a correct answer as a failure
 
 **Symptom.** The vision probe looked non-deterministic. Codex named the quadrant colours

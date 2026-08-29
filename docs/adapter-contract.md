@@ -130,6 +130,43 @@ enforce.
 A test for your own reasoning: if "the adapter cannot change files" depends on the adapter
 *deciding* something, it is prompt-enforced and belongs on the bottom row.
 
+### Sanitise every provider-controlled string, not only the fenced answer
+
+The rule is not "sanitise the answer." It is **sanitise anything the provider can influence
+that reaches a human.** For a long time this repo applied it to exactly one variable — the
+stdout capture — and left every diagnostic channel raw:
+
+| Channel | Was |
+|---|---|
+| `TEXT` — stdout, inside the fence | sanitised |
+| `DIAG` — a tail of the provider's **stderr** | **raw** |
+| GLM's `.error.message`, Ollama's `.error` | **raw** |
+| `quorum-verify`'s `PASS`/`FAIL`/info lines, printing that stderr | **raw** |
+
+**The unsanitised channels were the more dangerous ones,** because `diagnostics:` sits
+*outside* the delimiters — in the region a reader takes to be the adapter's own words. Text
+injected inside the fence is at least labelled as the provider's. Text injected above it is
+not labelled at all.
+
+Measured, with a stderr carrying `U+009B` (the single-character C1 CSI — cursor-up plus
+erase-line, **containing no ESC byte at all**, so a filter that strips `\033` never sees it):
+
+```
+status: error          renders as        status: ok
+exit_code: 1                             exit_code: 0
+```
+
+A quota-exhausted provider that returned nothing rendered as a successful answer — and a
+panel counts that as a vote. Failure has to stay legible as failure; this is the one place
+where a silent wrong answer is worse than a crash.
+
+This is not a theoretical input class. **`copilot -p` writes 24-bit SGR colour codes to its
+stderr on every ordinary run**, so real provider stderr carries control characters today.
+
+Pipe *every* such string through `quorum-sanitize` — and classify on the sanitised text too,
+so there is one canonical string rather than a classifier and a renderer that can disagree.
+Enforced by `tests/test-diagnostics-sanitized.sh`.
+
 ### The delimiters are a convention, not a boundary
 
 **Provider output can contain the closing marker.** Nothing escapes it — adapters are told

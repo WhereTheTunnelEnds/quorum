@@ -37,10 +37,25 @@ QUORUM_TIMEOUT="${QUORUM_VERIFY_TIMEOUT:-180}"
 export QUORUM_TIMEOUT
 
 pass=0; fail=0; warned=0; skipped=0
-P() { printf '  \033[32mPASS\033[0m  %s\n' "$1"; pass=$((pass+1)); }
-F() { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; fail=$((fail+1)); }
-W() { printf '  \033[33mWARN\033[0m  %s\n' "$1"; warned=$((warned+1)); }
-I() { printf '        %s\n' "$1"; }
+# The single choke point for anything this script did not write itself. Three sites below
+# print a tail of the PROVIDER'S STDERR, and a provider controls every byte of that. `tr` on
+# a newline is not sanitising: it leaves ESC and C1 intact, so `CSI A` + `CSI K` repaints the
+# PASS/FAIL lines already on screen. Measured in the adapters: a C1 CSI in stderr rewrote an
+# envelope's `status: error` to `status: ok`. The same bytes reach this script's output.
+#
+# Identical to quorum-status's scrub(), deliberately -- see the long rationale there for why
+# LC_ALL=C is load-bearing (BSD tr aborts on invalid UTF-8 under a UTF-8 locale and truncates
+# the rest of the string) and why the c2 80..9f range is safe to match bytewise.
+scrub() {
+  printf '%s' "$1" \
+    | LC_ALL=C tr '\000-\037\177' ' ' \
+    | LC_ALL=C sed "s/$(printf '\302')[$(printf '\200')-$(printf '\237')]//g"
+}
+
+P() { printf '  \033[32mPASS\033[0m  %s\n' "$(scrub "$1")"; pass=$((pass+1)); }
+F() { printf '  \033[31mFAIL\033[0m  %s\n' "$(scrub "$1")"; fail=$((fail+1)); }
+W() { printf '  \033[33mWARN\033[0m  %s\n' "$(scrub "$1")"; warned=$((warned+1)); }
+I() { printf '        %s\n' "$(scrub "$1")"; }
 
 # Probe files call $TIMEOUT_BIN internally so a hang surfaces as exit 124 rather than
 # blocking forever. macOS has no timeout(1) unless coreutils is installed.

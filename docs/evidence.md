@@ -66,6 +66,7 @@ cited as if it could.
 | Each adapter's runnable block reaches the status its own table requires | adapter-contract, all adapters | `tests/test-adapter-blocks.sh` — extracts the real block from the adapter, runs it against a local mock across six outcomes, and applies the documented table |
 | A hostile provider response cannot forge a status line through any adapter | field-notes, safety-model | same test — the fence marker and C1 controls must be gone from `$TEXT` in all five pipelines |
 | Every CI gate fires on the violation it claims to catch | field-notes, CONTRIBUTING | `tests/test-lint-gates.sh` — every gate but two, three-phase (clean / injected / reverted); the two it cannot exercise are named in its own output |
+| Provider-controlled stderr can forge the envelope's `status:` line unless sanitised | adapter-contract §4, all five adapters, quorum-verify | `tests/test-diagnostics-sanitized.sh` — renders a C1 CSI payload through an ECMA-48 interpreter and asserts it forges `status: ok` when raw and cannot when sanitised |
 
 ## Observed — reported, not reproducible from this repo
 

@@ -189,7 +189,20 @@ Note the native endpoint's error field is a **flat string** (`.error`), not the 
 `.error.message` that `/v1/chat/completions` returns. Read it defensively:
 
 ```bash
-jq -r 'if (.error|type)=="string" then .error else (.error.message // "unknown") end' "$BODY"
+# Guarded like every other block: this snippet gets copied on its own, and with
+# quorum-sanitize absent the pipe yields "" — an error message that vanishes, leaving an
+# empty `diagnostics:` under a non-`ok` status. Silence is the worst possible diagnostic.
+for _q_need in quorum-sanitize; do
+  command -v "$_q_need" >/dev/null 2>&1 || {
+    echo "status: error — $_q_need is not on PATH."
+    echo "Run scripts/install.sh from the Quorum repo, then retry."
+    exit 1
+  }
+done
+
+# Sanitised because this string is provider-controlled and lands in `diagnostics:`, which is
+# OUTSIDE the untrusted fence — see docs/adapter-contract.md §4.
+ERRMSG=$(jq -r 'if (.error|type)=="string" then .error else (.error.message // "unknown") end' "$BODY" | quorum-sanitize)
 ```
 
 Report exactly this envelope:

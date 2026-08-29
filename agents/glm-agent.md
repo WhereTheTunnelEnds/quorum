@@ -102,7 +102,7 @@ CODE=$(curl -sS -m 900 -o "$BODY" -w '%{http_code}' https://api.z.ai/api/anthrop
 TEXT=$(jq -r 'if .content then ([.content[] | select(.type=="text") | .text] | join("")) else "" end' "$BODY" \
        | quorum-sanitize)
 STOP=$(jq -r '.stop_reason // ""' "$BODY")
-ERRMSG=$(jq -r '.error.message // ""' "$BODY")
+ERRMSG=$(jq -r '.error.message // ""' "$BODY" | quorum-sanitize)   # provider-controlled
 
 rm -f "$PROMPT_FILE" "$REQ" "$BODY" "$_hdr"
 ```
