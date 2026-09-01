@@ -214,6 +214,18 @@ inject_no_api_key_passed_on_a_command_line() {
 revert_no_api_key_passed_on_a_command_line() {
   cp "$REPO/agents/ollama-agent.md" "$SANDBOX/agents/ollama-agent.md"; }
 
+# The companion gate. Keeping the key out of argv put it in a chmod 600 file, and removing
+# that file was left to a `trap` at each call site -- which four of seven sites never had.
+# The redirect, not the header text, is what this gate matches, so the injection has to
+# carry a real `> "$FILE"`.
+inject_no_api_key_written_to_a_file() {
+  # Same two-halves trick, for the same reason: written whole, this file would trip the
+  # gate it tests, and excluding tests/ would blind the gate to a real violation here.
+  h='Auth'; h="${h}orization: Bearer"
+  printf '\nprintf "%s %%s\\n" "$KEY" > "$HDR"\n' "$h" >> "$SANDBOX/agents/ollama-agent.md"; }
+revert_no_api_key_written_to_a_file() {
+  cp "$REPO/agents/ollama-agent.md" "$SANDBOX/agents/ollama-agent.md"; }
+
 inject_canonical_urls_point_at_files_that_exist() {
   # Split again: whole, this is a dangling canonical URL in a tracked file and the gate
   # fires on it. Three of the sixteen injections have to be assembled at runtime, which is

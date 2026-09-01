@@ -67,13 +67,14 @@ cat > "$PROMPT_FILE" <<'PROMPT_EOF'
 <the question, with file contents inlined>
 PROMPT_EOF
 
-# The key goes in a HEADER FILE, never on the command line. Measured on this machine:
-# with `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to every process running
-# as you, for the whole life of the call. curl reads `@file` and it never reaches argv.
-_hdr=$(mktemp); chmod 600 "$_hdr"
+# The key must reach neither the command line nor the disk. Measured on this machine: with
+# `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to every process running as
+# you, for the whole life of the call. Writing it to a chmod 600 file fixed that and created
+# a second problem -- a live credential on disk, cleaned only if every call site remembers a
+# trap, and four of seven did not. `-H @<(...)` keeps the same `@file` reader and hands it
+# a /dev/fd pipe instead: not in argv, not on disk, nothing to clean up.
 REQ=$(mktemp); BODY=$(mktemp)
-trap 'rm -f "$PROMPT_FILE" "$REQ" "$BODY" "$_hdr"' EXIT INT TERM HUP
-printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$_hdr"
+trap 'rm -f "$PROMPT_FILE" "$REQ" "$BODY"' EXIT INT TERM HUP
 
 jq -n --rawfile p "$PROMPT_FILE" \
   '{model:"glm-5.3", max_tokens:64000, messages:[{role:"user", content:$p}]}' > "$REQ"
@@ -94,7 +95,7 @@ jq -n --rawfile p "$PROMPT_FILE" \
 # skills/model-panel/SKILL.md already had it right; this file was the stale copy, and this
 # file is what runs when glm-agent is dispatched.
 CODE=$(curl -sS -m 900 -o "$BODY" -w '%{http_code}' https://api.z.ai/api/anthropic/v1/messages \
-    -H @"$_hdr" \
+    -H @<(printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY") \
     -H "anthropic-version: 2023-06-01" \
     -H "content-type: application/json" \
     -d @"$REQ")
@@ -104,7 +105,7 @@ TEXT=$(jq -r 'if .content then ([.content[] | select(.type=="text") | .text] | j
 STOP=$(jq -r '.stop_reason // ""' "$BODY")
 ERRMSG=$(jq -r '.error.message // ""' "$BODY" | quorum-sanitize)   # provider-controlled
 
-rm -f "$PROMPT_FILE" "$REQ" "$BODY" "$_hdr"
+rm -f "$PROMPT_FILE" "$REQ" "$BODY"
 ```
 
 **Do not use `.content[0].text`.** GLM is a reasoning model: `content[0]` is usually a
@@ -213,10 +214,10 @@ Model ids carry **no `[1m]` suffix** — it's `glm-5.3`, not `glm-5.3[1m]`. The 
 returns `modelCode: does not exist`. Query the live list rather than trusting this file:
 
 ```bash
-_hdr=$(mktemp); chmod 600 "$_hdr"          # again: the key must not reach argv
-printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$_hdr"
-curl -s https://api.z.ai/api/anthropic/v1/models -H @"$_hdr" | jq -r '.data[].id'
-rm -f "$_hdr"
+# again: the key reaches neither argv nor the disk
+curl -s https://api.z.ai/api/anthropic/v1/models \
+  -H @<(printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY") \
+  | jq -r '.data[].id'
 ```
 
 Use a `-turbo` variant when the task is simple and speed matters more than depth.

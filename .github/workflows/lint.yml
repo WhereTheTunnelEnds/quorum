@@ -361,10 +361,62 @@ jobs:
              | grep -vE '^[^:]*:[0-9]+:[[:space:]]*#' ; then
             echo
             echo 'ERROR: API key on a curl command line - it lands in argv, where ps shows it.'
-            echo '       Write the header to a chmod 600 mktemp file and use -H @"$file".'
+            echo '       Use: -H @<(printf %s "Authorization: Bearer %s\n" "$KEY")'
             exit 1
           fi
           echo "no API keys on command lines"
+
+      - name: No API key written to a file
+        run: |
+          # The companion to the gate above, and the reason it is needed.
+          #
+          # That gate forces the key OUT of argv and, as written, forced it INTO a file:
+          # `chmod 600` mktemp plus `-H @file`. Nothing then forced it back out. Removal was
+          # a convention -- `trap 'rm -f "$_hdr"' EXIT INT TERM HUP` -- and a convention
+          # applies only where someone remembers it. Four of seven sites did not:
+          #
+          #   probes/glm.sh                      no trap at all; the window spans curl -m 900
+          #   skills/model-panel/SKILL.md        $HDR created AFTER the trap, never added to
+          #                                      it, so three harmless files were cleaned and
+          #                                      the one holding the key was not
+          #   docs/porting/openai-compatible.md  rm -f only -- and it is the copy-me template
+          #   agents/glm-agent.md (2nd snippet)  rm -f only
+          #
+          # Measured, SIGTERM'd mid-call with a sentinel key: one file per interrupted run,
+          # mode 600, holding a live credential, surviving indefinitely. Earlier, before any
+          # trap existed, two independent audits counted 110 and 241 such files on the
+          # author's machine -- 130 of 130 runs -- outliving key rotation, landing in
+          # backups, and on Linux sitting in /tmp until systemd-tmpfiles ages them out.
+          #
+          # So the rule is not "remember the trap". It is "there is no file": curl reads the
+          # header from `-H @<(...)`, a /dev/fd pipe. Nothing to strand, nothing to
+          # remember, and this gate is what the trap convention never had.
+          #
+          # Anchored on the REDIRECT, not on the header text, so prose and comments that
+          # merely name the old pattern do not trip it -- the same false-positive trap that
+          # made three earlier versions of the argv gate unusable. Note `.*` and not
+          # `[^\n]*`: in ERE a bracket expression takes \ and n literally, so `[^\n]*` cannot
+          # cross the `%s\n` that every one of these lines contains, and the gate silently
+          # matched nothing. Measured: it passed against all seven live violations.
+          #
+          # Same exclusions as above, for the same reasons: field-notes.md quotes past
+          # mistakes verbatim, and lint.yml contains this pattern as text. tests/ is NOT
+          # excluded -- tests/test-key-never-on-disk.sh plants a violation to prove this
+          # gate can go red, and it assembles the forbidden literal from two halves so it
+          # never appears whole, exactly as tests/test-lint-gates.sh does for the argv gate.
+          # Excluding the file instead would blind this gate to a real violation written
+          # there later.
+          if grep -rnE -e 'Authorization: Bearer.*>[[:space:]]*"?\$' \
+               --include='*.md' --include='*.sh' --include='*.yml' \
+               --exclude=field-notes.md --exclude=lint.yml . \
+             | grep -vE '^[^:]*:[0-9]+:[[:space:]]*#' ; then
+            echo
+            echo 'ERROR: API key written to a file - a signal before the cleanup strands it.'
+            echo '       Use: -H @<(printf %s "Authorization: Bearer %s\n" "$KEY")'
+            echo '       See tests/test-key-never-on-disk.sh'
+            exit 1
+          fi
+          echo "no API keys written to files"
 
       - name: Canonical URLs point at files that exist
         run: |

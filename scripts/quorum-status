@@ -151,25 +151,25 @@ fi
 if [ -z "${Z_AI_API_KEY:-}" ]; then
   bad glm "Z_AI_API_KEY not set  ->  export it from $QUORUM_ENVFILE_SHORT"
 else
-  # The key goes in a HEADER FILE, never on the command line. Measured: with
-# `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to any process running as
-# you. curl reads @file and it never reaches argv.
-  _hdr=$(mktemp); chmod 600 "$_hdr"
-  # Remove it on EVERY exit path, including a signal. Without this, each run left a
-  # plaintext key file in the shared temp dir forever: two independent audits counted 110
-  # and 241 of them on the author's machine, one per invocation, 130 of 130 runs. The file
-  # exists to keep the key out of argv -- which it does -- but it then outlived key
-  # rotation, landed in backups, and on Linux sits in /tmp until systemd-tmpfiles ages it
-  # out ~10 days later. The adapters and probes already did this; the two shipped scripts
-  # did not.
-  trap 'rm -f "$_hdr"' EXIT INT TERM HUP
-  printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$_hdr"
+  # The key must reach neither the command line nor the disk. Measured: with
+# `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to any process running as you.
+  #
+  # This was a chmod 600 mktemp file plus `trap 'rm -f "$_hdr"' EXIT INT TERM HUP`. The trap
+  # was correct and still insufficient as a repo-wide answer: it has to be remembered at
+  # every call site, and four of seven sites did not remember it. Before the trap existed
+  # here, each run left a plaintext key file in the shared temp dir forever -- two
+  # independent audits counted 110 and 241 of them on the author's machine, one per
+  # invocation, 130 of 130 runs -- outliving key rotation, landing in backups, and on Linux
+  # sitting in /tmp until systemd-tmpfiles ages it out ~10 days later.
+  #
+  # `--config <(...)` removes the file, so there is nothing to strand and no rule to
+  # remember. curl reads the header from a /dev/fd pipe. tests/test-key-never-on-disk.sh
+  # enforces this everywhere and is the gate that the old convention never had.
   body=$(curl -sS -m 20 https://api.z.ai/api/anthropic/v1/messages \
-    -H @"$_hdr" \
+    -H @<(printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY") \
     -H "anthropic-version: 2023-06-01" \
     -H "content-type: application/json" \
     -d '{"model":"glm-5.3","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}' 2>/dev/null)
-  rm -f "$_hdr"
   # Classify on the BODY, not the exit code. (The comment here used to say failures arrive
   # inside HTTP 200; docs/field-notes.md measures 400/401. The classifier was always right,
   # the explanation was not -- and it is the same wrong sentence this repo removed from five

@@ -96,16 +96,17 @@ trap 'rm -f "$PROMPT" "$REQ" "$BODY"' EXIT INT TERM HUP
 printf '%s' "$Q" > "$PROMPT"
 jq -n --rawfile q "$PROMPT" \
   '{model:"glm-5.3",max_tokens:64000,messages:[{role:"user",content:$q}]}' > "$REQ"
-# The key goes in a header FILE, never on the command line. With
+# The key goes on NEITHER the command line nor the disk. With
 # -H "Authorization: Bearer $KEY" it sits in argv, where `ps auxww` shows it to every
-# process running as you for the whole life of the call. curl reads @file instead.
-HDR=$(mktemp); chmod 600 "$HDR"
-printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$HDR"
+# process running as you for the whole life of the call. The chmod 600 header file that
+# replaced it fixed argv and left a live credential on disk: $HDR was created AFTER the
+# trap above and never added to it, so the three harmless files were signal-cleaned and the
+# one holding the key was not. `-H @<(...)` deletes the whole question — curl reads the
+# header from a /dev/fd pipe, so there is no file to add to any trap.
 CODE=$(curl -s -m 900 -o "$BODY" -w '%{http_code}' https://api.z.ai/api/anthropic/v1/messages \
-  -H @"$HDR" \
+  -H @<(printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY") \
   -H "anthropic-version: 2023-06-01" \
   -H "content-type: application/json" -d @"$REQ")
-rm -f "$HDR"
 # The `else` branch is load-bearing. Without it, a failing call makes jq say
 # "Cannot iterate over null" and emit ZERO BYTES — which reads as "the model had nothing
 # to say". Measured: bad model id -> HTTP 400, 0 bytes out. See docs/field-notes.md in the Quorum repo.

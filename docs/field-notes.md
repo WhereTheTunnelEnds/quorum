@@ -325,12 +325,85 @@ most-executed place in the repo while the repo believed the problem was solved.
 the script is clean; it says nothing about a code block in a Markdown file that no test
 executes. Grep for the *pattern* across every file type, not just the ones you can run.
 
-**Fix.** All six sites use a `chmod 600` `mktemp` header file and `-H @file`, and CI now
-rejects `-H "Authorization: Bearer` on any non-comment line in any `.md`, `.sh` or `.yml`.
+**Fix.** All six sites moved to a `chmod 600` `mktemp` header file and `-H @file`, and CI
+now rejects `-H "Authorization: Bearer` on any non-comment line in any `.md`, `.sh` or
+`.yml`. That fix was correct about argv and created the leak documented in the next note —
+the header file itself. Both are now gone; see below.
 
 **The general lesson.** "Fixed" means every instance, and the instances you can execute are
 the ones you will find. Ask what a fix's search method structurally cannot see. Related:
 the same shape as the `max_tokens` default below — one fact in five files, corrected in three.
+
+### The fix for the argv leak was a file holding the same key
+
+**Symptom.** Keeping the key out of `argv` meant writing it to a `chmod 600` `mktemp` file
+and passing `-H @file`. That closed the `ps auxww` hole and opened a quieter one: a live
+credential on disk, removed only by an `rm -f` on the happy path. Any signal between the
+write and the `rm` strands it. Measured with a sentinel key, `SIGTERM` mid-call:
+
+```
+before=2  after=3  delta=1
+LEAKED -> /var/folders/.../T/tmp.F7vk7MIqj0  mode=600
+         [Authorization: Bearer SENTINEL-KEY-DO-NOT-USE-a1b2c3d4]
+```
+
+Earlier, before any cleanup existed, two independent audits counted 110 and 241 such files
+on the author's machine — one per invocation, 130 of 130 runs — outliving key rotation,
+landing in backups, and on Linux sitting in `/tmp` until `systemd-tmpfiles` ages them out.
+
+**What was missed.** `scripts/quorum-status` and `scripts/quorum-auth` were fixed with
+`trap 'rm -f "$_hdr"' EXIT INT TERM HUP`, and the comment left at the fix site said *"The
+adapters and probes already did this; the two shipped scripts did not."* The adapters did.
+Four of seven sites did not:
+
+| site | what was wrong |
+|---|---|
+| `probes/glm.sh` | no trap at all; the window spans `curl -m 900` |
+| `skills/model-panel/SKILL.md` | trap covered `$PROMPT $REQ $BODY`; `$HDR` was created *after* it and never added — so three harmless files were signal-cleaned and the one holding the key was not |
+| `docs/porting/openai-compatible.md` | `rm -f` only — and it is the copy-me template, so the defect propagates to every new provider |
+| `agents/glm-agent.md` (2nd snippet) | `rm -f` only |
+
+**Why the search missed it.** CI enforced half the rule. The gate forced the key *into* a
+file and nothing ever forced it back out, so removal stayed a convention — and a convention
+holds only where someone remembers it. The claim that the probes were already covered was
+written from the fix author's memory rather than from an enumeration, which is the same
+assumed-ground-truth failure this repo has now hit twice.
+
+**A false negative worth keeping.** The first reproduction reported *no leak*. The harness
+was wrong, not the code: on macOS `mktemp` with no template reads the
+`DARWIN_USER_TEMP_DIR` confstr and **ignores an exported `$TMPDIR`**, so the check counted
+files in an empty directory. `docs/evidence.md` had shipped that exact recipe as its proof.
+A verification that cannot observe the thing it verifies always passes.
+
+**Fix.** Delete the file, keep the reader. `-H @file` already accepted any path, so it is
+handed a pipe instead: `-H @<(printf 'Authorization: Bearer %s\n' "$KEY")`. Not in `argv`,
+not on disk, nothing to strand and no trap to remember. Verified at all seven sites — the
+header is still transmitted, the key is absent from `argv`, and the fd survives the extra
+`exec` through `qt`'s `timeout`. Needs bash or zsh; POSIX `sh` has no process substitution.
+`tests/test-key-never-on-disk.sh` and a second CI gate now enforce it.
+
+**The near-miss.** The first version of this fix used `curl --config <(printf 'header =
+"Authorization: Bearer %s"\n' "$KEY")`, which works and would have shipped a quieter bug:
+`--config` **unescapes** quoted values. Measured against the old `-H @file`, which is
+byte-transparent:
+
+| key | `-H @file` | `--config` quoted | `-H @<(...)` |
+|---|---|---|---|
+| `plain-abc123` | `plain-abc123` | `plain-abc123` | `plain-abc123` |
+| `has"quote` | `has"quote` | `has` | `has"quote` |
+| `has\backslash` | `has\backslash` | `hasbackslash` | `has\backslash` |
+
+A key containing `"` or `\` would be silently truncated or mangled into an auth failure that
+blames the provider. `quorum-auth --set-key` accepts whatever a user pastes, and the porting
+template is copied to providers whose key alphabets nobody here controls. The unquoted config
+form is worse: `header = Authorization: Bearer abc123` sets **no header at all**, with no
+warning. Preferring the form that changes the fewest semantics — same `@file` reader, new
+path — avoided all of it.
+
+**The general lesson.** A security fix that *relocates* a secret inherits responsibility for
+the new location's whole lifecycle. Ask what the fix created, not just what it removed — and
+prefer the version with no failure mode to remember over the version with a rule that every
+future call site has to honour.
 
 ### A command and a skill with the same name silently collide
 

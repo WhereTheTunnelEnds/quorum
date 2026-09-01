@@ -59,19 +59,22 @@ cat > "$PROMPT_FILE" <<'PROMPT_EOF'
 PROMPT_EOF
 
 BODY=$(mktemp)
-# The key goes in a header FILE, not on the command line: with
-# -H "Authorization: Bearer $KEY" the key sits in argv, where `ps auxww` shows it to every
-# process running as you. Harmless for a local endpoint with no real key — but copy this
-# adapter to a hosted OpenAI-compatible provider and the habit follows the code.
-HDR=$(mktemp); chmod 600 "$HDR"
-printf 'Authorization: Bearer %s\n' "${LOCAL_LLM_KEY:-none}" > "$HDR"
+# The key goes on NEITHER the command line nor the disk. With
+# -H "Authorization: Bearer $KEY" it sits in argv, where `ps auxww` shows it to every
+# process running as you. Writing it to a chmod 600 file fixes argv and strands a live
+# credential in the temp dir whenever a signal lands before the cleanup. `-H @<(...)` keeps
+# the same `@file` reader and hands it a /dev/fd pipe: no argv, no file, nothing to clean up.
+#
+# Harmless for a local endpoint with no real key — but copy this adapter to a hosted
+# OpenAI-compatible provider and the habit follows the code. It is the habit that matters,
+# which is why the template models the safe one. Needs bash or zsh: `<(...)` is process
+# substitution and POSIX `sh` does not have it.
 CODE=$(jq -n --rawfile p "$PROMPT_FILE" --arg m "$MODEL" \
         '{model:$m, messages:[{role:"user", content:$p}], stream:false}' \
       | curl -s -m 900 -o "$BODY" -w '%{http_code}' "$BASE/chat/completions" \
           -H "content-type: application/json" \
-          -H @"$HDR" \
+          -H @<(printf 'Authorization: Bearer %s\n' "${LOCAL_LLM_KEY:-none}") \
           -d @-)
-rm -f "$HDR"
 
 jq -r '.choices[0].message.content // .error.message // "no content"' "$BODY"
 ```

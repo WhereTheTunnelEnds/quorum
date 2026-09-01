@@ -321,23 +321,17 @@ if wants glm; then
     note "  echo 'export Z_AI_API_KEY=\"...\"' >> $QUORUM_ENVFILE_SHORT && chmod 600 $QUORUM_ENVFILE_SHORT"
     note "$QUORUM_ENVFILE_WHY"
   else
-    # The key goes in a HEADER FILE, never on the command line. Measured: with
-# `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to any process running as
-# you. curl reads @file and it never reaches argv.
-    _hdr=$(mktemp); chmod 600 "$_hdr"
-    # Remove it on EVERY exit path, including a signal. Without this, each run left a
-    # plaintext key file in the shared temp dir forever: two independent audits counted 110
-    # and 241 of them on the author's machine, one per invocation, 130 of 130 runs. The file
-    # exists to keep the key out of argv -- which it does -- but it then outlived key
-    # rotation and landed in backups. The adapters and probes already cleaned up; the two
-    # shipped scripts did not.
-    trap 'rm -f "$_hdr"' EXIT INT TERM HUP
-    printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY" > "$_hdr"
+    # The key must reach neither the command line nor the disk. Measured: with
+# `-H "Authorization: Bearer $KEY"`, `ps auxww` shows the key to any process running as you.
+    #
+    # This was a chmod 600 mktemp file plus a trap. The trap was correct; requiring one at
+    # every call site was not, and four of seven sites never got one. `--config <(...)` has
+    # curl read the header from a /dev/fd pipe instead: no file exists, so nothing can be
+    # stranded by a signal. See tests/test-key-never-on-disk.sh.
     body=$(curl -sS -m 20 https://api.z.ai/api/anthropic/v1/messages \
-      -H @"$_hdr" \
+      -H @<(printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY") \
       -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
       -d '{"model":"glm-5.3","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}' 2>/dev/null)
-    rm -f "$_hdr"
     # Classify on the BODY, not the exit code. (This comment used to say z.ai returns
     # failures inside HTTP 200; docs/field-notes.md measures 400/401. The classifier was
     # always right, the explanation was not.)

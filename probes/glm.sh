@@ -9,12 +9,19 @@ PROBE_PRECONDITION='[ -n "${Z_AI_API_KEY:-}" ]'
 PROBE_PRECONDITION_DESC='Z_AI_API_KEY is not set — run: quorum-auth glm --set-key'
 
 _glm_call() {  # $1 = model id, $2 = prompt file
-  # The key goes in a header FILE, never on the command line. Measured: with
-  # -H "Authorization: Bearer $KEY", `ps auxww` shows the key to any process running as
-  # you. curl reads @file, so it never reaches argv. Created per call because this file is
-  # SOURCED — setup at source time would run before quorum-verify is ready and leak on exit.
-  _gl_hdr=$(mktemp); chmod 600 "$_gl_hdr"
-  printf 'Authorization: Bearer %s\n' "${Z_AI_API_KEY:-}" > "$_gl_hdr"
+  # The key must not reach the command line. Measured: with -H "Authorization: Bearer $KEY",
+  # `ps auxww` shows the key to any process running as you.
+  #
+  # It must not reach the DISK either. This used to be a chmod 600 mktemp file passed as
+  # -H @file, cleaned by an `rm -f` at the end of the function. This file is SOURCED, so a
+  # source-time trap was rejected, and no per-call trap was ever added — leaving a window
+  # spanning `curl -m 900`. Measured, SIGTERM mid-call: one file per interrupted run,
+  # holding a live key, surviving indefinitely.
+  #
+  # `-H @<(...)` closes both. curl reads the header from a /dev/fd pipe: never in argv,
+  # never on disk, so there is no cleanup to forget and no trap to get wrong in a sourced
+  # file. Verified the header is still transmitted, that it stays out of argv, and that the
+  # fd survives the extra exec through `qt`'s `timeout`.
 
   # These MUST match agents/glm-agent.md. A probe's job is to re-run the adapter's documented
   # invocation against the live provider, so a probe carrying different numbers certifies a
@@ -37,7 +44,7 @@ _glm_call() {  # $1 = model id, $2 = prompt file
     '{model:$m, max_tokens:64000, messages:[{role:"user", content:$p}]}' \
   | qt curl -s -m 900 -o "$_gl_body" -w '%{http_code}' \
       https://api.z.ai/api/anthropic/v1/messages \
-      -H @"$_gl_hdr" \
+      -H @<(printf 'Authorization: Bearer %s\n' "${Z_AI_API_KEY:-}") \
       -H "anthropic-version: 2023-06-01" \
       -H "content-type: application/json" \
       -d @-)
@@ -52,7 +59,7 @@ _glm_call() {  # $1 = model id, $2 = prompt file
     printf 'HTTP %s: %s\n' "$_gl_code" \
       "$(jq -r '.error.message // tostring' "$_gl_body" 2>/dev/null || head -c 200 "$_gl_body")"
   fi
-  rm -f "$_gl_hdr" "$_gl_body"
+  rm -f "$_gl_body"
   return $_gl_rc
 }
 
