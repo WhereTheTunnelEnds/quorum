@@ -1,6 +1,6 @@
 ---
 name: model-panel
-description: Use when a decision is expensive to get wrong and a single model's opinion isn't enough - hard architecture calls, risky refactors, security-sensitive code, debugging that has resisted one line of attack, or any "am I sure about this?" moment. Fans the question out to GLM, Codex, Copilot, Antigravity and Ollama in parallel (read-only), then synthesizes the answers against Claude's own. For handing over whole tasks rather than questions, use delegate-task instead.
+description: Use when a decision is expensive to get wrong and a single model's opinion isn't enough - hard architecture calls, risky refactors, security-sensitive code, debugging that has resisted one line of attack, or any "am I sure about this?" moment. Fans the question out to GLM, Codex, Copilot, Antigravity, Ollama and OpenRouter in parallel (read-only), then synthesizes the answers against Claude's own. For handing over whole tasks rather than questions, use delegate-task instead.
 ---
 
 # Model Panel
@@ -37,6 +37,8 @@ synthesis step costs more than the answer is worth.
 | Huge file / whole subsystem in one read | **GLM only** | 1M context; the only one that can hold it at once |
 | The repo itself, read by the provider | **Codex** or **Antigravity** | Both open your files directly instead of working from pasted excerpts |
 | Anything that must not leave the machine | **Ollama only** | Local; nothing is transmitted |
+| A model no subscription here covers | **OpenRouter only** | Metered per token — the only way to reach a vendor you do not hold a plan for |
+| Two *different* vendors' frontier models on one question | **OpenRouter**, twice, with different `model:` | One key spans Anthropic, OpenAI and Google families |
 | Repo conventions, PR/issue/CI history | **Copilot only** | GitHub-native context the others lack |
 | Quick sanity check | **One**, whichever is least like Claude for that domain | A full panel on a small question trains you to stop using the panel |
 | Anything already covered by good tests | **None** | Tests are a cheaper oracle than a panel |
@@ -169,6 +171,11 @@ not benchmarks.
   that nothing leaves the machine. Do **not** count it as a vote on a hard call: a panel
   pays off through models being wrong in *different* ways, and a small local model is wrong
   more often and less independently. Use it for privacy-bound work, not tie-breaking.
+- **OpenRouter** — not a voice of its own but a *dial*: whichever model you name. It is the
+  only panelist whose character you choose per question, which makes it the one to reach for
+  when the panel is too correlated — two subscriptions to the same vendor family are one
+  opinion wearing two names. It is also the only metered panelist, so name a model
+  deliberately rather than defaulting.
 
 ## Workflow
 
@@ -190,6 +197,7 @@ not benchmarks.
    | `antigravity-agent` | headless permission auto-deny — **not** `--sandbox`, which does nothing | name paths; it reads the repo |
    | `glm-agent` | no machine access at all | **inline file contents** |
    | `ollama-agent` | no machine access at all | **inline file contents** |
+| `openrouter-agent` | no machine access at all — no server-side tool loop | **inline file contents** |
 
    Do not assume a flag name implies enforcement. For Antigravity the read-only guarantee
    comes from `-p` auto-denying permissions it cannot prompt for, and its adapter refuses
@@ -233,6 +241,7 @@ failure) against a written standard.
 | `glm-agent` | `npx -y zai-cli vision analyze`; JPG/PNG only, ≤5MB |
 | `antigravity-agent` | reads image paths directly; verified on the four-quadrant probe |
 | `ollama-agent` | only if a vision model is pulled — otherwise skip it |
+| `openrouter-agent` | data URI in the content array; verified on the four-quadrant probe |
 
 **Normalize the photo once, up front:** `IMG=$(prep-image <original>)`, then hand `$IMG` to
 every panelist. Phone photos are HEIC and often 20MB+, which some endpoints reject outright
@@ -290,5 +299,6 @@ consensus of four, and the user cannot tell the difference unless you say so.
 ## Cost
 
 Each consult spends quota on that provider's subscription — except Ollama, which is free
-and local. A full panel is roughly one answer per panelist plus your own. Worth it for a decision you'd otherwise sleep on; not worth it
+and local, and OpenRouter, which is **not** a subscription at all: it bills real prepaid
+balance per token, so a full panel including it has a cash cost the others do not. A full panel is roughly one answer per panelist plus your own. Worth it for a decision you'd otherwise sleep on; not worth it
 for anything you'd merge without review.

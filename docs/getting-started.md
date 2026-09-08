@@ -37,6 +37,7 @@ There is no configuration step that requires a provider you don't have.
 | A ChatGPT plan | Codex — deep focused debugging, repo-wide code review |
 | A GitHub Copilot plan | Copilot — PR/issue/CI context nothing else can see |
 | A Z.AI Coding Plan | GLM — 1M-token context, cheapest bulk work |
+| An OpenRouter balance | OpenRouter — any vendor's model, chosen per question, billed per token |
 | None of the above | Add a local model (Ollama, MLX) — see [step 6](#6-optional-a-local-model) |
 
 Skip any section below that doesn't apply. `quorum-status` will show the others as
@@ -129,7 +130,9 @@ line didn't take.
 
 Two rows will look "already done" and that is expected: **claude** reports logged in if you
 are using Claude Code at all, and **ollama** reports OK if you happen to have its server
-running. You may also see a `quorum-claude-on presets` section, which is covered in step 5.
+running. **openrouter** shows your prepaid balance rather than a subscription state, because
+it is the one provider here that is metered — the check costs nothing, but every consult
+through it does. You may also see a `quorum-claude-on presets` section, which is covered in step 5.
 
 At any point from here on, `quorum-auth` will tell you what's still unauthenticated and the
 exact command that fixes each one. The rest of this guide is the long-form version of that.

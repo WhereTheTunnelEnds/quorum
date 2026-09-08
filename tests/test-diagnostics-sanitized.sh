@@ -148,7 +148,10 @@ check "ollama: the defensive .error read is piped through quorum-sanitize" \
 
 # Nothing may reach the user un-sanitised. Catch the generic regression: a `tail`/`cat` of the
 # stderr file that is not piped onward.
-for a in codex copilot antigravity ollama glm; do
+# Derived from what actually ships, not hardcoded. A hardcoded list here silently excluded
+# every adapter added by /quorum:add-provider -- the repo's own advertised workflow -- which
+# is the same "list that quietly becomes a subset" defect the manifest CI gate exists for.
+for a in $(cd "$ROOT/agents" && ls -1 *-agent.md | sed 's/-agent\.md$//'); do
   f="$ROOT/agents/$a-agent.md"
   # Anchored to command position. An unanchored (tail|cat|head) matched "appliCATion/json"
   # on ollama's curl line -- a false positive on a line that merely redirects INTO $ERR.

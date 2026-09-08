@@ -38,7 +38,12 @@ Your caller specifies **consult**, **verify**, or **delegate**. If they didn't, 
 the OS, the harness, or a scratch worktree. If probe 3 FAILED, say plainly that the
 provider has no harness-level read-only mode and that isolation comes from the worktree.>
 
-### Verify — can run commands, cannot touch the working tree
+### Verify — <can run commands; working tree protected by X | NOT protected, worktree only>
+
+<Name what stops a write from reaching the real checkout, and do not assert containment
+you did not measure. "cannot touch the working tree" is a claim about a mechanism; if the
+only mechanism is a scratch worktree, the honest heading says so. Measured on the shipped
+adapters: GLM's verify tier grants Bash, so it is NOT read-only despite the tier name.>
 
 <Delete this section if the provider cannot execute anything.>
 
@@ -50,7 +55,13 @@ git -C "$WT" --no-pager diff --stat   # expect empty; report it if not
 <If the mechanism is an allowlist rather than a harness block, say that it is weaker and
 that consult is preferred whenever execution is not genuinely needed.>
 
-### Delegate — implementation, worktree-isolated
+### Delegate — <implementation; write boundary enforced by X | reviewable but NOT contained>
+
+<The tier name is a label; the enforcement mechanism is the claim. Of the five shipped
+adapters exactly ONE — Codex — has a write boundary enforced below the process, by the OS
+sandbox. Copilot's delegate tier was measured writing into the real checkout. If your
+provider's isolation is "we run it in a worktree and you review the diff", write that,
+and do not write "isolated".>
 
 <Delete this section if the provider has no file-editing capability — most local model
 servers do not, and inventing one is worse than omitting it.>
@@ -100,6 +111,17 @@ Report worktree path, branch, and diffstat. **Do not merge, push, or remove the 
 <Delete if probe 6 was skipped or failed.>
 
 ```bash
+# Quorum's OWN commands, and they exist only if scripts/install.sh has run. The plugin
+# route installs this adapter WITHOUT them, and absence does not fail loudly -- it renders
+# as an ordinary result. Refuse instead.
+for _q_need in prep-image; do
+  command -v "$_q_need" >/dev/null 2>&1 || {
+    echo "status: error — $_q_need is not on PATH."
+    echo "Run scripts/install.sh from the Quorum repo, then retry."
+    exit 1
+  }
+done
+
 IMG=$(prep-image "<original>")
 <invocation — note exactly how the prompt is passed alongside the image>
 ```
@@ -160,6 +182,17 @@ cursor up and overwrites the line above — which is your `status:` line — and
 the current one. Neither is caught by a text substitution.
 
 ```bash
+# Guard first: with quorum-sanitize missing, this pipeline yields "" and a real HTTP 200
+# answer is classified `empty` -- "the model had nothing to say". Measured against the live
+# API. A missing prerequisite must never be renderable as an ordinary result.
+for _q_need in quorum-sanitize; do
+  command -v "$_q_need" >/dev/null 2>&1 || {
+    echo "status: error — $_q_need is not on PATH."
+    echo "Run scripts/install.sh from the Quorum repo, then retry."
+    exit 1
+  }
+done
+
 # after substituting the markers, before the text enters the envelope
 TEXT=$(quorum-sanitize < "$OUT")   # never put the raw capture in the envelope
 ```

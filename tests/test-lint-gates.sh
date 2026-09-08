@@ -269,10 +269,19 @@ revert_links_to_local_files_resolve() {
 # Named explicitly so the count below is honest about what it does and does not prove.
 SKIP_TEST_SUITE="runs tests/*.sh, which includes THIS file — exercising it here recurses"
 SKIP_SHELLCHECK="installs shellcheck with apt-get; covered by CI running it for real"
+# Not a gate at all: it installs jq/shellcheck/perl onto the self-hosted runner, which
+# the stock ARC image lacks. Counting it as an "unproven gate" would inflate the number
+# below with a step that asserts nothing -- and that number is only useful while it means
+# "a real gate nobody has watched fail".
+SETUP_STEPS="prepare-self-hosted-runner"
 
 echo
 while IFS=$'\t' read -r slug name; do
   [ -n "$slug" ] || continue
+  case " $SETUP_STEPS " in
+    *" $slug "*) printf '  --    %s\n' "$name"; note "runner setup, not a gate — nothing to prove"; continue ;;
+  esac
+
   case "$slug" in
     test-suite) printf '  --    %s\n' "$name"; note "not exercised: $SKIP_TEST_SUITE"; uncovered=$((uncovered+1)); continue ;;
     shellcheck) printf '  --    %s\n' "$name"; note "not exercised: $SKIP_SHELLCHECK"; uncovered=$((uncovered+1)); continue ;;

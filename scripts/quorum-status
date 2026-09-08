@@ -29,7 +29,8 @@ quorum-status — which providers are reachable right now.
   quorum-status --json  the same checks, as JSON on stdout
 
 It makes a REAL call wherever a real call is the only evidence: GLM gets an API request,
-Ollama gets an /api/tags fetch, Claude gets a credential check.
+Ollama gets an /api/tags fetch, OpenRouter a /api/v1/key fetch (free — no model
+call), Claude gets a credential check.
 
 For copilot and agy it checks that the command EXISTS. That is a presence check, not
 # an auth check. codex is different — it gets a real `codex login status` call, so a stub
@@ -226,6 +227,37 @@ else
   fi
 fi
 
+# --- OpenRouter (metered gateway) -------------------------------------------------
+# There is no `openrouter` binary. Check the KEY against /api/v1/key, which validates the
+# credential and returns the balance WITHOUT a model call — so unlike a chat completion this
+# costs nothing, which is what makes it appropriate for a status command.
+if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+  bad openrouter "OPENROUTER_API_KEY not set  ->  export it from $QUORUM_ENVFILE_SHORT"
+else
+  # Key on a /dev/fd pipe, never argv and never a file — see the glm block above.
+  orbody=$(curl -sS -m 20 https://openrouter.ai/api/v1/key \
+    -H @<(printf 'Authorization: Bearer %s\n' "$OPENROUTER_API_KEY") 2>/dev/null)
+  if [ -z "$orbody" ]; then
+    # Empty body BEFORE jq sees it, for the reason documented in the glm block: jq on zero
+    # bytes emits zero bytes and exits 0, so `// "default"` never fires and an outage gets
+    # reported as a bad credential.
+    bad openrouter "no response from openrouter.ai — network, DNS, proxy or timeout, NOT your key"
+  elif printf '%s' "$orbody" | jq -e '.data' >/dev/null 2>&1; then
+    # `.limit` is null on a pay-as-you-go key, which is not an error and must not render as
+    # the string "null" — say what it means instead.
+    ordetail=$(printf '%s' "$orbody" | jq -r '.data
+      | "spent $\(.usage // 0)"
+        + (if .limit then " of $\(.limit) (remaining $\(.limit_remaining // 0))"
+           else " — no key limit set; account balance is the ceiling" end)' 2>/dev/null)
+    [ -n "$ordetail" ] || ordetail="key accepted"
+    ok openrouter "$ordetail"
+  else
+    ormsg=$(printf '%s' "$orbody" | jq -r '.error.message // empty' 2>/dev/null || true)
+    [ -n "$ormsg" ] || ormsg="unrecognised response from openrouter.ai (not valid JSON, or an unknown shape)"
+    bad openrouter "$ormsg"
+  fi
+fi
+
 # --- Antigravity -----------------------------------------------------------------
 # The binary is `agy`, NOT `antigravity`. Presence only: probing auth costs a model call,
 # which does not belong in a status command. Use quorum-auth for that.
@@ -271,9 +303,9 @@ render_text() {
     IFS=$'\t' read -r st name detail <<<"$r"
     [ "${#detail}" -gt 120 ] && detail="${detail:0:117}..."
     case "$st" in
-      ok)   printf '  \033[32mOK\033[0m  %-9s %s\n' "$name" "$detail" ;;
-      bad)  printf '  \033[31m--\033[0m  %-9s %s\n' "$name" "$detail" ;;
-      warn) printf '  \033[33m??\033[0m  %-9s %s\n' "$name" "$detail" ;;
+      ok)   printf '  \033[32mOK\033[0m  %-10s %s\n' "$name" "$detail" ;;
+      bad)  printf '  \033[31m--\033[0m  %-10s %s\n' "$name" "$detail" ;;
+      warn) printf '  \033[33m??\033[0m  %-10s %s\n' "$name" "$detail" ;;
     esac
   done
   if [ -d "$ENDPOINT_DIR" ]; then
