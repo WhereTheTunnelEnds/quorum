@@ -68,11 +68,14 @@ for d in "$ROOT"/skills/*/; do
   n=$(basename "$d")
   [ -e "$CLAUDE_DIR/skills/$n" ] && shadows="$shadows skills/$n"
 done
-check "no hand-copied agents or skills in $CLAUDE_DIR (the plugin owns these)" \
+for f in "$ROOT"/commands/*.md; do
+  b=$(basename "$f")
+  [ -e "$CLAUDE_DIR/commands/quorum/$b" ] && shadows="$shadows commands/quorum/$b"
+done
+check "no hand-copied agents, skills or commands in $CLAUDE_DIR (the plugin owns these)" \
       "$([ -z "$shadows" ] && echo 0 || echo 1)"
 [ -n "$shadows" ] && { for s in $shadows; do note "shadow: $CLAUDE_DIR/$s"; done
                        note "remove them; the plugin provides these. They do not auto-update."; }
-
 # --- gate 2: the deployed plugin copy matches this repo ------------------------------------
 # Resolve the newest installed copy. Layout: plugins/cache/<marketplace>/<plugin>/<version>/
 PLUGIN_DIR=$(ls -dt "$CLAUDE_DIR"/plugins/cache/*/quorum/*/ 2>/dev/null | head -1)
