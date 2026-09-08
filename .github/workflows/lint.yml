@@ -34,7 +34,7 @@ jobs:
       # Point it at an empty dir so the gate skips loudly, as it does everywhere else.
       CLAUDE_CONFIG_DIR: ${{ github.workspace }}/.ci-claude-config
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Full history, because tests/test-history-has-no-secrets.sh scans every blob
           # ever committed -- which is what going public actually exposes. The default
