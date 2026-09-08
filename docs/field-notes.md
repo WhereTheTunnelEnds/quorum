@@ -9,7 +9,7 @@ measured, so you can tell a claim from a guess.
 
 CLI behaviour changes. Entries measured against a specific version say so. Versions used
 for the current round: **Codex 0.148.0**, **Copilot CLI 1.0.80**, **Claude Code 2.1.246**,
-**Ollama 0.18.2**, **Antigravity CLI 1.1.21**.
+**Ollama 0.18.2**, **Antigravity CLI 1.1.21**. OpenRouter is an HTTP API with no client version; entries below name the model and date instead.
 Re-run `scripts/quorum-verify --all` after any provider update — a flag that quietly got
 renamed looks exactly like a model with nothing to say.
 
@@ -1035,6 +1035,77 @@ repository it never opened, with no error on either stream. If a consult answer 
 of files that plainly exist, check that path before believing the answer. It also means only
 `--model`/`--effort` can serve as `probe_broken` — the other three cannot fail.
 
+## OpenRouter (metered gateway)
+
+### `max_tokens` is a budget for reasoning AND content, and reasoning is spent first
+
+**Symptom.** A reasoning model returns HTTP 200, curl exit 0, and a 4,659-byte body — with
+`.choices[0].message.content` **empty**. Every signal an adapter normally checks says
+success. Classified naively it reports `empty`: *"the model had nothing to say."*
+
+**Cause.** `max_tokens` caps reasoning tokens plus completion tokens together, and the
+reasoning is generated first. A model that thinks past the cap never begins the answer. The
+body is large because the *reasoning* is in it, so even a byte count on the response says
+there is plenty of output.
+
+**Fix.** Classify on `finish_reason` before emptiness, and keep the budget generous — unused
+tokens are not billed:
+
+```bash
+FINISH=$(jq -r '.choices[0].finish_reason // "none"' "$BODY")
+TEXT=$(jq -r '.choices[0].message.content // ""' "$BODY")
+# finish_reason=length + empty TEXT  -> error "budget went to reasoning", NOT empty
+```
+
+Never relay the `reasoning` field in place of the answer. It is scratch work, and it reads
+convincingly enough to be mistaken for a conclusion.
+
+**Measured.** `openai/gpt-5-nano`, `max_tokens: 48`: HTTP 200, curl rc 0, body 4,659 bytes,
+`finish_reason: "length"`, `reasoning` 924 characters, `reasoning_tokens: 234`,
+`completion_tokens: 0`, `content` length **0**. The identical call at `max_tokens: 2000`:
+`finish_reason: "stop"`, `content` 223 characters.
+
+**Note what this sharpens.** The cross-cutting entry above establishes that z.ai does *not*
+hide failures inside HTTP 200. Nor does OpenRouter — a bad model id is 400, a bad key 401,
+an unroutable model 404, all cleanly discriminating. What arrives as 200 here is not a
+failure but an **incomplete answer**, which is the harder case: there is no error object to
+find, only a field that says the model stopped for the wrong reason.
+
+### `native_finish_reason` is vendor-specific; `finish_reason` is not
+
+**Symptom.** A truncation check works against one model and silently passes truncated
+answers from another, with no code change between them.
+
+**Cause.** OpenRouter returns two fields. `finish_reason` is normalised to the OpenAI
+vocabulary (`stop`, `length`, …); `native_finish_reason` is passed through verbatim from
+whichever upstream served the request. Which upstream serves a given model id is
+OpenRouter's routing decision, not the caller's — so a check written against a native string
+is correct for one vendor and wrong for the next, and the switch happens without warning.
+
+**Fix.** Classify on `finish_reason`. Keep `native_finish_reason` and `.provider` for
+diagnostics only.
+
+**Measured.** The same truncation condition, same prompt, same `max_tokens`:
+`google/gemini-2.5-flash` returned `native_finish_reason: "MAX_TOKENS"`;
+`openai/gpt-5-nano` returned `"max_output_tokens"`. Both normalised to
+`finish_reason: "length"`.
+
+### HTTP 404 means "nothing will serve you this", not "no such model"
+
+**Symptom.** A model id that exists in the catalogue, and is spelled correctly, returns 404.
+The natural response — tell the user to check the spelling — sends them the wrong way.
+
+**Cause.** 400 and 404 are different faults here. **400** `... is not a valid model ID` is a
+malformed or retired id. **404** `No allowed providers are available for the selected model`
+means the id is fine but no upstream will serve it to *this account*, usually because of the
+account's data-policy/privacy settings or a region restriction. The fix is an account
+setting at `https://openrouter.ai/settings/privacy`, not an edit to the request.
+
+**Measured.** Bad id: HTTP 400, curl rc 0, 132-byte body. Unroutable id: HTTP 404, curl rc
+0, 778-byte body. Bad key: HTTP 401, curl rc 0, 50-byte body, `"User not found."` — note
+that message names the *user*, not the key, which reads like an account problem when it is
+an authentication one. **curl exits 0 for all three.**
+
 ## Claude Code as a subprocess
 
 ### `claude -p` hangs on a permission prompt
@@ -1052,6 +1123,69 @@ claude -p "..." --allowedTools "Read,Glob,Grep,Bash" --disallowedTools "Write,Ed
 access, silently converting a verification into an unreviewed delegation.
 
 ---
+
+## Deploying the plugin
+
+### `marketplace update` does not update the plugin, and `plugin update` compares versions
+
+**Symptom.** A file is edited in the repo, `claude plugin marketplace update quorum` reports
+success, and the deployed copy is unchanged. `claude plugin update quorum` then answers
+*"already at the latest version (0.1.0)"* and also changes nothing. Everything reports
+success; nothing is deployed.
+
+**Cause.** Two separate things, and the names invite conflating them. `marketplace update`
+refreshes marketplace **metadata** and never touches an installed plugin. `plugin update`
+does re-sync the cache, but it decides whether to act by comparing **version strings** — not
+file contents. With the version unchanged there is nothing it considers to do, however much
+the source has changed.
+
+**Fix.** Bump the version in `.claude-plugin/plugin.json` *and* the marketplace entry (they
+must agree), then:
+
+```bash
+claude plugin marketplace update quorum   # refresh the metadata
+claude plugin update quorum               # re-sync the installed copy
+```
+
+A content change with no version bump is not deployable. `tests/test-deployed-matches-repo.sh`
+is what makes this visible instead of silent.
+
+**Measured.** Adding `agents/openrouter-agent.md` and editing `skills/model-panel/SKILL.md`:
+both update commands reported success at version 0.1.0 while the drift gate stayed red on
+both files. After bumping to 0.2.0, `plugin update` reported *"updated from 0.1.0 to 0.2.0"*
+and the gate went green.
+
+**Note.** `claude` may be shell-aliased such that it swallows subcommands and starts a
+session instead of running the CLI — `claude plugin marketplace update quorum` then returns
+prose rather than output. Use `command claude` if that happens.
+
+### The deployment check picked a version nothing was running
+
+**Symptom.** With two versions in the plugin cache, the drift gate reported files as stale
+that were byte-identical to the repo in the version actually installed.
+
+**Cause.** It resolved the deployed copy with `ls -dt .../quorum/*/ | head -1` — newest
+directory by mtime. An update left `0.1.0` and `0.2.0` with the **same mtime to the second**;
+`ls -dt` broke the tie by name and returned `0.1.0`, which nothing executes.
+
+**Fix.** Read Claude Code's own installation record rather than inferring from the
+filesystem — `~/.claude/plugins/installed_plugins.json` carries `installPath` and `version`
+per scope:
+
+```bash
+jq -r '(.plugins // {}) | to_entries[] | select(.key | test("^quorum@"))
+       | .value[]? | .installPath // empty' ~/.claude/plugins/installed_plugins.json
+```
+
+**Why it matters more than the false positive it produced.** A wrong-but-red gate is
+annoying. The same bug in the other direction is silent: had the stale `0.1.0` happened to
+match the repo while the live `0.2.0` did not, the gate would have reported all-clear over
+exactly the drift it exists to catch. **A deployment check that infers which artifact is
+deployed is not a deployment check.**
+
+**Measured.** `ls -ldT` on both directories: identical timestamps, `Sep 8 16:18:58 2026`.
+`ls -dt | head -1` returned `0.1.0`; `claude plugin list` and `installed_plugins.json` both
+said `0.2.0`.
 
 ## Epistemics of relayed answers
 

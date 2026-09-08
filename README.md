@@ -39,7 +39,7 @@ built by walking into each of those failures first.
 
 | | |
 |---|---|
-| **5 verified adapters** | `glm-agent`, `codex-agent`, `copilot-agent`, `ollama-agent`, `antigravity-agent` — every flag field-tested, every failure mode documented |
+| **6 verified adapters** | `glm-agent`, `codex-agent`, `copilot-agent`, `ollama-agent`, `antigravity-agent`, `openrouter-agent` — every flag field-tested, every failure mode documented |
 | **`model-panel`** | Fan a question to every available provider in parallel, then synthesize consensus, splits, and outliers |
 | **`delegate-task`** | Hand over whole units of work; each runs in a throwaway worktree you review as a diff |
 | **`add-provider`** | Your Claude probes a new provider and writes a verified adapter for it — MLX, Ollama, another CLI, anything |
@@ -158,7 +158,9 @@ alone, and names what it deliberately does not touch — your shell env line, `~
 and anything you copied into `~/.claude/`.
 
 `quorum-status` makes a **real call** wherever a real call is the only evidence: GLM gets an
-API request, Ollama gets a `/api/tags` fetch, Claude gets a credential check.
+API request, Ollama gets a `/api/tags` fetch, OpenRouter a `/api/v1/key` fetch (which
+validates the key and reports the balance without spending a token), Claude gets a
+credential check.
 
 It does use `command -v` for the providers that genuinely ship a binary named after
 themselves. For `copilot` and `agy` that is all it is — a stub implementing only
@@ -179,13 +181,13 @@ Measured with `claude plugin details quorum@quorum` on a real install:
 
 | | |
 |---|---|
-| **Always-on** | **~1,510 tokens**, added to every session, whether or not you use Quorum |
-| On invoke | `glm-agent` ~12.7k · `copilot-agent` ~9k · `antigravity-agent` ~8.1k · `codex-agent` ~7.5k · `model-panel` ~6.7k · `ollama-agent` ~6.5k · `build-adapter` ~4.5k |
+| **Always-on** | **~1,680 tokens**, added to every session, whether or not you use Quorum |
+| On invoke | `glm-agent` ~12.9k · `copilot-agent` ~9.4k · `antigravity-agent` ~8.9k · `codex-agent` ~8k · `model-panel` ~7.2k · `openrouter-agent` ~7.2k · `ollama-agent` ~6.8k · `build-adapter` ~4.5k · `delegate-task` ~2.1k |
 | Commands | ~240–590 each |
 
-The always-on figure is the frontmatter of 14 components; the on-invoke figures are the
-adapter bodies, paid each time one fires. A full five-provider panel therefore spends roughly
-**45k tokens on adapter definitions alone** before a single provider is called. That is the
+The always-on figure is the frontmatter of 15 components; the on-invoke figures are the
+adapter bodies, paid each time one fires. A full six-provider panel therefore spends roughly
+**53k tokens on adapter definitions alone** before a single provider is called. That is the
 real price of adapters that document every flag and every failure mode, and it is stated here
 rather than left for you to discover.
 
@@ -209,6 +211,7 @@ documented: [docs/providers.md](docs/providers.md).
 | Copilot | `copilot` CLI (GitHub Copilot subscription) |
 | GLM | `Z_AI_API_KEY` exported from `~/.zshenv` (Z.AI Coding Plan) |
 | Antigravity | `agy` CLI, one browser login (Antigravity subscription). **Consult only** |
+| OpenRouter | `OPENROUTER_API_KEY` exported from `~/.zshenv`. Metered per token, **not** a subscription. **Consult only** |
 | anything else | build it with `/quorum:add-provider` |
 
 Plus `jq`, `curl`, `git`, `bash`, and `perl`. `timeout(1)` is used for hang detection — macOS

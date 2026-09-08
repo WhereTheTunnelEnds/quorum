@@ -204,12 +204,14 @@ PROVIDERS='codex^codex^npm install -g @openai/codex^ChatGPT subscription
 copilot^copilot^npm install -g @github/copilot^GitHub Copilot subscription
 glm^-^get an API key from https://z.ai, then: quorum-auth glm --set-key^Z.AI Coding Plan, 1M context
 ollama^-^see https://ollama.com/download, then: ollama pull llama3.2:3b^local, free, private, no account
+openrouter^-^get a key from https://openrouter.ai/settings/keys, then export OPENROUTER_API_KEY^metered per token, many vendors behind one key
 antigravity^agy^curl -fsSL https://antigravity.google/cli/install.sh | bash^Google; replaces the retired Gemini CLI'
 
 present() {  # present <name> <binary>
   case "$1" in
     glm)    [ -n "${Z_AI_API_KEY:-}" ] ;;
     ollama) curl -s -m 3 "${OLLAMA_BASE:-http://localhost:11434}/api/tags" >/dev/null 2>&1 ;;
+    openrouter) [ -n "${OPENROUTER_API_KEY:-}" ] ;;
     *)      command -v "$2" >/dev/null 2>&1 ;;
   esac
 }

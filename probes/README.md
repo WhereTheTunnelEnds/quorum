@@ -30,8 +30,8 @@ rc=1. Neither this file nor `probe.sh.template` used to mention the variable, so
 contributor following the template exactly produced that, then — per `CONTRIBUTING.md` —
 pasted it into their PR.
 
-**`PROBE_PRECONDITION`** covers providers with no binary at all: GLM needs an API key, Ollama
-needs a running server. Without it, an unconfigured provider showed a red `FAIL` on the first
+**`PROBE_PRECONDITION`** covers providers with no binary at all: GLM and OpenRouter need an
+API key, Ollama needs a running server. Without it, an unconfigured provider showed a red `FAIL` on the first
 command the README tells a new user to run, and — with an Ollama server down — three green
 `PASS`es for calls that never happened.
 

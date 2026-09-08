@@ -33,6 +33,7 @@ questions.
 | Antigravity | headless `-p` auto-denying any permission it cannot prompt for | Harness refusal — **not** `--sandbox`, which does nothing here |
 | GLM | Direct HTTPS call to the Messages API | No machine access at all |
 | Ollama | Direct HTTP call to a local model server | No machine access at all; **no harness of any kind** |
+| OpenRouter | Direct HTTPS call to a chat-completions gateway | No machine access at all; no server-side tool loop |
 
 Two of those are worth dwelling on, because their enforcement story is the least obvious:
 
@@ -45,6 +46,13 @@ than quietly claiming a boundary it no longer has.
 **Ollama** has no sandbox, no tool loop, and no file-editing capability at all — so it is
 read-only by *absence*, and gets a consult tier only. That is why its adapter has no verify
 or delegate section: there would be nothing to enforce them with.
+
+**OpenRouter** is the same shape, and worth stating separately because its breadth invites
+the opposite assumption: it can reach agentic *models*, but it is not an agentic *harness*.
+It will emit tool-call requests if a request supplies a `tools` array, and executing one is
+entirely the client's choice — so its adapter never sends that array, and read-only by
+absence holds. Measured: asked to write a file into a scratch directory, it replied that it
+could not, `tool_calls` was absent, and the directory stayed empty.
 
 Note what the GLM row means in practice: it has no filesystem, so **you must inline file
 contents** into the prompt. Anything it says about your codebase is inference from what you
