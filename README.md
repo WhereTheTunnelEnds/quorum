@@ -95,7 +95,29 @@ cp    commands/*.md ~/.claude/commands/quorum/      # note the quorum/ subdirect
 ./scripts/install.sh
 ```
 
-Three things about that block, each of which broke for someone:
+**This route does not update, and that is a security property, not an inconvenience.** `cp`
+records no version and has no way to notice the source moved. Measured on the author's
+machine, 2026-09-08, on an install done this way five months earlier:
+
+| file | repo | the copy that was running | drift |
+|---|---|---|---|
+| `agents/glm-agent.md` | 609 lines | 256 lines | 413 changed lines |
+| `agents/copilot-agent.md` | 470 | 248 | 262 |
+| `skills/model-panel/SKILL.md` | 294 | 239 | 87 |
+
+~1,374 lines across seven files, and the copy still passed the key on the curl command
+line, where `ps auxww` shows it to every process running as you — the argv leak this repo
+had already fixed twice, and the form the "No API key passed on a command line" CI gate
+rejects. Every gate was green throughout, because they read the repository and none of them
+had ever read the deployment.
+
+If you take this route, re-run these `cp` commands on every `git pull`, and run
+`tests/test-deployed-matches-repo.sh` to check you have. That test **fails by design**
+against a manual install it finds out of date, and it fails on a manual install that
+shadows a plugin install. The plugin route above has none of this: one versioned artifact,
+updated by `claude plugin marketplace update quorum`.
+
+Three further things about that block, each of which broke for someone:
 
 - **The clone is part of it.** This branch needs the repository too — it is not an
   alternative to fetching the code, only to installing it as a plugin.

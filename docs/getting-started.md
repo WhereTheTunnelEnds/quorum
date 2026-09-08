@@ -144,6 +144,19 @@ cp    commands/*.md ~/.claude/commands/quorum/      # note the quorum/ subdirect
 ./scripts/install.sh
 ```
 
+**Nothing updates this copy, and that is the risk.** `cp` records no version and cannot
+notice the source moved. Measured on the author's machine, 2026-09-08, against an install
+done this way five months earlier: seven files, ~1,374 lines of drift, and the copy that
+was actually running still passed the key on the curl command line, where `ps auxww` shows
+it to every process running as you. That is the argv leak this repo had already fixed twice,
+and the form CI rejects. Every gate was green, because they read the repository and none had
+ever read the deployment.
+
+So if you take this route: re-run these `cp` commands on every `git pull`, and run
+`tests/test-deployed-matches-repo.sh` to confirm you did. That test is written to fail
+against a stale manual install, and against a manual install shadowing a plugin install.
+The plugin route has one versioned artifact and `claude plugin marketplace update quorum`.
+
 **`commands/quorum/`, not `commands/`.** User commands are namespaced by *subdirectory*.
 Copy to `~/.claude/commands/` and you get `/status` and `/panel`; this guide tells you to
 type `/quorum:status` and `/quorum:panel`, which only exist if the files sit in a `quorum/`
