@@ -1124,6 +1124,69 @@ access, silently converting a verification into an unreviewed delegation.
 
 ---
 
+## Deploying the plugin
+
+### `marketplace update` does not update the plugin, and `plugin update` compares versions
+
+**Symptom.** A file is edited in the repo, `claude plugin marketplace update quorum` reports
+success, and the deployed copy is unchanged. `claude plugin update quorum` then answers
+*"already at the latest version (0.1.0)"* and also changes nothing. Everything reports
+success; nothing is deployed.
+
+**Cause.** Two separate things, and the names invite conflating them. `marketplace update`
+refreshes marketplace **metadata** and never touches an installed plugin. `plugin update`
+does re-sync the cache, but it decides whether to act by comparing **version strings** — not
+file contents. With the version unchanged there is nothing it considers to do, however much
+the source has changed.
+
+**Fix.** Bump the version in `.claude-plugin/plugin.json` *and* the marketplace entry (they
+must agree), then:
+
+```bash
+claude plugin marketplace update quorum   # refresh the metadata
+claude plugin update quorum               # re-sync the installed copy
+```
+
+A content change with no version bump is not deployable. `tests/test-deployed-matches-repo.sh`
+is what makes this visible instead of silent.
+
+**Measured.** Adding `agents/openrouter-agent.md` and editing `skills/model-panel/SKILL.md`:
+both update commands reported success at version 0.1.0 while the drift gate stayed red on
+both files. After bumping to 0.2.0, `plugin update` reported *"updated from 0.1.0 to 0.2.0"*
+and the gate went green.
+
+**Note.** `claude` may be shell-aliased such that it swallows subcommands and starts a
+session instead of running the CLI — `claude plugin marketplace update quorum` then returns
+prose rather than output. Use `command claude` if that happens.
+
+### The deployment check picked a version nothing was running
+
+**Symptom.** With two versions in the plugin cache, the drift gate reported files as stale
+that were byte-identical to the repo in the version actually installed.
+
+**Cause.** It resolved the deployed copy with `ls -dt .../quorum/*/ | head -1` — newest
+directory by mtime. An update left `0.1.0` and `0.2.0` with the **same mtime to the second**;
+`ls -dt` broke the tie by name and returned `0.1.0`, which nothing executes.
+
+**Fix.** Read Claude Code's own installation record rather than inferring from the
+filesystem — `~/.claude/plugins/installed_plugins.json` carries `installPath` and `version`
+per scope:
+
+```bash
+jq -r '(.plugins // {}) | to_entries[] | select(.key | test("^quorum@"))
+       | .value[]? | .installPath // empty' ~/.claude/plugins/installed_plugins.json
+```
+
+**Why it matters more than the false positive it produced.** A wrong-but-red gate is
+annoying. The same bug in the other direction is silent: had the stale `0.1.0` happened to
+match the repo while the live `0.2.0` did not, the gate would have reported all-clear over
+exactly the drift it exists to catch. **A deployment check that infers which artifact is
+deployed is not a deployment check.**
+
+**Measured.** `ls -ldT` on both directories: identical timestamps, `Sep 8 16:18:58 2026`.
+`ls -dt | head -1` returned `0.1.0`; `claude plugin list` and `installed_plugins.json` both
+said `0.2.0`.
+
 ## Epistemics of relayed answers
 
 Two failure modes that no exit code will ever catch.

@@ -77,8 +77,34 @@ check "no hand-copied agents, skills or commands in $CLAUDE_DIR (the plugin owns
 [ -n "$shadows" ] && { for s in $shadows; do note "shadow: $CLAUDE_DIR/$s"; done
                        note "remove them; the plugin provides these. They do not auto-update."; }
 # --- gate 2: the deployed plugin copy matches this repo ------------------------------------
-# Resolve the newest installed copy. Layout: plugins/cache/<marketplace>/<plugin>/<version>/
-PLUGIN_DIR=$(ls -dt "$CLAUDE_DIR"/plugins/cache/*/quorum/*/ 2>/dev/null | head -1)
+# Resolve the copy Claude Code ACTUALLY RUNS, from its own installation record.
+#
+# This used to be `ls -dt "$CLAUDE_DIR"/plugins/cache/*/quorum/*/ | head -1` -- the newest
+# cached version directory by mtime. Measured the first time a second version was installed:
+# an update left 0.1.0 and 0.2.0 side by side with the SAME mtime to the second, `ls -dt`
+# broke the tie by name and picked 0.1.0, and this gate spent its whole run comparing the
+# repo against a version that nothing executes.
+#
+# That produced a false positive here, which is the harmless direction. The other direction
+# is the one that matters: had the stale 0.1.0 happened to match the repo while the live
+# 0.2.0 did not, the gate would have reported all-clear over exactly the drift it exists to
+# catch. A deployment check that infers which artifact is deployed is not a deployment check.
+#
+# installed_plugins.json is where Claude Code records installPath and version per scope.
+PLUGIN_DIR=""
+INSTALLED_JSON="$CLAUDE_DIR/plugins/installed_plugins.json"
+if [ -f "$INSTALLED_JSON" ] && command -v jq >/dev/null 2>&1; then
+  PLUGIN_DIR=$(jq -r '(.plugins // {}) | to_entries[]
+                      | select(.key | test("^quorum@"))
+                      | .value[]? | .installPath // empty' "$INSTALLED_JSON" 2>/dev/null | head -1)
+  [ -n "$PLUGIN_DIR" ] && PLUGIN_DIR="${PLUGIN_DIR%/}/"
+fi
+if [ -z "$PLUGIN_DIR" ]; then
+  # No record to read. Fall back, but say out loud that the answer is now a guess -- a
+  # silent fallback to the mechanism that was wrong is how the original bug survives a fix.
+  PLUGIN_DIR=$(ls -dt "$CLAUDE_DIR"/plugins/cache/*/quorum/*/ 2>/dev/null | head -1)
+  [ -n "$PLUGIN_DIR" ] && note "no installed_plugins.json entry — GUESSING the newest cached copy by mtime"
+fi
 
 if [ -z "$PLUGIN_DIR" ] || [ ! -d "$PLUGIN_DIR" ]; then
   printf '  --    quorum is not installed as a plugin here\n'
@@ -98,7 +124,15 @@ else
         "$([ -z "$drifted" ] && echo 0 || echo 1)"
   if [ -n "$drifted" ]; then
     for d in $drifted; do note "stale: $d"; done
-    note "re-sync with: claude plugin marketplace update quorum"
+    # `marketplace update` refreshes marketplace METADATA and leaves the installed copy
+    # untouched -- measured: it reported success while this gate stayed red. `plugin update`
+    # is the one that re-syncs, and it compares VERSION STRINGS, not content: with the
+    # version unchanged it answers "already at the latest version (0.1.0)" and keeps serving
+    # a cache that no longer matches the repo. So a content change needs a version bump to
+    # be deployable at all.
+    note "re-sync with: claude plugin update quorum   (NOT 'marketplace update')"
+    note "if it says 'already at the latest version', bump .claude-plugin/plugin.json"
+    note "and the marketplace entry -- it compares versions, not file contents."
   fi
 fi
 
