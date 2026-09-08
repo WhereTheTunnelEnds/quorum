@@ -8,7 +8,31 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    # Org-level self-hosted runners. GitHub-hosted minutes are metered on private repos
+    # and a billing block stops the job before it starts -- measured: two runs reported
+    # "The job was not started because recent account payments have failed", with zero
+    # gates executed. Self-hosted minutes are not metered, so CI stops depending on a
+    # payment state.
+    #
+    # BOTH platforms, because the gates are shell and the two toolchains disagree.
+    # docs/field-notes.md records a `tr` divergence where the documented failure does not
+    # happen on GNU at all -- so a green run on one platform is not evidence about the
+    # other. linux is the ARC scale set (GNU grep/sed); macos is the Mac Studio (BSD).
+    strategy:
+      fail-fast: false          # one platform's failure must not hide the other's result
+      matrix:
+        include:
+          - {name: linux, runner: org-runners}
+          - {name: macos, runner: mac-studio}
+    runs-on: ${{ matrix.runner }}
+    env:
+      # tests/test-deployed-matches-repo.sh compares this repo against the plugin
+      # INSTALLED on the machine. On a hosted runner nothing is deployed, so it skips.
+      # The Mac Studio is a real workstation with quorum installed in ~/.claude, so
+      # without this it would compare the branch under test against whatever version
+      # happens to be installed and fail every branch that is not byte-identical to it.
+      # Point it at an empty dir so the gate skips loudly, as it does everywhere else.
+      CLAUDE_CONFIG_DIR: ${{ github.workspace }}/.ci-claude-config
     steps:
       - uses: actions/checkout@v4
         with:
@@ -18,6 +42,37 @@ jobs:
           # examined almost nothing. It says so when shallow, but an honest vacuous check
           # is still a vacuous check. 62 commits costs nothing to fetch.
           fetch-depth: 0
+
+      # Neither runner is a stock GitHub image, and each is short a different tool.
+      - name: Prepare self-hosted runner
+        shell: bash
+        run: |
+          mkdir -p "$CLAUDE_CONFIG_DIR"
+          case "$RUNNER_OS" in
+            Linux)
+              # ghcr.io/actions/actions-runner is deliberately minimal -- it is NOT the
+              # ubuntu-latest image. Measured: git, curl, tar, python3 and perl are
+              # present; jq and shellcheck are NOT, and both are load-bearing here (jq
+              # parses the manifests, shellcheck is its own gate). The runner has
+              # passwordless sudo, so install rather than maintain a custom image.
+              sudo apt-get update -qq
+              sudo apt-get install -y -qq jq shellcheck perl
+              ;;
+            macOS)
+              # The launchd service runs with PATH=/usr/bin:/bin:/usr/sbin:/sbin, and
+              # Homebrew is NOT on it. Measured on this runner under that exact PATH:
+              # jq, perl, python3 (3.9.6), git, curl and cmp all resolve -- and
+              # shellcheck does NOT, because it exists only in /opt/homebrew/bin. An
+              # interactive shell finds it and the service does not, which is precisely
+              # the "works on my machine" gap CI is supposed to catch rather than inherit.
+              echo /opt/homebrew/bin >> "$GITHUB_PATH"
+              export PATH="/opt/homebrew/bin:$PATH"
+              command -v shellcheck >/dev/null 2>&1 || brew install shellcheck
+              ;;
+          esac
+          # Prove they RUN, not merely that the installer exited 0 -- a missing tool here
+          # makes a gate fail in a way that reads like a real violation.
+          jq --version && shellcheck --version | head -2 && perl --version | sed -n 2p
 
       - name: Validate JSON manifests
         run: |
