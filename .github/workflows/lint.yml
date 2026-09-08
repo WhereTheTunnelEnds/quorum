@@ -104,8 +104,17 @@ jobs:
           OWN = {'quorum-sanitize','prep-image','make-probe-image','quorum-claude-on',
                  'quorum-flags','quorum-status','quorum-verify','quorum-auth','quorum-setup'}
           bad = tot = 0
+          # commands/ and the build-adapter TEMPLATES are in scope, not just agents and
+          # skills. adapter.md.template does not end in .md, so `skills/**/*.md` never
+          # matched it, and it invoked prep-image and quorum-sanitize with NO guard at
+          # all -- while all five shipped adapters carried 9 to 15 guard references each.
+          # Every provider added by /quorum:add-provider would have inherited the defect
+          # this gate exists to prevent: the rule was applied to the adapters that
+          # prompted it, and never enumerated to the thing that generates more of them.
           files = sorted(list(pathlib.Path('agents').glob('*.md')) +
-                         list(pathlib.Path('skills').rglob('*.md')))
+                         list(pathlib.Path('skills').rglob('*.md')) +
+                         list(pathlib.Path('skills').rglob('*.template')) +
+                         list(pathlib.Path('commands').glob('*.md')))
           for f in files:
               s = f.read_text()
               for m in re.finditer(r'```bash\n(.*?)```', s, re.S):

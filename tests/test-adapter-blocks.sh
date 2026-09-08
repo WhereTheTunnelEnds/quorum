@@ -105,6 +105,34 @@ OLLAMA = {
                           "prompt_eval_count":10, "done_reason":"stop"}),
 }
 
+# OpenRouter's shapes are NOT Anthropic's, despite both being "OpenAI-compatible-ish".
+# The two `length` rows are the point of this table: measured on the live API, a reasoning
+# model can spend the whole max_tokens budget thinking and return HTTP 200 with a large body
+# and an EMPTY content -- which an adapter that checks emptiness before finish_reason
+# reports as "the model had nothing to say".
+OPENROUTER = {
+  "ok":            (200, {"choices":[{"finish_reason":"stop","native_finish_reason":"completed",
+                                      "message":{"role":"assistant","content":"REAL ANSWER"}}],
+                          "provider":"MockVendor"}),
+  "truncated":     (200, {"choices":[{"finish_reason":"length","native_finish_reason":"MAX_TOKENS",
+                                      "message":{"role":"assistant","content":"partial review, cut off mid-sen"}}],
+                          "provider":"MockVendor"}),
+  "reasoning_burn":(200, {"choices":[{"finish_reason":"length","native_finish_reason":"max_output_tokens",
+                                      "message":{"role":"assistant","content":"",
+                                                 "reasoning":"lots and lots of thinking "*40}}],
+                          "usage":{"completion_tokens":0,
+                                   "completion_tokens_details":{"reasoning_tokens":234}},
+                          "provider":"MockVendor"}),
+  "thinking_only": (200, {"choices":[{"finish_reason":"stop","native_finish_reason":"completed",
+                                      "message":{"role":"assistant","content":""}}],
+                          "provider":"MockVendor"}),
+  "http_401":      (401, {"error":{"message":"User not found.","code":401}}),
+  "http_400":      (400, {"error":{"message":"openrouter/does-not-exist-9x is not a valid model ID","code":400}}),
+  "hostile":       (200, {"choices":[{"finish_reason":"stop","native_finish_reason":"completed",
+                                      "message":{"role":"assistant","content":HOSTILE}}],
+                          "provider":"MockVendor"}),
+}
+
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def _send(self, code, obj):
@@ -118,7 +146,9 @@ class H(http.server.BaseHTTPRequestHandler):
         n = int(self.headers.get("content-length") or 0)
         self.rfile.read(n)
         s = scenario()
-        table = OLLAMA if self.path.startswith("/api/chat") else ANTHROPIC
+        if self.path.startswith("/api/v1/chat/completions"): table = OPENROUTER
+        elif self.path.startswith("/api/chat"):              table = OLLAMA
+        else:                                                table = ANTHROPIC
         code, body = table.get(s, table["ok"])
         self._send(code, body)
     def do_GET(self):
@@ -280,6 +310,127 @@ else
   [ "$got" = "timeout" ] \
     && ok "unreachable endpoint -> timeout (curl wrote CODE=000), not misreported as error" \
     || bad "unreachable endpoint -> $got, expected timeout"
+fi
+
+# ---------------------------------------------------------------------------------------
+# OPENROUTER — the two `length` rows are why this section exists. Its table orders
+# "budget went to reasoning" ABOVE "empty", and the ordering is the whole guarantee: get it
+# wrong and a call where the model thought for 234 tokens and ran out of room reports as
+# "the model had nothing to say", which sends the user to fix the wrong thing.
+# ---------------------------------------------------------------------------------------
+OR_BLOCK="$WORK/openrouter.sh"
+if ! extract "$ROOT/agents/openrouter-agent.md" 'openrouter.ai/api/v1/chat/completions' > "$OR_BLOCK" 2>"$WORK/err"; then
+  bad "could not extract the OpenRouter consult block: $(cat "$WORK/err")"
+else
+  ok "extracted the OpenRouter consult block from the adapter itself"
+fi
+
+python3 - "$OR_BLOCK" "http://127.0.0.1:$PORT/api/v1/chat/completions" <<'PY'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+s = s.replace("https://openrouter.ai/api/v1/chat/completions", sys.argv[2])
+s = s.replace("<the question, with file contents inlined — this endpoint has no machine access>",
+              "what is 2+2")
+s = s.replace("timeout 900 ", "")
+s = s.replace("-m 890", "-m 10")
+s += '\nprintf "CODE=%s\\nRC=%s\\nFINISH=%s\\nSERVED=%s\\nTEXTLEN=%s\\n" "$CODE" "$RC" "$FINISH" "$SERVED" "${#TEXT}"\n'
+s += 'printf "TEXT<<\\n%s\\n>>TEXT\\n" "$TEXT"\n'
+p.write_text(s)
+PY
+
+# The adapter's documented table, transcribed IN ORDER. Moving the `length` row BELOW the
+# emptiness row is the mistake this function exists to detect.
+or_status() {  # or_status CODE RC FINISH TEXTLEN
+  { [ "$2" = 124 ] || [ "$2" = 28 ]; } && { echo timeout; return; }
+  [ "$2" != 0 ]     && { echo error; return; }
+  [ "$1" != "200" ] && { echo error; return; }
+  if [ "$3" = "length" ]; then echo error; return; fi
+  [ "$4" -eq 0 ]    && { echo empty; return; }
+  echo ok
+}
+
+run_or() {  # run_or <scenario>; sets CODE RC FINISH SERVED TEXTLEN TEXTOUT
+  echo "$1" > "$STATE"
+  out=$(env OPENROUTER_API_KEY="DUMMY-NOT-A-REAL-KEY" bash "$OR_BLOCK" 2>"$WORK/stderr")
+  CODE=$(printf '%s' "$out" | sed -n 's/^CODE=//p')
+  RC=$(printf '%s' "$out" | sed -n 's/^RC=//p')
+  FINISH=$(printf '%s' "$out" | sed -n 's/^FINISH=//p')
+  SERVED=$(printf '%s' "$out" | sed -n 's/^SERVED=//p')
+  TEXTLEN=$(printf '%s' "$out" | sed -n 's/^TEXTLEN=//p')
+  TEXTOUT=$(printf '%s' "$out" | sed -n '/^TEXT<<$/,/^>>TEXT$/p')
+}
+
+echo
+echo "  openrouter-agent.md — consult"
+for spec in "ok:ok" "truncated:error" "reasoning_burn:error" "thinking_only:empty" \
+            "http_401:error" "http_400:error" "hostile:ok"; do
+  sc=${spec%%:*}; want=${spec##*:}
+  run_or "$sc"
+  if [ -z "$CODE" ]; then
+    bad "$sc — the block produced no CODE at all (it did not run): $(tail -1 "$WORK/stderr")"
+    continue
+  fi
+  got=$(or_status "$CODE" "${RC:-0}" "${FINISH:-none}" "${TEXTLEN:-0}")
+  if [ "$got" = "$want" ]; then
+    ok "$sc -> $got   (CODE=$CODE FINISH=${FINISH:-none} textlen=$TEXTLEN)"
+  else
+    bad "$sc -> $got, expected $want   (CODE=$CODE FINISH=${FINISH:-none} textlen=$TEXTLEN)"
+  fi
+done
+
+# The distinction the table turns on, asserted directly rather than inferred from two rows
+# that both say `error`: a reasoning burn and a genuinely empty answer are BOTH HTTP 200
+# with zero characters of text, and only finish_reason separates them.
+run_or reasoning_burn; RB="$CODE/$FINISH/$TEXTLEN"
+run_or thinking_only;  TO="$CODE/$FINISH/$TEXTLEN"
+if [ "$RB" = "200/length/0" ] && [ "$TO" = "200/stop/0" ]; then
+  ok "reasoning burn and an empty answer differ ONLY by finish_reason ($RB vs $TO)"
+else
+  bad "the two zero-length 200s did not capture as expected ($RB vs $TO)"
+fi
+
+# `.provider` must survive into the envelope: it is the only record of which upstream ran it.
+run_or ok
+[ "$SERVED" = "MockVendor" ] \
+  && ok "the serving upstream is captured (SERVED=$SERVED)" \
+  || bad "SERVED='$SERVED', expected MockVendor — the envelope cannot say who answered"
+
+# Hostile payload, with the same precondition-first discipline as the GLM section: "contains
+# no fence marker" is trivially true of an empty string, which is what a broken block emits.
+run_or hostile
+if ! printf '%s' "$TEXTOUT" | grep -q 'here is the answer'; then
+  bad "hostile payload: the block captured no text at all, so the two checks below would pass vacuously"
+  bad "  (skipped: fence marker neutralised)"
+  bad "  (skipped: control characters stripped)"
+else
+  ok "hostile payload reached \$TEXT (so the checks below are testing something)"
+  printf '%s' "$TEXTOUT" | grep -qiE '(BEGIN|END) UNTRUSTED PROVIDER OUTPUT' \
+    && bad "hostile payload kept a usable fence marker — quorum-sanitize is not in this pipeline" \
+    || ok "hostile payload's fence marker was neutralised in the adapter's own pipeline"
+  printf '%s' "$TEXTOUT" | has_control \
+    && bad "hostile payload kept control characters" \
+    || ok "hostile payload's C1 control characters were stripped"
+fi
+
+# Unreachable endpoint. Unlike GLM, this table has no CODE=000 row: curl fails outright and
+# RC carries it, so the expected status is `error`, not `timeout`. Asserting it here stops a
+# future edit from copying GLM's 000 row into an adapter where it cannot fire.
+python3 - "$OR_BLOCK" <<'PY'
+import sys, pathlib, re
+p = pathlib.Path(sys.argv[1]); s = p.read_text()
+p.write_text(re.sub(r'http://127\.0\.0\.1:\d+/api/v1/chat/completions',
+                    'http://127.0.0.1:1/api/v1/chat/completions', s))
+PY
+run_or ok
+if [ -z "$RC" ]; then
+  bad "unreachable endpoint: the block captured no RC at all"
+elif [ "$RC" = 0 ]; then
+  bad "unreachable endpoint: RC=0, so a dead endpoint is indistinguishable from an answer"
+else
+  got=$(or_status "${CODE:-000}" "$RC" "${FINISH:-none}" "${TEXTLEN:-0}")
+  [ "$got" = "error" ] \
+    && ok "unreachable endpoint -> error (curl RC=$RC, CODE=$CODE)" \
+    || bad "unreachable endpoint -> $got, expected error"
 fi
 
 # ---------------------------------------------------------------------------------------
@@ -483,7 +634,7 @@ echo
 # tool absent, TEXT is "" while CODE is 200 and stop_reason is end_turn, so the table
 # classifies a perfectly good response as `empty`. `/plugin marketplace add` installs the
 # plugin without running install.sh, so that PATH is a real one, not a corner case.
-for prov in glm ollama codex copilot antigravity; do
+for prov in glm ollama openrouter codex copilot antigravity; do
   case "$prov" in
     glm)         B="$GLM_BLOCK" ;;
     ollama)      B="$OLL_BLOCK" ;;

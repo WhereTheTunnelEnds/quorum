@@ -31,6 +31,10 @@ cited as if it could.
 | z.ai reports a bad model id in the **body**, curl exits 0 | field-notes | `quorum-verify glm` |
 | Ollama's unpulled-model failure is **HTTP 404**, curl exits 0 | field-notes | `quorum-verify ollama` |
 | Antigravity's broken call is **rc=1, 0 bytes stdout** | field-notes | `quorum-verify antigravity` |
+| OpenRouter reports a bad model id as **HTTP 400**, curl exits 0 | field-notes | `quorum-verify openrouter` |
+| A reasoning model can return **HTTP 200 with empty `content`** when `max_tokens` is spent on reasoning | field-notes, openrouter-agent | `jq -n '{model:"openai/gpt-5-nano",max_tokens:48,messages:[{role:"user",content:"Explain in detail how a B-tree rebalances on insert."}]}' \| curl -s https://openrouter.ai/api/v1/chat/completions -H @<(printf 'Authorization: Bearer %s\\n' "$OPENROUTER_API_KEY") -H 'content-type: application/json' -d @- \| jq '{finish:.choices[0].finish_reason, len:(.choices[0].message.content\|length)}'` — expect `length` and `0` |
+| `native_finish_reason` differs by upstream vendor for the identical condition | field-notes | run the command above against `google/gemini-2.5-flash` (`MAX_TOKENS`) and `openai/gpt-5-nano` (`max_output_tokens`); `finish_reason` is `length` for both |
+| OpenRouter has **no tool loop**: it cannot write to the filesystem | openrouter-agent, safety-model | `d=$(mktemp -d); ` ask it to create `$d/probe3.txt`, then `ls "$d"` — expect an empty directory and `.choices[0].message.tool_calls` absent |
 | Every flag the adapters use still exists | model-panel, adapters | `quorum-flags` |
 | `quorum-flags` exits 0 on a healthy machine and 1 on a real drift | field-notes | `quorum-flags; echo $?`, then invent a flag in an adapter and re-run |
 | The setup wizard completes without hanging | getting-started | `tests/drive-setup.exp n` — **spends quota**: quorum-setup always reaches quorum-auth, which makes a live z.ai call plus `copilot -p` and `agy --print` |

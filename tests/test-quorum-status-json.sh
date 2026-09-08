@@ -60,12 +60,18 @@ done
 # are. Verify with `command -v` before changing this: if a vendor CLI ever does land in
 # /usr/bin, this test starts passing for the wrong reason.
 isolated() {
-  env -u Z_AI_API_KEY -u OLLAMA_BASE \
+  env -u Z_AI_API_KEY -u OPENROUTER_API_KEY -u OLLAMA_BASE \
       PATH=/usr/bin:/bin \
       HOME=/nonexistent-quorum-test \
       QUORUM_ENDPOINT_DIR=/nonexistent-quorum-test/endpoints \
       "$@"
 }
+
+# One row per shipped adapter, plus Claude itself. Derived rather than hardcoded: the
+# literal 6 that used to sit in four places here went stale the moment an adapter was added,
+# and a stale count fails in a way that reads like a bug in quorum-status. Deriving it also
+# makes this test catch the real omission -- an adapter that ships with no status check.
+EXPECTED_PROVIDERS=$(( $(ls -1 "$HERE"/../agents/*-agent.md | wc -l) + 1 ))
 
 echo "quorum-status --json"
 
@@ -76,8 +82,8 @@ check "emits valid JSON with every provider down" $?
 check "exits 1 when no provider is reachable" "$([ "$ec" = 1 ] && echo 0 || echo 1)"
 # A consumer must still learn WHICH providers are down from the run that failed.
 n=$(printf '%s' "$out" | jq -r '.providers | length' 2>/dev/null)
-check "still reports all 6 providers on the failing run (got ${n:-none})" \
-      "$([ "$n" = 6 ] && echo 0 || echo 1)"
+check "still reports all $EXPECTED_PROVIDERS providers on the failing run (got ${n:-none})" \
+      "$([ "$n" = "$EXPECTED_PROVIDERS" ] && echo 0 || echo 1)"
 check "available is 0" \
       "$([ "$(printf '%s' "$out" | jq -r .available)" = 0 ] && echo 0 || echo 1)"
 check "endpoints is [] when the dir is absent" \
@@ -87,8 +93,8 @@ check "endpoints is [] when the dir is absent" \
 hostile=$(isolated OLLAMA_BASE="http://127.0.0.1:$PORT" "$STATUS" --json 2>/dev/null)
 printf '%s' "$hostile" | jq -e . >/dev/null 2>&1
 check "hostile model name still yields valid JSON" $?
-check "hostile run still has exactly 6 providers (no injected structure)" \
-      "$([ "$(printf '%s' "$hostile" | jq -r '.providers | length' 2>/dev/null)" = 6 ] && echo 0 || echo 1)"
+check "hostile run still has exactly $EXPECTED_PROVIDERS providers (no injected structure)" \
+      "$([ "$(printf '%s' "$hostile" | jq -r '.providers | length' 2>/dev/null)" = "$EXPECTED_PROVIDERS" ] && echo 0 || echo 1)"
 check "the injected object stayed inside a string" \
       "$(printf '%s' "$hostile" | jq -e '.providers.ollama.detail | type == "string"' >/dev/null 2>&1 && echo 0 || echo 1)"
 detail=$(printf '%s' "$hostile" | jq -r '.providers.ollama.detail' 2>/dev/null)
@@ -129,7 +135,7 @@ check "renderer emits exactly 2 ESC on the ollama row, none from the provider (g
 # instead: six providers, six rows, no matter what any of them returned.
 rows_printed=$(printf '%s\n' "$text" | grep -cE '^  .*(OK|--|\?\?)')
 check "still exactly 6 rows, so the payload did not forge one (got ${rows_printed:-?})" \
-      "$([ "$rows_printed" = 6 ] && echo 0 || echo 1)"
+      "$([ "$rows_printed" = "$EXPECTED_PROVIDERS" ] && echo 0 || echo 1)"
 
 # --- 3b. invalid UTF-8 must not silently truncate the detail ----------------------
 # Under a UTF-8 locale, BSD tr aborts on the first invalid byte with "Illegal byte
@@ -172,7 +178,7 @@ check "invalid UTF-8 from a provider still yields valid JSON" $?
 EPD=$(mktemp -d)
 : > "$EPD/$(printf 'evil\033[9A\033[2K  \033[32mOK\033[0m  glm  forged').env" 2>/dev/null \
   || : > "$EPD/evil$(printf '\033')9A.env"
-epstext=$(env -u Z_AI_API_KEY -u OLLAMA_BASE PATH=/usr/bin:/bin \
+epstext=$(env -u Z_AI_API_KEY -u OPENROUTER_API_KEY -u OLLAMA_BASE PATH=/usr/bin:/bin \
             HOME=/nonexistent-quorum-test QUORUM_ENDPOINT_DIR="$EPD" \
             OLLAMA_BASE="http://127.0.0.1:1" "$STATUS" 2>/dev/null)
 esc_after=$(printf '%s\n' "$epstext" | sed -n '/presets/,$p' | tr -cd '\033' | wc -c | tr -d ' ')
@@ -182,7 +188,7 @@ check "no ESC survives into the presets block (got ${esc_after:-?})" \
 # first blank line — that blank line is the one right under the "quorum providers" title.
 table_rows=$(printf '%s\n' "$epstext" | sed '/presets/,$d' | grep -cE '^  .*(OK|--|\?\?)')
 check "a hostile preset name did not add a table row (got ${table_rows:-?})" \
-      "$([ "$table_rows" = 6 ] && echo 0 || echo 1)"
+      "$([ "$table_rows" = "$EXPECTED_PROVIDERS" ] && echo 0 || echo 1)"
 rm -rf "$EPD"
 
 # --- 4. argument handling ---------------------------------------------------------
