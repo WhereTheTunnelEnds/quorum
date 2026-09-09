@@ -106,8 +106,13 @@ env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL \
     CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_ALT_OAUTH_TOKEN" \
     CLAUDE_CONFIG_DIR="$ALT_HOME" \
   timeout 900 "$CB" -p "<the question — it can read this repo, so name paths>" \
-    --output-format json >"$OUT" 2>"$ERR"
+    --output-format json >"$OUT" 2>"$ERR" </dev/null
 RC=$?
+# `</dev/null` is not decoration. Without it the child waits on an inherited stdin and emits
+# "Warning: no stdin data received in 3s, proceeding without it" to STDERR -- which this
+# adapter puts in `diagnostics:`. Measured: is_error stays FALSE and the answer is correct,
+# so the run is fine and the envelope looks alarming. A warning under `status: ok` teaches
+# the reader to skim that field, which is where real failures get reported.
 
 IS_ERR=$(jq -r '.is_error // true' "$OUT" 2>/dev/null)      # load-bearing — see below
 DENIALS=$(jq -r '(.permission_denials // []) | length' "$OUT" 2>/dev/null)
