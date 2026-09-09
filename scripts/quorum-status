@@ -258,6 +258,21 @@ else
   fi
 fi
 
+# --- Claude, second subscription --------------------------------------------------
+# Presence only. The token is long-lived and a real call would spend the very quota this
+# adapter exists to preserve, so this checks that it is SET, not that it is valid --
+# quorum-verify claude-alt is what proves it works.
+if [ -z "${CLAUDE_ALT_OAUTH_TOKEN:-}" ]; then
+  bad claude-alt "CLAUDE_ALT_OAUTH_TOKEN not set  ->  the holder runs: claude setup-token"
+else
+  altbin=$(/usr/bin/which claude 2>/dev/null || printf '%s' "$HOME/.local/bin/claude")
+  if [ -x "$altbin" ]; then
+    ok claude-alt "token set; run quorum-verify claude-alt to prove it"
+  else
+    bad claude-alt "token set but no claude binary at $altbin"
+  fi
+fi
+
 # --- Antigravity -----------------------------------------------------------------
 # The binary is `agy`, NOT `antigravity`. Presence only: probing auth costs a model call,
 # which does not belong in a status command. Use quorum-auth for that.

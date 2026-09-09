@@ -1187,6 +1187,75 @@ deployed is not a deployment check.**
 `ls -dt | head -1` returned `0.1.0`; `claude plugin list` and `installed_plugins.json` both
 said `0.2.0`.
 
+## A second Claude subscription (`claude-alt`)
+
+### `subtype` says "success" on a failed call — classify on `is_error`
+
+**Symptom.** An authentication failure is relayed as an answer, with the error string sitting
+inside the untrusted-output fence as though the model had said it.
+
+**Cause.** `claude -p --output-format json` returns BOTH fields, and they disagree. Measured
+with a deliberately invalid OAuth token:
+
+```json
+{"is_error": true, "subtype": "success",
+ "result": "Failed to authenticate. API Error: 401 OAuth access token is invalid."}
+```
+
+`subtype` is the field whose name most invites you to classify on it, and it is the one that
+lies. Note also that **stderr was 0 bytes** — an adapter reading only stderr sees a clean run.
+
+**Fix.** `IS_ERR=$(jq -r '.is_error // true' "$OUT")`, and treat `true` as `error` regardless
+of `subtype`. Default to `true` when the field is absent, so a malformed body fails closed.
+
+**Measured.** Good call: `is_error:false, subtype:success, result:"PROBE_OK"`, exit 0. Bad
+token: `is_error:true, subtype:success`, exit 1, stdout 1192B, stderr **0B**.
+
+### Headless read-only IS enforced, and it is machine-visible
+
+**Symptom.** None — this one is good news, recorded because the *evidence* is easy to miss
+and the adjacent flag is a decoy.
+
+**Cause.** `-p` is non-interactive, so a permission prompt has nobody to answer it and the
+harness denies the tool call. The denial is recorded in `.permission_denials`, which makes
+this the only shipped adapter whose read-only guarantee can be *verified from the output* of
+an ordinary run rather than inferred.
+
+**Measured**, asked to add an Installation section to a real README:
+
+| invocation | README | `.permission_denials` |
+|---|---|---|
+| `-p` (default) | unchanged | **1** — `tool_name: "Edit"` |
+| `-p --permission-mode plan` | unchanged | **0** — never attempted |
+| `-p --dangerously-skip-permissions` | **written** | — |
+
+Row 1 is the guarantee: the model *tried* and was *refused*. Row 3 proves the boundary is
+real rather than a polite model. **Row 2 is the decoy** — `--permission-mode plan` adds
+nothing to enforcement, it only stops the model attempting, which is the prompt-shaped
+version of the same outcome. Reaching for it as the safety mechanism would be claiming a
+guarantee from the wrong layer.
+
+Contrast OpenCode, probed the same day: its `plan` agent also produced no file and no tool
+calls, but its permission block is byte-identical to the fully-permissive one and no denial
+event ever fires. Same observable behaviour, no enforcement underneath. **The denial event is
+the difference between the two, and without checking it they look alike.**
+
+### `env` cannot run a shell function
+
+**Symptom.** A probe exits **127** and `quorum-verify` reports "probe is broken — a command
+it depends on is missing", naming no command.
+
+**Cause.** The invocation was `env -u ... VAR=val qt <binary>`. `qt` is a shell **function**
+that `quorum-verify` defines; `env` execs a binary and cannot see functions, so it looked for
+a program called `qt` and found none.
+
+**Fix.** Put the function first: `qt env -u ... VAR=val <binary>`. `timeout` then runs `env`,
+which runs the binary — and the deadline still applies to the whole thing.
+
+**Measured.** Exit 127 with zero bytes on stderr. Worth noting `quorum-verify` handled it
+correctly: it reported a *broken probe* rather than downgrading to "provider not installed",
+which is the failure-rendered-as-normal-state shape this repo keeps finding.
+
 ## Epistemics of relayed answers
 
 Two failure modes that no exit code will ever catch.

@@ -34,6 +34,7 @@ questions.
 | GLM | Direct HTTPS call to the Messages API | No machine access at all |
 | Ollama | Direct HTTP call to a local model server | No machine access at all; **no harness of any kind** |
 | OpenRouter | Direct HTTPS call to a chat-completions gateway | No machine access at all; no server-side tool loop |
+| Claude (2nd sub) | Headless `-p` auto-denying any permission it cannot prompt for | Harness refusal — and the **only** one that records the denial in its own output (`.permission_denials`) |
 
 Two of those are worth dwelling on, because their enforcement story is the least obvious:
 

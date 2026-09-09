@@ -134,7 +134,7 @@ check "renderer emits exactly 2 ESC on the ollama row, none from the provider (g
 # the real ollama row contains that text legitimately, inside its detail column. Count rows
 # instead: six providers, six rows, no matter what any of them returned.
 rows_printed=$(printf '%s\n' "$text" | grep -cE '^  .*(OK|--|\?\?)')
-check "still exactly 6 rows, so the payload did not forge one (got ${rows_printed:-?})" \
+check "still exactly $EXPECTED_PROVIDERS rows, so the payload did not forge one (got ${rows_printed:-?})" \
       "$([ "$rows_printed" = "$EXPECTED_PROVIDERS" ] && echo 0 || echo 1)"
 
 # --- 3b. invalid UTF-8 must not silently truncate the detail ----------------------

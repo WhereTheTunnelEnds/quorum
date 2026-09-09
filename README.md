@@ -39,7 +39,7 @@ built by walking into each of those failures first.
 
 | | |
 |---|---|
-| **6 verified adapters** | `glm-agent`, `codex-agent`, `copilot-agent`, `ollama-agent`, `antigravity-agent`, `openrouter-agent` — every flag field-tested, every failure mode documented |
+| **7 verified adapters** | `glm-agent`, `codex-agent`, `copilot-agent`, `ollama-agent`, `antigravity-agent`, `openrouter-agent`, `claude-alt-agent` — every flag field-tested, every failure mode documented |
 | **`model-panel`** | Fan a question to every available provider in parallel, then synthesize consensus, splits, and outliers |
 | **`delegate-task`** | Hand over whole units of work; each runs in a throwaway worktree you review as a diff |
 | **`add-provider`** | Your Claude probes a new provider and writes a verified adapter for it — MLX, Ollama, another CLI, anything |
@@ -212,6 +212,7 @@ documented: [docs/providers.md](docs/providers.md).
 | GLM | `Z_AI_API_KEY` exported from `~/.zshenv` (Z.AI Coding Plan) |
 | Antigravity | `agy` CLI, one browser login (Antigravity subscription). **Consult only** |
 | OpenRouter | `OPENROUTER_API_KEY` exported from `~/.zshenv`. Metered per token, **not** a subscription. **Consult only** |
+| Claude (2nd sub) | `CLAUDE_ALT_OAUTH_TOKEN` from `claude setup-token`. Separate quota, full repo access |
 | anything else | build it with `/quorum:add-provider` |
 
 Plus `jq`, `curl`, `git`, `bash`, and `perl`. `timeout(1)` is used for hang detection — macOS

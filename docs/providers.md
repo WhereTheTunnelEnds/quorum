@@ -29,6 +29,7 @@ from a row in this table alone.
 | **Ollama** | server on `:11434` | macOS `brew install ollama` · Linux `curl -fsSL https://ollama.com/install.sh \| sh` · then `ollama pull <model>` | none | **verified** |
 | **Antigravity** | **`agy`** | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | browser, or a Gemini API key for headless | **verified** (consult only) |
 | **OpenRouter** | **none** | — | `OPENROUTER_API_KEY` in `~/.zshenv` | **verified** (consult only) |
+| **Claude (2nd sub)** | `claude` (often shell-aliased — resolve the real path) | already installed | `claude setup-token` on the holder's machine, then `CLAUDE_ALT_OAUTH_TOKEN` in `~/.zshenv` | **verified** |
 | **Cline** | `cline` | `npm i -g cline` | `cline auth --provider <p> --apikey ...`, or `ANTHROPIC_API_KEY` etc. | documented |
 | **Pi** | `pi` | `npm i -g @earendil-works/pi-coding-agent` | provider key in env | documented |
 | **MLX** | server on `:8080` | `pip install mlx-lm` then `mlx_lm.server --model ...` | none | documented |
@@ -125,6 +126,7 @@ You do not re-authenticate per session, per project, or per call.
 | GLM (Z.AI) | — | **yes** — `Z_AI_API_KEY` |
 | Ollama | — | **yes** — no auth at all |
 | OpenRouter | — | **yes** — `OPENROUTER_API_KEY`; metered, not a subscription |
+| Claude (2nd sub) | one time, by the holder | **yes** — `claude setup-token` emits a long-lived token; it is a subscription, not a metered key |
 | Antigravity | one time | **yes** — `GEMINI_API_KEY` *(documented, unverified here)* |
 | Codex | one time | ChatGPT subscription is OAuth-only; an API key bills separately |
 | Copilot | one time | subscription is OAuth-only |
