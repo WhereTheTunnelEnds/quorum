@@ -163,7 +163,23 @@ verify_one() {
     P "non-interactive exit (rc=$GOOD_RC)"
   fi
 
-  if grep -q "$CANARY" "$OUT" 2>/dev/null; then
+  if grep -q "$CANARY" "$OUT" 2>/dev/null && \
+     [ -n "${BROKEN_MATCH:-}" ] && grep -qE "$BROKEN_MATCH" "$OUT" 2>/dev/null; then
+    # The canary arrived AND the good call matches the probe's own failure pattern. The
+    # provider answered; the probe reported it as a failure and shipped the answer inside
+    # the failure string.
+    #
+    # This is not hypothetical. probes/claude-alt.sh classified with
+    # `jq -r '.is_error // true'`, and jq's `//` fires on `false` as well as `null` -- so a
+    # successful call's `is_error:false` became `true` and the probe printed
+    # "FAILED is_error=true: PROBE_OK". Every check here passed: rc was 0, the byte count
+    # was non-zero, the canary was present inside that string, and the exit-code
+    # discriminator still separated good from broken. Four green ticks over a probe that
+    # called every success a failure.
+    F "reachability — canary present, but the GOOD call matches BROKEN_MATCH /$BROKEN_MATCH/"
+    I "the probe reported a successful call as a failure and put the answer inside it"
+    I "head: $(head -c 160 "$OUT" | tr '\n' ' ')"
+  elif grep -q "$CANARY" "$OUT" 2>/dev/null; then
     P "reachability — canary returned (${GOOD_BYTES} bytes)"
   elif [ "$GOOD_BYTES" -gt 0 ]; then
     W "reachability — answered ${GOOD_BYTES} bytes but no canary token"
