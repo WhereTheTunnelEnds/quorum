@@ -40,7 +40,21 @@ jobs:
     # hosted minutes, so outside contributors still get full CI -- they simply get it on
     # GitHub's machines rather than on ours. Keep the approval setting on as well; two
     # independent controls, neither relying on the other.
-    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && matrix.hosted || matrix.runner }}
+    #
+    # UPDATE 2026-09-09: this repository is now PUBLIC, so EVERY job runs hosted, not just
+    # fork PRs. That is not a preference -- it is forced, and it is also correct:
+    #
+    #   - Forced: the org's Default runner group has `allows_public_repositories: false`,
+    #     which is GitHub's default and a deliberate safety one. Within 40 minutes of the
+    #     visibility flip, three `lint` runs sat queued (6m, 14m, 24m) against a pool that
+    #     had gone back to one idle runner. Nothing was broken; the runners are simply not
+    #     allowed to serve this repo any more, so the jobs would have queued forever.
+    #   - Correct: public repositories get unlimited free hosted minutes, so hosted costs
+    #     nothing here, while pointing a public repo at a homelab cluster and a physical
+    #     Mac Studio is the risk the fork-PR routing below already existed to avoid.
+    #
+    # `matrix.runner` is kept so this is one line to revert if the repo goes private again.
+    runs-on: ${{ matrix.hosted }}
     env:
       # tests/test-deployed-matches-repo.sh compares this repo against the plugin
       # INSTALLED on the machine. On a hosted runner nothing is deployed, so it skips.
