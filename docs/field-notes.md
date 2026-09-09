@@ -1278,6 +1278,19 @@ equivalent — a paraphrase is a different program. And when an adapter and its 
 disagree, get both **from the same invocation**; two runs cannot show you a disagreement,
 only a difference.
 
+**It was in the probe too, and four green ticks hid it.** The same `// true` sat in
+`probes/claude-alt.sh`, so `probe_consult` printed `FAILED is_error=true: PROBE_OK` — the
+right answer, inside its own failure marker — while `quorum-verify claude-alt` reported
+**4 passed, 0 failed**. Every check was individually true: exit code 0, non-zero byte count,
+the canary present *within* that string, and the exit-code discriminator still separating
+good from broken. A verifier that asks "did bytes come back containing the canary" cannot
+see a probe that calls every success a failure.
+
+`quorum-verify` now fails when the good call matches the probe's own `BROKEN_MATCH`, because
+a success that looks like the documented failure is a contradiction rather than a pass.
+Proven able to fail: with the bug reintroduced it reports
+*"canary present, but the GOOD call matches BROKEN_MATCH"* and shows the offending line.
+
 **Related but separate.** The same commit moved envelope rendering into the shell so the
 model relays stdout verbatim instead of filling fields. That is worth keeping — it removes
 an interpretation step — but it did **not** fix this bug, and should not be credited with
