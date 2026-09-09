@@ -166,7 +166,7 @@ asked for `<colour>` without saying which one, so `white circle` and `red circle
 correct and the probe could not be scored. Measured on codex: 7 of 11 with the ambiguous
 prompt, 5 of 5 with the one above. The apparent 36% failure rate was entirely the ambiguity
 being marked as error — see
-[field-notes.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/field-notes.md).
+[field-notes.md](https://github.com/WhereTheTunnelEnds/quorum/blob/main/docs/field-notes.md).
 If a probe can be answered two ways, fix the prompt; do not average over more runs.
 
 **Demand the labels — do not accept four ordered lines.** Asking for "four lines clockwise

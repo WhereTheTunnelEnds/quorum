@@ -24,7 +24,7 @@ adapter "for them to test later." An untested adapter that looks tested is worse
 ### If the provider isn't installed
 
 Stop, but be useful about it. Look it up in
-[docs/providers.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/providers.md) and give the user the exact install and auth
+[docs/providers.md](https://github.com/WhereTheTunnelEnds/quorum/blob/main/docs/providers.md) and give the user the exact install and auth
 commands for their platform. Then say plainly that you'll run the probes once it's there.
 
 **Do not install it yourself.** Two reasons, and neither is squeamishness:
@@ -48,9 +48,9 @@ adapters:
 |---|---|---|
 | **Agentic CLI** | Gemini CLI, Aider, Amp, Cursor CLI | the CLI's own headless/exec mode |
 | **HTTP endpoint, no CLI** | Z.AI, OpenRouter, a hosted API | `curl` |
-| **Local server** | MLX, Ollama, LM Studio, llama.cpp, vLLM | `curl` to localhost; see the [porting guides](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/porting/) |
+| **Local server** | MLX, Ollama, LM Studio, llama.cpp, vLLM | `curl` to localhost; see the [porting guides](https://github.com/WhereTheTunnelEnds/quorum/blob/main/docs/porting/) |
 
-[docs/providers.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/providers.md) lists the ones already known, including which
+[docs/providers.md](https://github.com/WhereTheTunnelEnds/quorum/blob/main/docs/providers.md) lists the ones already known, including which
 binary each actually installs as. Then find the real entry point. **Do not assume a binary is named after its vendor** —
 GLM has no `glm` command at all. `command -v` returning NOT FOUND proves nothing; it is
 already responsible for one panel falsely reporting a working provider as missing.
@@ -159,7 +159,7 @@ This is the step where an adapter becomes trustworthy or merely optimistic.
 > that word.
 
 Same reasoning for **verify** (named-command allowlist, or a scratch worktree) and
-**delegate** (throwaway worktree on its own branch, always). See [docs/safety-model.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/safety-model.md).
+**delegate** (throwaway worktree on its own branch, always). See [docs/safety-model.md](https://github.com/WhereTheTunnelEnds/quorum/blob/main/docs/safety-model.md).
 
 ## Step 3 — Write the three files
 
@@ -174,7 +174,7 @@ Copy the templates, then fill them from your notes — never from memory of the 
 2. **`probes/<name>.sh`** — from `templates/probe.sh.template`. This is what makes the
    adapter re-checkable after a vendor update. `probe_broken()` encodes probe 4.
 
-3. **A [docs/field-notes.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/field-notes.md) entry** — but only for genuine surprises. Anything that cost
+3. **A [docs/field-notes.md](https://github.com/WhereTheTunnelEnds/quorum/blob/main/docs/field-notes.md) entry** — but only for genuine surprises. Anything that cost
    you more than one attempt to get right will cost the next person the same. Use the
    documented format, and mark anything you inferred rather than observed.
 
@@ -214,7 +214,7 @@ one for a provider nobody has covered yet is the most useful PR this repo can re
   OpenAI-compatible server on localhost, so consult is a `curl` adapter. They typically
   have **no agentic harness**, which means no native read-only mode and no verify or
   delegate tier. That is fine — say so rather than inventing one. Start from
-  [docs/porting/openai-compatible.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/porting/openai-compatible.md).
+  [docs/porting/openai-compatible.md](https://github.com/WhereTheTunnelEnds/quorum/blob/main/docs/porting/openai-compatible.md).
 - **Another vendor's coding CLI** — closest to the built-in three. Find its headless flag,
   its "don't ask the user" flag, and its sandbox flag, in that order.
 - **A hosted API** — mirror `agents/glm-agent.md`. Capture **both** `%{http_code}` and the
