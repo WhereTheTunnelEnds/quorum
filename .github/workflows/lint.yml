@@ -34,12 +34,17 @@ jobs:
     # would execute on that hardware -- which is why GitHub advises against self-hosted
     # runners on public repos at all.
     #
-    # Requiring manual approval for fork workflows is the usual mitigation, and it depends on
-    # a human scrutinising every run forever. This does not: a PR whose head repo is not this
-    # repo is routed to a GitHub-hosted runner instead. Public repositories get unlimited free
-    # hosted minutes, so outside contributors still get full CI -- they simply get it on
-    # GitHub's machines rather than on ours. Keep the approval setting on as well; two
-    # independent controls, neither relying on the other.
+    # The routing below sends a PR whose head repo is not this repo to a GitHub-hosted runner.
+    #
+    # Be clear about what that is and is not. For `pull_request`, GitHub runs the workflow file
+    # from the FORK's head branch -- so a hostile fork can simply edit `runs-on:` back to a
+    # self-hosted label. The routing prevents ACCIDENTAL use of our hardware by an outside
+    # contributor. It is NOT a control against a determined one, and an earlier version of this
+    # comment called it one of "two independent controls", which was wrong.
+    #
+    # The controls that are real: `allows_public_repositories: false` on the org runner group
+    # (a hard block, and the reason everything below is hosted), and requiring approval for
+    # outside collaborators (real, but it depends on a human scrutinising every run forever).
     #
     # UPDATE 2026-09-09: this repository is now PUBLIC, so EVERY job runs hosted, not just
     # fork PRs. That is not a preference -- it is forced, and it is also correct:
