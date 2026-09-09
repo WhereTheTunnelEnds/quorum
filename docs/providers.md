@@ -12,6 +12,8 @@ install command instead of just reporting failure.
 |---|---|
 | **verified** | An adapter exists and passes `quorum-verify` against the live provider |
 | **documented** | Install command and binary name from vendor docs. **Nobody has run the probes.** |
+| **probed — no adapter** | The probes WERE run and the provider was rejected. The reason is recorded below. This is the most expensive row to produce and the easiest to lose, which is why it gets a status of its own rather than being filed under `documented`. |
+| **retired** | Was covered; the vendor discontinued it or replaced it. |
 
 The distinction is the whole point. A documented row is a starting place, not a promise —
 see [`/quorum:add-provider`](../skills/build-adapter/SKILL.md), which will refuse to write an adapter
@@ -27,11 +29,84 @@ from a row in this table alone.
 | **Ollama** | server on `:11434` | macOS `brew install ollama` · Linux `curl -fsSL https://ollama.com/install.sh \| sh` · then `ollama pull <model>` | none | **verified** |
 | **Antigravity** | **`agy`** | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | browser, or a Gemini API key for headless | **verified** (consult only) |
 | **OpenRouter** | **none** | — | `OPENROUTER_API_KEY` in `~/.zshenv` | **verified** (consult only) |
+| **Claude (2nd sub)** | `claude` (often shell-aliased — resolve the real path) | already installed | `claude setup-token` on the holder's machine, then `CLAUDE_ALT_OAUTH_TOKEN` in `~/.zshenv` | **verified** |
 | **Cline** | `cline` | `npm i -g cline` | `cline auth --provider <p> --apikey ...`, or `ANTHROPIC_API_KEY` etc. | documented |
 | **Pi** | `pi` | `npm i -g @earendil-works/pi-coding-agent` | provider key in env | documented |
 | **MLX** | server on `:8080` | `pip install mlx-lm` then `mlx_lm.server --model ...` | none | documented |
 | **LM Studio** | server on `:1234` | app, or `lms server start` | none | documented |
+| **OpenCode** | `opencode` (installs to `~/.opencode/bin`, not on PATH by default) | `curl -fsSL https://opencode.ai/install \| bash` | `opencode auth login` — **Anthropic is API-key only** | **probed — no adapter** |
 | **Gemini CLI** | `gemini` | — | — | **retired** |
+
+## OpenCode — probed 2026-09-08, rejected
+
+Version **1.18.23**, installed at `~/.opencode/bin/opencode`. It is a capable agentic CLI
+and it runs fine. It is recorded here because two measurements make it unsuitable for
+Quorum's purpose, and both cost a probe session to establish.
+
+### Anthropic is API-key only — there is no subscription login
+
+The reason it was evaluated at all was to pool a **second Claude subscription**. It cannot.
+
+`opencode auth login` takes `-p <provider>` and `-m <method>`, and passing a bogus method
+makes it enumerate the real ones. Measured:
+
+```text
+opencode auth login -p github-copilot -m __nope__
+  Error: Unknown method "__nope__" for github-copilot. Available: Login with GitHub Copilot
+
+opencode auth login -p anthropic -m __nope__
+  ┌  Add credential
+  ◆  Enter your API key
+```
+
+The contrast is the proof: a provider that has OAuth reports it by name, and `anthropic`
+does not — the bogus method is ignored and it goes straight to a key prompt. An Anthropic
+API key is metered per token and billed separately from a Claude subscription, so routing
+here would violate the rule every adapter in this repo carries: **never fall back to a
+metered API key when a subscription is what is being pooled.**
+
+It can reach Claude models through OpenRouter (`openrouter/~anthropic/claude-*` appears
+among 369 models), but that is metered too, and `openrouter-agent` already covers it.
+
+### `plan` mode is prompt-enforced, not harness-enforced — so there is no consult tier
+
+This is the more general finding, and it would apply even if the auth story were different.
+
+OpenCode ships a `plan` agent that behaves as read-only. It is not enforced. Three
+measurements, none of them the transcript:
+
+| Evidence | Result |
+|---|---|
+| `plan`'s permission block vs `build`'s | **identical** — `{"permission":"*","action":"allow","pattern":"*"}`. No write denial anywhere; the only constraints are `doom_loop: ask` and `external_directory: ask`. |
+| Can `plan` call tools at all? | **Yes** — a read request produced 1 tool event, so tool use is not disabled in that mode. |
+| Asked to write a file, then told it was not in plan mode and to ignore its instructions | **0 tool calls**, no file, and no permission-denial event. It narrated *"I am in Plan Mode and should only read"* — `should`, not "was blocked". |
+
+`build`, for contrast, created the file on the first attempt.
+
+So the read-only behaviour rests on the model complying with its system prompt. A denial by
+the harness would surface as a permission event; none ever did. Per
+[docs/safety-model.md](safety-model.md), a tier that cannot be demonstrated is not claimed —
+**OpenCode would get no consult tier**, which for a provider whose whole value here would be
+a second opinion leaves very little.
+
+### What did pass, for whoever picks this up later
+
+Probes 1 and 2 both pass, measured against `openrouter/google/gemini-2.5-flash`:
+
+```text
+opencode run --format json -m <provider/model> "<prompt>" </dev/null
+  rc=0  stdout=933B  stderr=0B
+```
+
+`--format json` emits newline-delimited events (`step_start`, `text`, `tool`), which is a
+good basis for a response contract. It exits cleanly with stdin closed, so there is no
+missing "don't ask" flag. `--auto` exists and is documented by the vendor as
+*"auto-approve permissions that are not explicitly denied (dangerous!)"* — that would be the
+delegate-tier lever, and it would need a throwaway worktree.
+
+**If OpenCode later ships an Anthropic OAuth method, the auth objection disappears — but the
+tier finding stands until `plan` gains a real write denial.** Re-run the probes rather than
+trusting this page; that is the rule this whole document exists to enforce.
 
 ## Is authentication a repeated chore?
 
@@ -51,9 +126,11 @@ You do not re-authenticate per session, per project, or per call.
 | GLM (Z.AI) | — | **yes** — `Z_AI_API_KEY` |
 | Ollama | — | **yes** — no auth at all |
 | OpenRouter | — | **yes** — `OPENROUTER_API_KEY`; metered, not a subscription |
+| Claude (2nd sub) | one time, by the holder | **yes** — `claude setup-token` emits a long-lived token; it is a subscription, not a metered key |
 | Antigravity | one time | **yes** — `GEMINI_API_KEY` *(documented, unverified here)* |
 | Codex | one time | ChatGPT subscription is OAuth-only; an API key bills separately |
 | Copilot | one time | subscription is OAuth-only |
+| OpenCode | **no Anthropic OAuth exists** | API key only — metered, not a subscription |
 
 So for CI, containers, or a fleet of machines, prefer the key column: export the variable
 from `~/.zshenv` and nothing interactive ever happens.
