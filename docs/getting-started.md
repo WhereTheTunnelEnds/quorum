@@ -38,7 +38,7 @@ There is no configuration step that requires a provider you don't have.
 | A GitHub Copilot plan | Copilot — PR/issue/CI context nothing else can see |
 | A Z.AI Coding Plan | GLM — 1M-token context, cheapest bulk work |
 | An OpenRouter balance | OpenRouter — any vendor's model, chosen per question, billed per token |
-| None of the above | Add a local model (Ollama, MLX) — see [step 6](#6-optional-a-local-model) |
+| None of the above | Add a local model (Ollama, MLX) — see [step 9](#9-optional-a-local-model) |
 
 Skip any section below that doesn't apply. `quorum-status` will show the others as
 unavailable, and that is a normal, working state — not an error.
@@ -306,7 +306,85 @@ correct. Both appear on every successful run. See
 
 ---
 
-## 6. Optional: a local model
+## 6. Antigravity (Google Antigravity subscription)
+
+```bash
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+agy                  # no arguments: opens a browser once, then bind the account
+```
+
+**Check:**
+
+```bash
+agy --version
+quorum-verify antigravity
+```
+
+Want: `4 passed, 0 failed`.
+
+> **There is no `antigravity` binary — the command is `agy`.** `command -v antigravity`
+> returns nothing on a machine where this provider works perfectly. Checking for the wrong
+> name has already caused a working provider to be reported as missing.
+
+---
+
+## 7. OpenRouter (prepaid balance — not a subscription)
+
+Every other provider here spends something you already pay for monthly. This one bills per
+token against a balance you top up, which is exactly why it is worth having: it reaches
+model families no subscription here covers.
+
+Get a key at **https://openrouter.ai/settings/keys**, then:
+
+```bash
+quorum-auth openrouter --set-key      # silent prompt; the key never reaches your shell history
+```
+
+**Check:**
+
+```bash
+quorum-auth openrouter
+quorum-verify openrouter
+```
+
+Want: `4 passed, 0 failed`. `quorum-auth` also prints the key's usage, because a key that
+authenticates fine still fails every call once the balance hits zero — and that failure
+arrives as a 402 mid-panel, long after auth said OK.
+
+> Do not paste the key into a chat with an agent, including this one. `--set-key` reads it
+> from a hidden prompt so it never touches your history, your terminal, or a transcript.
+
+---
+
+## 8. A second Claude subscription (optional — pooling)
+
+Only relevant if **another person** is contributing their own Claude subscription, or you
+hold two. It adds Claude-family capacity without spending this session's quota.
+
+Signed in as the **other** account, in your own terminal:
+
+```bash
+claude setup-token           # prints a long-lived OAuth token
+```
+
+Put it in your env file as `CLAUDE_ALT_OAUTH_TOKEN`, mode 600.
+
+**Check:**
+
+```bash
+quorum-auth claude-alt
+quorum-verify claude-alt
+```
+
+Want: `4 passed, 0 failed`.
+
+> **Log in as the other subscription first.** Running `setup-token` while signed in as
+> yourself produces a valid token for the account you already have, and the panel then pools
+> one subscription with itself — every check passes and nothing is gained.
+
+---
+
+## 9. Optional: a local model
 
 For privacy-bound work, offline use, or zero marginal cost.
 
@@ -328,7 +406,7 @@ work, not to tie-breaking hard calls.
 
 ---
 
-## 7. Verify everything together
+## 10. Verify everything together
 
 ```bash
 quorum-status                          # what's reachable
@@ -345,7 +423,7 @@ nothing is the exact failure this project exists to prevent.
 
 ---
 
-## 8. Your first panel
+## 11. Your first panel
 
 In Claude Code, in a real repo:
 
@@ -370,7 +448,7 @@ trains you to stop reaching for it when a decision actually is expensive.
 
 ---
 
-## 9. Your first delegation
+## 12. Your first delegation
 
 ```
 /quorum:delegate  Port the remaining tests in tests/legacy/ to the new fixture API.
@@ -400,6 +478,7 @@ Nothing is merged, pushed, or deleted without you asking.
 
 | | |
 |---|---|
+| Bringing on a teammate | [onboarding-a-teammate.md](onboarding-a-teammate.md) |
 | Something's broken | [troubleshooting.md](troubleshooting.md) |
 | When to use which model | [model-panel skill](../skills/model-panel/SKILL.md) |
 | What each tier can touch | [safety-model.md](safety-model.md) |
