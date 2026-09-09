@@ -111,7 +111,7 @@ Two halves, two installs. The plugin gives Claude the agents, skills, and comman
 scripts are for your *shell* and are installed separately:
 
 ```bash
-git clone https://github.com/kourosh-forti-hands/quorum.git
+git clone https://github.com/WhereTheTunnelEnds/quorum.git
 cd quorum && ./scripts/install.sh
 ```
 

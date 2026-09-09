@@ -61,14 +61,14 @@ built by walking into each of those failures first.
 **As a plugin** (recommended — one command, updates with `git pull`):
 
 ```
-/plugin marketplace add kourosh-forti-hands/quorum
+/plugin marketplace add WhereTheTunnelEnds/quorum
 /plugin install quorum@quorum
 ```
 
 Then put the helper scripts on `PATH` and run the guided setup:
 
 ```bash
-git clone https://github.com/kourosh-forti-hands/quorum.git
+git clone https://github.com/WhereTheTunnelEnds/quorum.git
 cd quorum && ./scripts/install.sh
 ./scripts/quorum-setup     # prerequisites -> providers -> auth -> a real call to each
 ```
@@ -85,7 +85,7 @@ pasted into an agent chat becomes transcript.
 **Or install the pieces manually** — everything here is plain markdown and shell:
 
 ```bash
-git clone https://github.com/kourosh-forti-hands/quorum.git
+git clone https://github.com/WhereTheTunnelEnds/quorum.git
 cd quorum
 
 mkdir -p ~/.claude/agents ~/.claude/skills ~/.claude/commands/quorum
