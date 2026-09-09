@@ -1240,6 +1240,35 @@ calls, but its permission block is byte-identical to the fully-permissive one an
 event ever fires. Same observable behaviour, no enforcement underneath. **The denial event is
 the difference between the two, and without checking it they look alike.**
 
+### A placeholder is an invitation to invent
+
+**Symptom.** An adapter reports `status: error` and `is_error: true` over a correct,
+complete answer. Re-running the identical command by hand shows `is_error: false`. The
+provider is fine; the envelope is wrong.
+
+**Cause.** The adapter captured values into shell variables and then asked the *model* to
+render `is_error: <IS_ERR>`. When a capture does not land — a variable lost between two
+Bash calls, a temp file gone with its shell — a haiku-class model does not stop and say the
+capture failed. It supplies a plausible value. Two of two end-to-end dispatches produced a
+wrong `is_error` this way, while `permission_denials` and `cost_usd`, captured in the same
+block, came through correct.
+
+**Why it hid.** It reproduces only through the agent path — the way the adapter is actually
+invoked — and never from a plain shell. Four direct runs said `is_error:false`; the first
+two agent dispatches said `true`. Testing the invocation is not testing the adapter, and an
+adapter is a document executed by a model, not a script.
+
+**Fix.** The shell classifies and prints the finished envelope; the model relays stdout
+verbatim. Nothing is left to fill in. The classification table stays in the prose so it is
+reviewable, marked as implemented in the block rather than applied by the reader.
+
+**And do not fail closed into the same word.** The capture was `jq -r '.is_error // true'`,
+meant to be safe. Measured: with the file missing, jq errors and the substitution yields an
+EMPTY string, so the `// true` never fires — the guard did not do what it looked like it
+did. It now reports `MISSING`, which is a different status row from `true`, because "the
+provider failed" and "we could not read whether the provider failed" are different faults
+and collapsing them hides which one happened.
+
 ### `env` cannot run a shell function
 
 **Symptom.** A probe exits **127** and `quorum-verify` reports "probe is broken — a command
