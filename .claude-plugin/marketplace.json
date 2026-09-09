@@ -10,8 +10,8 @@
     {
       "name": "quorum",
       "source": "./",
-      "description": "Consult and delegate to GLM, Codex, Copilot, Antigravity, Ollama, OpenRouter, and any provider you add yourself. Three safety tiers, each documented with exactly what it does and does not enforce.",
-      "version": "0.2.0",
+      "description": "Consult and delegate to GLM, Codex, Copilot, Antigravity, Ollama, OpenRouter, a second Claude subscription (claude-alt), and any provider you add yourself. Three safety tiers, each documented with exactly what it does and does not enforce.",
+      "version": "0.3.0",
       "category": "augmentation"
     }
   ]

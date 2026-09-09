@@ -303,7 +303,7 @@ jobs:
           # it matched no secret pattern. Auditing the FILE LIST is what catches them.
           stray=$(git ls-files \
             | grep -vE '^(agents|skills|docs|scripts|probes|commands|reference|tests|\.github|\.claude-plugin)/' \
-            | grep -vE '^(\.gitignore|README\.md|LICENSE|CONTRIBUTING\.md)$' || true)
+            | grep -vE '^(\.gitignore|README\.md|LICENSE|CONTRIBUTING\.md|AGENTS\.md|CLAUDE\.md)$' || true)
           if [ -n "$stray" ]; then
             echo "ERROR: unexpected tracked files:"; echo "$stray"; exit 1
           fi
