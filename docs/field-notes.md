@@ -17,6 +17,49 @@ Format for new entries is at the bottom. PRs welcome — see [CONTRIBUTING.md](.
 
 ---
 
+## A red test that misidentified its own cause
+
+Moving CI to GitHub-hosted runners turned three UTF-8 gates red on `macos-latest` and
+nowhere else. The obvious reading was a platform difference, and the perl versions
+supported it: 5.34.1 on the Mac Studio and 5.38.2 on ubuntu-latest passed, 5.44.0 on
+macos-latest failed. Two hypotheses followed from that and **both were wrong**:
+
+1. *The PerlIO `:encoding(UTF-8)` layer truncates malformed input on newer perl.* Plausible
+   — that layer's malformed-input behaviour genuinely is version-dependent. `quorum-sanitize`
+   was rewritten to decode explicitly with `Encode::decode`. The gates stayed red.
+2. *`Encode` is missing, so the filter dies and emits nothing* — which would explain why every
+   failing assertion needed content present while every passing one was satisfied by empty
+   output. Also wrong.
+
+Instrumenting the runner settled it in one run. `quorum-sanitize` was **byte-perfect** on
+perl 5.44: `modele-cafe-日本` in, the identical bytes out; `START\x9bEND-日本` in,
+`START<U+FFFD>END-日本` out. `Encode` 3.24 loaded fine.
+
+The real cause was three lines away from anything examined:
+
+```
+DEBUG detail text: no server at http://127.0.0.1:18436  ->  run: ollama serve
+```
+
+The test's fake Ollama fixture never came up. Its readiness loop was
+`for _ in 1..10; do curl && break; sleep 0.3; done` — three seconds, and then it **continued
+whether or not the server was listening**. On a cold hosted macOS runner python3's
+`http.server` needs longer. So the assertions ran against a dead fixture, found no payload,
+and reported it as a sanitising failure.
+
+**The lesson is not about perl.** A test that fails for a true reason — the payload really
+was absent — while naming the wrong cause is more expensive than one that simply lies,
+because it is believed and it aims the search. Roughly two hours went into a filter that was
+never broken.
+
+The fixture now polls for 30 seconds and, if the server is still not listening, prints
+`FIXTURE FAILED: ... never started listening` and exits non-zero rather than testing
+nothing. Proven able to fail against a dead port.
+
+The `Encode::decode` rewrite was kept — explicit decoding has stable semantics across perl
+versions where the PerlIO layer does not, so it is the better code regardless. But its commit
+message claimed it fixed the macOS failures, and it did not. That claim is retracted here.
+
 ## Cross-cutting
 
 ### Piping destroys the exit code you are trying to measure

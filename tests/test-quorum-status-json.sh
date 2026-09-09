@@ -23,6 +23,31 @@ check() { # check <description> <condition-result>
 command -v jq >/dev/null 2>&1 || { echo "SKIP: jq not installed"; exit 0; }
 command -v python3 >/dev/null 2>&1 || { echo "SKIP: python3 not installed"; exit 0; }
 
+# A fixture that never came up must FAIL LOUDLY, not fall through.
+#
+# This used to be `for _ in 1..10; do curl && break; sleep 0.3; done` -- 3 seconds, and then
+# it continued whether or not the server was listening. Measured on GitHub-hosted macOS:
+# python3's http.server needs longer than that on a cold runner, so the tests ran against a
+# dead fixture, `detail` held "no server at http://127.0.0.1:18436", and three content
+# assertions failed. They were red for a true reason (the payload really was absent) but
+# blamed the wrong thing entirely -- the search went to quorum-sanitize and perl versions,
+# neither of which was involved.
+#
+# A red test that misidentifies its own cause costs more than a green one that lies, because
+# it is believed. So: poll for 30s, and if it is still not listening, say so and exit non-zero.
+wait_for_server() {  # wait_for_server <url> <label>
+  _wfs_i=0
+  while [ "$_wfs_i" -lt 60 ]; do
+    curl -s -m 1 "$1" >/dev/null 2>&1 && return 0
+    _wfs_i=$((_wfs_i+1))
+    sleep 0.5
+  done
+  echo "FIXTURE FAILED: $2 never started listening at $1 after 30s." >&2
+  echo "  Nothing below this point would be testing what it claims to test." >&2
+  exit 1
+}
+
+
 # --- a fake Ollama that returns hostile model names -------------------------------
 # Every character class that breaks hand-rolled JSON escaping, an ANSI cursor-up sequence
 # that would repaint the row above if it reached the terminal, a forged untrusted-output
@@ -46,10 +71,7 @@ http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
 PY
 SERVER=$!
 trap 'kill "$SERVER" 2>/dev/null' EXIT
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-  curl -s -m 1 "http://127.0.0.1:$PORT/api/tags" >/dev/null 2>&1 && break
-  sleep 0.3
-done
+wait_for_server "http://127.0.0.1:$PORT/api/tags" "hostile ollama fixture"
 
 # Everything except our fake Ollama is forced unreachable: no HOME (so no ~/.claude.json),
 # no API key, and a PATH holding none of the vendor CLIs.
@@ -169,10 +191,7 @@ http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
 PY
 BADSRV=$!
 trap 'kill "$SERVER" "$BADSRV" 2>/dev/null' EXIT
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-  curl -s -m 1 "http://127.0.0.1:$((PORT+1))/api/tags" >/dev/null 2>&1 && break
-  sleep 0.3
-done
+wait_for_server "http://127.0.0.1:$((PORT+1))/api/tags" "invalid-UTF-8 ollama fixture"
 
 badtext=$(isolated OLLAMA_BASE="http://127.0.0.1:$((PORT+1))" "$STATUS" 2>/dev/null)
 check "text after an invalid UTF-8 byte is not truncated away" \
