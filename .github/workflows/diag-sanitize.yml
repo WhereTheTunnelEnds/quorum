@@ -1,0 +1,70 @@
+name: diag-sanitize
+
+# TEMPORARY. Instruments quorum-sanitize on GitHub-hosted macOS, where three UTF-8 gates
+# fail and do not fail on perl 5.34 (Mac Studio) or 5.38 (ubuntu-latest). Two hypotheses
+# have already been wrong, so this gathers evidence at each boundary instead of guessing
+# a third time. Delete once the cause is fixed.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Environment
+        shell: bash
+        run: |
+          echo "== uname ==";      uname -a
+          echo "== perl ==";       perl --version | sed -n 2p
+          echo "== perl path ==";  command -v perl
+          echo "== locale ==";     locale || true
+          echo "LANG=${LANG:-unset} LC_ALL=${LC_ALL:-unset}"
+
+      - name: Does Encode load at all?
+        shell: bash
+        run: |
+          perl -MEncode -e 'print "Encode OK, version $Encode::VERSION\n"' \
+            || echo "ENCODE FAILED TO LOAD (exit $?)"
+
+      - name: Run quorum-sanitize on the three test inputs
+        shell: bash
+        run: |
+          S=./scripts/quorum-sanitize
+          probe() {  # probe <label> <printf-format>
+            echo "--- $1"
+            printf "$2" > /tmp/in.bin
+            echo "  input : $(xxd -p /tmp/in.bin | tr -d '\n')"
+            set +e
+            out=$("$S" < /tmp/in.bin 2>/tmp/err.txt); rc=$?
+            set -e
+            echo "  rc    : $rc"
+            echo "  stderr: $(cat /tmp/err.txt)"
+            echo "  outhex: $(printf '%s' "$out" | xxd -p | tr -d '\n')"
+            echo "  outtxt: $out"
+          }
+          probe "plain non-ASCII"           'modele-cafe-\xe6\x97\xa5\xe6\x9c\xac'
+          probe "invalid byte then text"    'START\x9bEND-\xe6\x97\xa5\xe6\x9c\xac'
+          probe "invalid byte alone"        'A\x9bB'
+          probe "pure ASCII control"        'A\x07B'
+
+      - name: Is it the C1 strip eating raw bytes?
+        shell: bash
+        run: |
+          # If $t is a BYTE string rather than characters, this class deletes 0x97 and 0x9C,
+          # which are interior bytes of 日本 (e6 97 a5 e6 9c ac) -- corrupting it silently.
+          perl -Mutf8 -MEncode -e '
+            my $b = "modele-cafe-\xe6\x97\xa5\xe6\x9c\xac";
+            my $t = Encode::decode("UTF-8", $b);
+            printf "decoded length in CHARS: %d (bytes in: %d)\n", length($t), length($b);
+            printf "utf8 flag on decoded   : %s\n", utf8::is_utf8($t) ? "yes" : "NO";
+            $t =~ s/[\x{0080}-\x{009F}]//g;
+            printf "after C1 strip, chars  : %d\n", length($t);
+            print  "re-encoded             : ", Encode::encode("UTF-8", $t), "\n";
+          '
