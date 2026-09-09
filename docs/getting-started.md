@@ -96,7 +96,10 @@ Should print at least one path.
 /plugin install quorum@quorum
 ```
 
-**Plus the helper scripts** — the parts your *shell* uses. Both halves are needed:
+**Plus the helper scripts** — the parts your *shell* uses. Both halves are needed, and the
+adapters refuse to run without them, deliberately: with `quorum-sanitize` missing, a perfectly
+good HTTP 200 came back with empty text and was classified `empty` — *"the model had nothing
+to say."* Measured against the live API. A loud refusal beat that silence.
 
 ```bash
 git clone https://github.com/WhereTheTunnelEnds/quorum.git
@@ -106,6 +109,21 @@ cd quorum
 
 Clone it wherever you keep code — nothing below assumes a particular location, because
 `install.sh` puts the commands on your `PATH` and every later step calls them by bare name.
+
+Then run the guided setup — **with the `./scripts/` prefix**:
+
+```bash
+./scripts/quorum-setup     # prerequisites -> providers -> auth -> a real call to each
+```
+
+`install.sh` cannot change the `PATH` of the shell that invoked it, so the bare name does not
+resolve until you open a new terminal. Measured on a clean Debian container:
+`quorum-setup: command not found`, exit 127.
+
+`quorum-setup` stops at each thing you need to do yourself. It never asks for a key or an
+auth code — installs and logins are printed for **you** to run, because vendor installers
+execute remote code, logins bind your paid accounts, and anything pasted into an agent chat
+becomes transcript.
 
 That symlinks eight commands into `~/.local/bin`, so `git pull` updates them. If the script
 says that directory isn't on your `PATH`, add it **in `~/.zshenv`, not `~/.zshrc`**:
@@ -134,6 +152,23 @@ running. **openrouter** shows your prepaid balance rather than a subscription st
 it is the one provider here that is metered — the check costs nothing, but every consult
 through it does. You may also see a `quorum-claude-on presets` section, which is covered in step 5.
 
+**What that table is evidence of.** `quorum-status` makes a **real call** wherever a real
+call is the only evidence: GLM gets an API request, Ollama a `/api/tags` fetch, OpenRouter a
+`/api/v1/key` fetch (which validates the key and reports the balance without spending a
+token), Claude a credential check.
+
+It uses `command -v` only for providers that genuinely ship a binary named after themselves,
+and for `copilot` and `agy` that is *all* it is — a stub implementing only `--version` is
+reported OK. That is a presence check, not an auth check, which is why the table says
+`installed` rather than `logged in` for `agy`. `codex` is the exception: it gets a real
+`codex login status`. Measured against a stub answering only `--version`: copilot and agy
+report OK, codex reports `not logged in`.
+
+What it never does is infer *absence* from a missing binary — see the
+[field notes](field-notes.md#a-missing-binary-proves-nothing-about-a-provider).
+
+Use `quorum-auth` for authentication and `quorum-verify` for "does it actually work".
+
 At any point from here on, `quorum-auth` will tell you what's still unauthenticated and the
 exact command that fixes each one. The rest of this guide is the long-form version of that.
 
@@ -149,9 +184,16 @@ cp    commands/*.md ~/.claude/commands/quorum/      # note the quorum/ subdirect
 
 **Nothing updates this copy, and that is the risk.** `cp` records no version and cannot
 notice the source moved. Measured on the author's machine, 2026-09-08, against an install
-done this way five months earlier: seven files, ~1,374 lines of drift, and the copy that
-was actually running still passed the key on the curl command line, where `ps auxww` shows
-it to every process running as you. That is the argv leak this repo had already fixed twice,
+done this way five months earlier:
+
+| file | repo | the copy that was running | drift |
+|---|---|---|---|
+| `agents/glm-agent.md` | 609 lines | 256 lines | 413 changed lines |
+| `agents/copilot-agent.md` | 470 | 248 | 262 |
+| `skills/model-panel/SKILL.md` | 294 | 239 | 87 |
+
+~1,374 lines across seven files, and the copy that was actually running still passed the key
+on the curl command line, where `ps auxww` shows it to every process running as you. That is the argv leak this repo had already fixed twice,
 and the form CI rejects. Every gate was green, because they read the repository and none had
 ever read the deployment.
 
