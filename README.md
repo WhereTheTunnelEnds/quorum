@@ -72,18 +72,13 @@ built by walking into each of those failures first.
 
 ## Install
 
-> **New here?** [**getting-started.md**](docs/getting-started.md) is a step-by-step
-> walkthrough from zero to your first panel, with a check after every step. This section is
-> the short version.
-
-**As a plugin** (recommended — one command, updates with `git pull`):
+Two halves: the **plugin** is what Claude uses, the **scripts** are what your shell uses.
+You need both — the adapters refuse to run without the scripts, deliberately.
 
 ```
 /plugin marketplace add WhereTheTunnelEnds/quorum
 /plugin install quorum@quorum
 ```
-
-Then put the helper scripts on `PATH` and run the guided setup:
 
 ```bash
 git clone https://github.com/WhereTheTunnelEnds/quorum.git
@@ -91,107 +86,34 @@ cd quorum && ./scripts/install.sh
 ./scripts/quorum-setup     # prerequisites -> providers -> auth -> a real call to each
 ```
 
-Use the `./scripts/` prefix on that third line. `install.sh` cannot change the PATH of the
-shell that invoked it, so the bare name does not resolve until you open a new terminal —
-measured on a clean Debian container: `quorum-setup: command not found`, exit 127.
+Keep the `./scripts/` prefix on that last line. `install.sh` cannot change the `PATH` of the
+shell that invoked it, so the bare name does not resolve until you open a new terminal.
 
-`quorum-setup` walks you through it and stops at each thing you need to do yourself. It
-never asks for a key or an auth code — installs and logins are printed for **you** to run,
-because vendor installers execute remote code, logins bind your paid accounts, and anything
-pasted into an agent chat becomes transcript.
+`quorum-setup` stops at each thing you need to do yourself. It never asks for a key or an
+auth code — installs and logins are printed for **you** to run, because vendor installers
+execute remote code, logins bind your paid accounts, and anything pasted into an agent chat
+becomes transcript.
 
-**Or install the pieces manually** — everything here is plain markdown and shell:
-
-```bash
-git clone https://github.com/WhereTheTunnelEnds/quorum.git
-cd quorum
-
-mkdir -p ~/.claude/agents ~/.claude/skills ~/.claude/commands/quorum
-cp    agents/*.md   ~/.claude/agents/
-cp -r skills/*      ~/.claude/skills/
-cp    commands/*.md ~/.claude/commands/quorum/      # note the quorum/ subdirectory
-./scripts/install.sh
-```
-
-**This route does not update, and that is a security property, not an inconvenience.** `cp`
-records no version and has no way to notice the source moved. Measured on the author's
-machine, 2026-09-08, on an install done this way five months earlier:
-
-| file | repo | the copy that was running | drift |
-|---|---|---|---|
-| `agents/glm-agent.md` | 609 lines | 256 lines | 413 changed lines |
-| `agents/copilot-agent.md` | 470 | 248 | 262 |
-| `skills/model-panel/SKILL.md` | 294 | 239 | 87 |
-
-~1,374 lines across seven files, and the copy still passed the key on the curl command
-line, where `ps auxww` shows it to every process running as you — the argv leak this repo
-had already fixed twice, and the form the "No API key passed on a command line" CI gate
-rejects. Every gate was green throughout, because they read the repository and none of them
-had ever read the deployment.
-
-If you take this route, re-run these `cp` commands on every `git pull`, and run
-`tests/test-deployed-matches-repo.sh` to check you have. That test **fails by design**
-against a manual install it finds out of date, and it fails on a manual install that
-shadows a plugin install. The plugin route above has none of this: one versioned artifact,
-updated by `claude plugin marketplace update quorum`.
-
-Three further things about that block, each of which broke for someone:
-
-- **The clone is part of it.** This branch needs the repository too — it is not an
-  alternative to fetching the code, only to installing it as a plugin.
-- **`commands/quorum/`, not `commands/`.** User commands are namespaced by **subdirectory**,
-  so copying to `~/.claude/commands/` gives you `/status` and `/panel` — *not* the
-  `/quorum:status` and `/quorum:panel` this guide tells you to type. Verified on a live
-  install: `~/.claude/commands/build.md` → `/build`, while
-  `~/.claude/commands/bench/plan_new_feature.md` → `/bench:plan_new_feature`. The plugin
-  route gets the prefix from the plugin name; the manual route has to get it from the
-  directory.
-- **`mkdir -p` is not optional.** Where those directories do not exist, `cp` fails with
-  *"Not a directory"* and installs nothing.
-
-Both halves are needed: the plugin is what Claude uses, the scripts are what your shell
-uses. Then check what's reachable:
+Then see what's reachable:
 
 ```bash
-quorum-status
+quorum-status      # what's installed and answering
+quorum-auth        # what still needs authenticating, and the exact fix for each
+quorum-verify --all   # four live checks per provider — the one that proves it works
 ```
 
-Anything missing? `quorum-auth` names the exact fix for each, and `/quorum:auth` walks you
-through it inside Claude Code.
+> **[getting-started.md](docs/getting-started.md) is the full walkthrough** — zero to your
+> first panel, with a check after every step, all seven providers, and the `PATH` gotcha that
+> is the single most common setup failure. Start there if anything above is unfamiliar.
+>
+> It also covers **installing without the plugin** by copying files in. That route works, but
+> nothing updates it: measured against one done five months earlier, ~1,374 lines of drift
+> across seven files, and the copy still leaked the key on the curl command line — a bug the
+> repo had fixed twice. Every gate was green, because they read the repository and none had
+> ever read the deployment.
 
-**Both halves really are needed.** Installing only the plugin leaves Quorum's own commands
-off your `PATH`, and the adapters refuse to run without them — deliberately. That refusal
-exists because the silent version was worse: with `quorum-sanitize` missing, a perfectly good
-HTTP 200 came back with empty text and got classified `empty`, *"the model had nothing to
-say."* Measured against the live API. See [field-notes.md](docs/field-notes.md).
-
-To remove everything later:
-
-```bash
-./scripts/install.sh --uninstall
-```
-
-It unlinks only the symlinks pointing into this clone, leaves anything it did not create
-alone, and names what it deliberately does not touch — your shell env line, `~/.config/quorum/`,
-and anything you copied into `~/.claude/`.
-
-`quorum-status` makes a **real call** wherever a real call is the only evidence: GLM gets an
-API request, Ollama gets a `/api/tags` fetch, OpenRouter a `/api/v1/key` fetch (which
-validates the key and reports the balance without spending a token), Claude gets a
-credential check.
-
-It does use `command -v` for the providers that genuinely ship a binary named after
-themselves. For `copilot` and `agy` that is all it is — a stub implementing only
-`--version` is reported as OK, which is a presence check rather than an auth check, and the
-table says `installed` rather than `logged in` for `agy` for exactly that reason.
-`codex` is the exception: it gets a real `codex login status` call. Measured with a stub
-answering only `--version`: copilot and agy report OK, codex reports `not logged in`. Use `quorum-auth` for
-authentication and `quorum-verify` for "does it actually work".
-
-What it never does is infer *absence* from a missing binary. GLM ships no `glm` command at
-all, and `command -v glm` returning nothing has already caused a working provider to be
-reported as missing. See the
-[field notes](docs/field-notes.md#a-missing-binary-proves-nothing-about-a-provider).
+Removing it later is `./scripts/install.sh --uninstall`; it names what it deliberately leaves
+alone.
 
 ## What it costs you in context
 
