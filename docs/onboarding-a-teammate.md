@@ -1,7 +1,6 @@
 # Onboarding a teammate
 
-For a second or third person joining a repo that uses Quorum — James and Merle on
-[Last Call](https://github.com/WhereTheTunnelEnds/last-call), or anyone after them.
+For a second or third person joining a repo that already uses Quorum.
 
 The mechanics of each provider live in [getting-started.md](getting-started.md) and are not
 repeated here. **One copy, so the two cannot drift.** This file is about the part that is
@@ -111,8 +110,8 @@ un-leak it.
 ## Coordinating once everyone is set up
 
 Quorum is per-person; the repo is shared. Coordination between people is a separate concern
-and belongs in the project's own `TEAM.md` — for Last Call, that means vertical feature
-ownership and the spine files that collide. Quorum does not manage that and should not try.
+and belongs in the project's own `TEAM.md` — typically vertical feature ownership, and
+whichever files everyone's work collides in. Quorum does not manage that and should not try.
 
 What Quorum does add to a team is worth stating plainly:
 
