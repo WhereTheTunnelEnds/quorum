@@ -98,6 +98,17 @@ check "hostile run still has exactly $EXPECTED_PROVIDERS providers (no injected 
 check "the injected object stayed inside a string" \
       "$(printf '%s' "$hostile" | jq -e '.providers.ollama.detail | type == "string"' >/dev/null 2>&1 && echo 0 || echo 1)"
 detail=$(printf '%s' "$hostile" | jq -r '.providers.ollama.detail' 2>/dev/null)
+# QUORUM_TEST_DEBUG=1 dumps the intermediate value. Added because these three assertions
+# failed on GitHub-hosted macOS while quorum-sanitize was proven byte-correct there in
+# isolation -- so the defect was somewhere between the provider and the assertion, and the
+# assertion alone could not say where.
+if [ -n "${QUORUM_TEST_DEBUG:-}" ]; then
+  echo "  DEBUG locale: LANG=${LANG:-unset} LC_ALL=${LC_ALL:-unset}"
+  echo "  DEBUG detail hex : $(printf '%s' "$detail" | xxd -p | tr -d '\n')"
+  echo "  DEBUG detail text: $detail"
+  echo "  DEBUG grep rc    : $(printf '%s' "$detail" | grep -q 'modele-cafe-日本'; echo $?)"
+  echo "  DEBUG raw json   : $(printf '%s' "$hostile" | head -c 400)"
+fi
 check "non-ASCII survives sanitising" \
       "$(printf '%s' "$detail" | grep -q 'modele-cafe-日本' && echo 0 || echo 1)"
 

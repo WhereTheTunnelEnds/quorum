@@ -68,3 +68,10 @@ jobs:
             printf "after C1 strip, chars  : %d\n", length($t);
             print  "re-encoded             : ", Encode::encode("UTF-8", $t), "\n";
           '
+
+      - name: Run the failing test with debug output
+        shell: bash
+        run: |
+          command -v jq >/dev/null || (command -v brew >/dev/null && brew install jq) || true
+          QUORUM_TEST_DEBUG=1 bash tests/test-quorum-status-json.sh 2>&1 \
+            | grep -E 'DEBUG|non-ASCII|truncated away|multi-byte|passed,' || true
