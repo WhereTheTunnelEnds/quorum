@@ -50,7 +50,7 @@ by the capability they actually have, not by novelty.
    given provider resolved to one path, and projects sharing a parent directory resolved to
    each other's. Never point a delegate at
    the working tree — an unreviewable diff mixed into live work is the failure mode this
-   whole design exists to prevent. See [docs/safety-model.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/safety-model.md).
+   whole design exists to prevent. See [docs/safety-model.md](https://github.com/WhereTheTunnelEnds/quorum/blob/main/docs/safety-model.md).
 
 3. **Run parallel attempts in one message.** If you're comparing approaches, dispatch the
    agents as multiple Agent calls in a *single* message so they run concurrently. Each gets

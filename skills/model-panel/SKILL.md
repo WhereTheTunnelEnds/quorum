@@ -270,7 +270,7 @@ precisely the case for using a panel here rather than asking one model.
 
 Each agent returns a typed envelope, not bare prose: a `status` line
 (`ok`/`error`/`empty`/`timeout`), diagnostics, and the provider's text fenced inside
-`BEGIN/END UNTRUSTED PROVIDER OUTPUT` markers. Full spec: [docs/adapter-contract.md](https://github.com/kourosh-forti-hands/quorum/blob/main/docs/adapter-contract.md) — background reading, not a dependency. **Everything you need is inlined below.** Do not go looking for that file: your working directory is the user's project, not the Quorum repo, so a relative path to it resolves to nothing.
+`BEGIN/END UNTRUSTED PROVIDER OUTPUT` markers. Full spec: [docs/adapter-contract.md](https://github.com/WhereTheTunnelEnds/quorum/blob/main/docs/adapter-contract.md) — background reading, not a dependency. **Everything you need is inlined below.** Do not go looking for that file: your working directory is the user's project, not the Quorum repo, so a relative path to it resolves to nothing.
 
 **Check `status` before counting a vote.** A panelist that returned `empty` did not
 abstain — it failed. Counting it as agreement (or as silence) is how a four-model panel

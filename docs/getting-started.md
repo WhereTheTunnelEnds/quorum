@@ -12,7 +12,7 @@ this guide says it should, stop there — the next step will not fix it, and
 ## The short version
 
 ```bash
-git clone https://github.com/kourosh-forti-hands/quorum.git
+git clone https://github.com/WhereTheTunnelEnds/quorum.git
 cd quorum && ./scripts/install.sh && quorum-setup
 ```
 
@@ -92,14 +92,14 @@ Should print at least one path.
 **As a Claude Code plugin** — the parts Claude uses (agents, skills, commands):
 
 ```
-/plugin marketplace add kourosh-forti-hands/quorum
+/plugin marketplace add WhereTheTunnelEnds/quorum
 /plugin install quorum@quorum
 ```
 
 **Plus the helper scripts** — the parts your *shell* uses. Both halves are needed:
 
 ```bash
-git clone https://github.com/kourosh-forti-hands/quorum.git
+git clone https://github.com/WhereTheTunnelEnds/quorum.git
 cd quorum
 ./scripts/install.sh
 ```
