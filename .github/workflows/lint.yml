@@ -22,9 +22,25 @@ jobs:
       fail-fast: false          # one platform's failure must not hide the other's result
       matrix:
         include:
-          - {name: linux, runner: org-runners}
-          - {name: macos, runner: mac-studio}
-    runs-on: ${{ matrix.runner }}
+          # `runner` is ours; `hosted` is the GitHub-hosted equivalent used for fork PRs.
+          # Both legs exist in both worlds, so an outside contributor still gets the
+          # BSD-and-GNU coverage that is the whole reason this matrix has two rows.
+          - {name: linux, runner: org-runners, hosted: ubuntu-latest}
+          - {name: macos, runner: mac-studio,  hosted: macos-latest}
+    # Fork PRs NEVER touch the self-hosted runners.
+    #
+    # The self-hosted pool is a homelab Kubernetes cluster and a physical Mac Studio. On a
+    # PUBLIC repository anyone can open a pull request from a fork, and that PR's workflow
+    # would execute on that hardware -- which is why GitHub advises against self-hosted
+    # runners on public repos at all.
+    #
+    # Requiring manual approval for fork workflows is the usual mitigation, and it depends on
+    # a human scrutinising every run forever. This does not: a PR whose head repo is not this
+    # repo is routed to a GitHub-hosted runner instead. Public repositories get unlimited free
+    # hosted minutes, so outside contributors still get full CI -- they simply get it on
+    # GitHub's machines rather than on ours. Keep the approval setting on as well; two
+    # independent controls, neither relying on the other.
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && matrix.hosted || matrix.runner }}
     env:
       # tests/test-deployed-matches-repo.sh compares this repo against the plugin
       # INSTALLED on the machine. On a hosted runner nothing is deployed, so it skips.
@@ -59,12 +75,15 @@ jobs:
               sudo apt-get install -y -qq jq shellcheck perl
               ;;
             macOS)
-              # The launchd service runs with PATH=/usr/bin:/bin:/usr/sbin:/sbin, and
-              # Homebrew is NOT on it. Measured on this runner under that exact PATH:
+              # On the SELF-HOSTED Mac the launchd service runs with
+              # PATH=/usr/bin:/bin:/usr/sbin:/sbin, and Homebrew is NOT on it. Measured there
+              # under that exact PATH:
               # jq, perl, python3 (3.9.6), git, curl and cmp all resolve -- and
               # shellcheck does NOT, because it exists only in /opt/homebrew/bin. An
               # interactive shell finds it and the service does not, which is precisely
               # the "works on my machine" gap CI is supposed to catch rather than inherit.
+              # Harmless on a GitHub-hosted mac, where Homebrew is already on PATH and
+              # shellcheck is usually preinstalled -- the install below is then a no-op.
               echo /opt/homebrew/bin >> "$GITHUB_PATH"
               export PATH="/opt/homebrew/bin:$PATH"
               command -v shellcheck >/dev/null 2>&1 || brew install shellcheck
