@@ -113,6 +113,92 @@ if [ "$INIT_EP" = 1 ]; then
   echo
 fi
 
+# Read a key from a hidden prompt and store it in the user's env file.
+# Extracted from the GLM path so OpenRouter reuses it rather than growing a second copy that
+# drifts. Every guard here was earned by a measured failure -- see the comments inside.
+#   $1 = env var name   $2 = vendor label (for the prompt)   $3 = provider slug (for messages)
+_store_key() {
+  VAR="$1"; LABEL="$2"; SLUG="$3"
+  if [ ! -t 0 ]; then
+    echo "  --set-key needs a terminal (it reads the key from a hidden prompt)" >&2
+    echo "  run it yourself: quorum-auth $SLUG --set-key" >&2
+    exit 1
+  fi
+  printf '  paste your $LABEL key (input hidden, not echoed, %ss): ' "${QUORUM_ASK_TIMEOUT:-120}"
+  # Bounded, like every read in quorum-setup. A prompt that can block forever is the same
+  # hang class, and this one is worse: it is silent because the input is hidden.
+  if ! read -rs -t "${QUORUM_ASK_TIMEOUT:-120}" KEY; then
+    echo; echo "  timed out; no change made" >&2; KEY=""
+  fi
+  echo
+  if [ -z "$KEY" ]; then
+    echo "  nothing entered; no change made" >&2
+  else
+    # $ENVFILE is resolved by quorum-lib.sh against the user's actual shell — for bash it
+    # is whichever of .bash_profile / .bash_login / .profile that shell really reads.
+    # Leading whitespace is allowed, and `export` is optional. The old anchor demanded
+    # the line START with `export $VAR=`, so a two-space-indented export -- which
+    # is ordinary formatting in a hand-edited profile -- was invisible to it. Measured:
+    # the guard stayed silent, a SECOND export was appended, and since the later
+    # assignment wins, the user's own value was silently shadowed by ours. Verified
+    # identical under BSD grep and ugrep; the pattern uses no GNU extensions.
+    if grep -qE '^[[:space:]]*((export|declare -x)[[:space:]]+)?$VAR=|^[[:space:]]*set[[:space:]]+-gx[[:space:]]+$VAR[[:space:]]' "$ENVFILE" 2>/dev/null; then
+      echo "  $ENVFILE already exports $VAR; leaving it alone." >&2
+      echo "  Edit it by hand if you need to replace the key." >&2
+    else
+      umask 077
+      if [ "$QUORUM_ENVFILE_SYNTAX" = fish ]; then
+        # fish's own idiom. (It CAN in fact parse `export X=y` -- fish ships an `export`
+        # function at /usr/share/fish/functions/export.fish, measured -- so the old comment
+        # here claiming otherwise was wrong. `set -gx` is still the right thing to write;
+        # the reason is idiom, not incapacity.)
+        #
+        # Leading \n, and QUOTES around the value. Without the newline this glued the key
+        # onto whatever the previous line was when the file lacked a trailing newline --
+        # measured, it produced `set -gx EDITOR nvimset -gx $VAR <value>`, so the
+        # key never got set and instead ended up inside an exported EDITOR. Without quotes,
+        # a value containing a space becomes a fish LIST, and a `#` starts a comment.
+        mkdir -p "$(dirname "$ENVFILE")"
+        printf '\nset -gx %s %s\n' "$VAR" "'$KEY'" >> "$ENVFILE"
+      else
+        printf '\nexport %s=%q\n' "$VAR" "$KEY" >> "$ENVFILE"
+      fi
+      # umask only governs file CREATION. Appending to an existing file leaves its mode
+      # untouched — measured: -rw-r--r-- with a live key in it. Set it explicitly. This
+      # can tighten a login file shared with other tools, which is the correct trade once
+      # a secret is in it — but report it rather than doing it silently.
+      _oldmode=$(ls -l "$ENVFILE" 2>/dev/null | cut -c1-10)
+      chmod 600 "$ENVFILE" 2>/dev/null || true
+      echo "  wrote an export to $ENVFILE (now mode 600, was ${_oldmode:-new file})"
+      echo "  open a new terminal for it to take effect"
+      # bash reads only the FIRST of .bash_profile / .bash_login / .profile that exists.
+      # If a tool later creates an earlier-priority file (nvm, conda, pyenv and
+      # Homebrew-on-Linux all create ~/.bash_profile), a second key can be written there
+      # and the older one is left behind at a path the user was never told about, and so
+      # never rotates. Precedence means nothing BREAKS -- which is exactly why it needs
+      # saying out loud.
+      for _other in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile" "${ZDOTDIR:-$HOME}/.zshenv"; do
+        [ "$_other" = "$ENVFILE" ] && continue
+        [ -f "$_other" ] || continue
+        if grep -qE '^[[:space:]]*((export|declare -x)[[:space:]]+)?$VAR=' "$_other" 2>/dev/null; then
+          echo "  NOTE  $_other also sets $VAR. That copy is now stale."
+          echo "        Remove it — otherwise it survives every key rotation you do here."
+        fi
+      done
+      # THE KEY MUST BECOME VISIBLE TO THIS PROCESS TOO. Without this, the checks below
+      # re-read $$VAR from the current environment — which the write never touched
+      # — so the SUCCESS path printed a red "$VAR not set", named itself as its
+      # own unrun fix, and exited 1. Measured under a pty: the file held the key while the
+      # command reported failure. Verbatim the bug already fixed once for
+      # --init-endpoint; this sibling path was missed.
+      export "$VAR=$KEY"
+    fi
+    unset KEY
+  fi
+  echo
+  unset VAR LABEL SLUG
+}
+
 # --- Claude Code ---------------------------------------------------------------
 if wants claude; then
   if [ -f "$HOME/.claude.json" ] && command -v jq >/dev/null 2>&1 \
@@ -235,82 +321,7 @@ fi
 # --- GLM / Z.AI ----------------------------------------------------------------
 if wants glm; then
   if [ "$SET_KEY" = 1 ]; then
-    if [ ! -t 0 ]; then
-      echo "  --set-key needs a terminal (it reads the key from a hidden prompt)" >&2
-      echo "  run it yourself: quorum-auth glm --set-key" >&2
-      exit 1
-    fi
-    printf '  paste your Z.AI key (input hidden, not echoed, %ss): ' "${QUORUM_ASK_TIMEOUT:-120}"
-    # Bounded, like every read in quorum-setup. A prompt that can block forever is the same
-    # hang class, and this one is worse: it is silent because the input is hidden.
-    if ! read -rs -t "${QUORUM_ASK_TIMEOUT:-120}" KEY; then
-      echo; echo "  timed out; no change made" >&2; KEY=""
-    fi
-    echo
-    if [ -z "$KEY" ]; then
-      echo "  nothing entered; no change made" >&2
-    else
-      # $ENVFILE is resolved by quorum-lib.sh against the user's actual shell — for bash it
-      # is whichever of .bash_profile / .bash_login / .profile that shell really reads.
-      # Leading whitespace is allowed, and `export` is optional. The old anchor demanded
-      # the line START with `export Z_AI_API_KEY=`, so a two-space-indented export -- which
-      # is ordinary formatting in a hand-edited profile -- was invisible to it. Measured:
-      # the guard stayed silent, a SECOND export was appended, and since the later
-      # assignment wins, the user's own value was silently shadowed by ours. Verified
-      # identical under BSD grep and ugrep; the pattern uses no GNU extensions.
-      if grep -qE '^[[:space:]]*((export|declare -x)[[:space:]]+)?Z_AI_API_KEY=|^[[:space:]]*set[[:space:]]+-gx[[:space:]]+Z_AI_API_KEY[[:space:]]' "$ENVFILE" 2>/dev/null; then
-        echo "  $ENVFILE already exports Z_AI_API_KEY; leaving it alone." >&2
-        echo "  Edit it by hand if you need to replace the key." >&2
-      else
-        umask 077
-        if [ "$QUORUM_ENVFILE_SYNTAX" = fish ]; then
-          # fish's own idiom. (It CAN in fact parse `export X=y` -- fish ships an `export`
-          # function at /usr/share/fish/functions/export.fish, measured -- so the old comment
-          # here claiming otherwise was wrong. `set -gx` is still the right thing to write;
-          # the reason is idiom, not incapacity.)
-          #
-          # Leading \n, and QUOTES around the value. Without the newline this glued the key
-          # onto whatever the previous line was when the file lacked a trailing newline --
-          # measured, it produced `set -gx EDITOR nvimset -gx Z_AI_API_KEY <value>`, so the
-          # key never got set and instead ended up inside an exported EDITOR. Without quotes,
-          # a value containing a space becomes a fish LIST, and a `#` starts a comment.
-          mkdir -p "$(dirname "$ENVFILE")"
-          printf '\nset -gx Z_AI_API_KEY %s\n' "'$KEY'" >> "$ENVFILE"
-        else
-          printf '\nexport Z_AI_API_KEY=%q\n' "$KEY" >> "$ENVFILE"
-        fi
-        # umask only governs file CREATION. Appending to an existing file leaves its mode
-        # untouched — measured: -rw-r--r-- with a live key in it. Set it explicitly. This
-        # can tighten a login file shared with other tools, which is the correct trade once
-        # a secret is in it — but report it rather than doing it silently.
-        _oldmode=$(ls -l "$ENVFILE" 2>/dev/null | cut -c1-10)
-        chmod 600 "$ENVFILE" 2>/dev/null || true
-        echo "  wrote an export to $ENVFILE (now mode 600, was ${_oldmode:-new file})"
-        echo "  open a new terminal for it to take effect"
-        # bash reads only the FIRST of .bash_profile / .bash_login / .profile that exists.
-        # If a tool later creates an earlier-priority file (nvm, conda, pyenv and
-        # Homebrew-on-Linux all create ~/.bash_profile), a second key can be written there
-        # and the older one is left behind at a path the user was never told about, and so
-        # never rotates. Precedence means nothing BREAKS -- which is exactly why it needs
-        # saying out loud.
-        for _other in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile" "${ZDOTDIR:-$HOME}/.zshenv"; do
-          [ "$_other" = "$ENVFILE" ] && continue
-          [ -f "$_other" ] || continue
-          if grep -qE '^[[:space:]]*((export|declare -x)[[:space:]]+)?Z_AI_API_KEY=' "$_other" 2>/dev/null; then
-            echo "  NOTE  $_other also sets Z_AI_API_KEY. That copy is now stale."
-            echo "        Remove it — otherwise it survives every key rotation you do here."
-          fi
-        done
-        # THE KEY MUST BECOME VISIBLE TO THIS PROCESS TOO. Without this, the checks below
-        # re-read $Z_AI_API_KEY from the current environment — which the write never touched
-        # — so the SUCCESS path printed a red "Z_AI_API_KEY not set", named itself as its
-        # own unrun fix, and exited 1. Measured under a pty: the file held the key while the
-        # command reported failure. Verbatim the bug already fixed once for
-        # --init-endpoint; this sibling path was missed.
-        export Z_AI_API_KEY="$KEY"
-      fi
-      unset KEY
-    fi
+    _store_key Z_AI_API_KEY "Z.AI" glm
     echo
   fi
 
@@ -378,6 +389,95 @@ if wants glm; then
     fi
   fi
 fi
+
+# --- OpenRouter ----------------------------------------------------------------
+
+if wants openrouter; then
+  if [ "$SET_KEY" = 1 ]; then
+    _store_key OPENROUTER_API_KEY "OpenRouter" openrouter
+    echo
+  fi
+
+  if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+    bad "openrouter  OPENROUTER_API_KEY not set"
+    todo "quorum-auth openrouter --set-key   # silent prompt, stores in $QUORUM_ENVFILE_SHORT"
+    note "get a key at https://openrouter.ai/keys (prepaid balance, not a subscription)"
+    note "$QUORUM_ENVFILE_WHY"
+  else
+    # /key returns the key's own metadata and consumes NO tokens, so an auth check costs
+    # nothing. A chat completion would bill for the privilege of asking whether the key works.
+    # Same header discipline as GLM: `--config <(...)`-style /dev/fd, never argv, never disk.
+    body=$(curl -sS -m 20 https://openrouter.ai/api/v1/key \
+      -H @<(printf 'Authorization: Bearer %s\n' "$OPENROUTER_API_KEY") 2>/dev/null)
+    if [ -z "$body" ]; then
+      bad "openrouter  no response from openrouter.ai — network, DNS, proxy or timeout, NOT your key"
+      todo "check connectivity first: curl -sS -m 10 -o /dev/null -w '%{http_code}\\n' https://openrouter.ai"
+      note "your key is probably fine — do not rotate it on the strength of this"
+    elif printf '%s' "$body" | grep -q '"data"'; then
+      ok "openrouter  key accepted"
+      # Surface the balance. OpenRouter is prepaid: a key that authenticates fine still fails
+      # every call once the balance hits zero, and that failure arrives as a 402 at use time,
+      # long after auth said OK. Cheap to check here, expensive to discover mid-panel.
+      _used=$(printf '%s' "$body" | jq -r '.data.usage // empty' 2>/dev/null)
+      _lim=$(printf '%s' "$body" | jq -r '.data.limit // empty' 2>/dev/null)
+      if [ -n "$_lim" ] && [ "$_lim" != "null" ]; then
+        note "credit limit ${_lim}, used ${_used:-0}"
+      else
+        note "usage ${_used:-0} — no credit limit set on this key"
+      fi
+    else
+      msg=$(printf '%s' "$body" | jq -r '.error.message // empty' 2>/dev/null || true)
+      [ -n "$msg" ] || msg="unrecognised response from openrouter.ai (not valid JSON, or an unknown shape)"
+      bad "openrouter  $msg"
+      todo "get a fresh key from https://openrouter.ai/keys then: quorum-auth openrouter --set-key"
+    fi
+  fi
+fi
+
+# --- Claude (second subscription) ----------------------------------------------
+
+if wants claude-alt; then
+  if [ -z "${CLAUDE_ALT_OAUTH_TOKEN:-}" ]; then
+    bad "claude-alt  CLAUDE_ALT_OAUTH_TOKEN not set"
+    todo "claude setup-token               # run it YOURSELF, in your own terminal"
+    note "it prints a long-lived token; add it to $QUORUM_ENVFILE_SHORT as CLAUDE_ALT_OAUTH_TOKEN"
+    note "log in as the OTHER subscription first, or you will pool one account with itself"
+    note "$QUORUM_ENVFILE_WHY"
+  else
+    _ca_bin=$(/usr/bin/which claude 2>/dev/null || printf '%s' "$HOME/.local/bin/claude")
+    if [ ! -x "$_ca_bin" ]; then
+      bad "claude-alt  the claude binary is not on PATH"
+      todo "install Claude Code first; claude-alt runs it as a subprocess"
+    else
+      # `env -u` on all three ambient credentials is load-bearing: any of them overrides the
+      # OAuth token and routes the call to the WRONG account with an identical-looking result,
+      # so a check that skipped this could confirm the FIRST subscription and call it the second.
+      _ca_out=$(qt 90 env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL \
+        CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_ALT_OAUTH_TOKEN" \
+        CLAUDE_CONFIG_DIR="${QUORUM_CLAUDE_ALT_DIR:-$HOME/.claude-alt}" \
+        "$_ca_bin" -p 'reply with exactly: OK' --output-format json </dev/null 2>/dev/null)
+      # NOT `.is_error // true`. jq's `//` is the ALTERNATIVE operator and fires on `false`
+      # as well as `null`, so that form rewrites a successful call's `false` into `true` and
+      # reports every working token as broken. Cost a full debug cycle in the adapter and the
+      # probe both -- see docs/field-notes.md.
+      _ca_err=$(printf '%s' "$_ca_out" | jq -r 'if has("is_error") then (.is_error|tostring) else "MISSING" end' 2>/dev/null)
+      if [ "$_ca_err" = false ]; then
+        ok "claude-alt  token accepted (second subscription reachable)"
+      elif [ -z "$_ca_out" ]; then
+        bad "claude-alt  no output from claude -p — network, or the binary failed to start"
+        todo "run it yourself to see the error: claude -p hi --output-format json"
+      else
+        # A bad token returns subtype="success" with is_error=true. Anything classifying on
+        # subtype reports an auth failure as an answer -- measured 2026-09-08.
+        bad "claude-alt  token rejected (is_error=$_ca_err)"
+        todo "generate a fresh one: claude setup-token   # as the OTHER subscription"
+      fi
+      unset _ca_out _ca_err
+    fi
+    unset _ca_bin
+  fi
+fi
+
 
 echo
 if [ "$need" -eq 0 ]; then
