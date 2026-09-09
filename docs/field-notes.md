@@ -1240,34 +1240,48 @@ calls, but its permission block is byte-identical to the fully-permissive one an
 event ever fires. Same observable behaviour, no enforcement underneath. **The denial event is
 the difference between the two, and without checking it they look alike.**
 
-### A placeholder is an invitation to invent
+### `jq`'s `//` treats `false` as absent, so a fail-closed default inverted the answer
 
 **Symptom.** An adapter reports `status: error` and `is_error: true` over a correct,
-complete answer. Re-running the identical command by hand shows `is_error: false`. The
-provider is fine; the envelope is wrong.
+complete answer, every time. The raw JSON from the very same invocation says
+`is_error: false`.
 
-**Cause.** The adapter captured values into shell variables and then asked the *model* to
-render `is_error: <IS_ERR>`. When a capture does not land — a variable lost between two
-Bash calls, a temp file gone with its shell — a haiku-class model does not stop and say the
-capture failed. It supplies a plausible value. Two of two end-to-end dispatches produced a
-wrong `is_error` this way, while `permission_denials` and `cost_usd`, captured in the same
-block, came through correct.
+**Cause.** The capture was `jq -r '.is_error // true'`, written to be fail-closed. jq's `//`
+returns its right-hand side when the left is `null` **or `false`** — it is an
+"alternative operator", not a null-coalesce. So the one value that matters most, a
+successful call's `false`, was rewritten to `true` on every run.
 
-**Why it hid.** It reproduces only through the agent path — the way the adapter is actually
-invoked — and never from a plain shell. Four direct runs said `is_error:false`; the first
-two agent dispatches said `true`. Testing the invocation is not testing the adapter, and an
-adapter is a document executed by a model, not a script.
+```text
+echo '{"is_error": false}' | jq -r '.is_error'          -> false
+echo '{"is_error": false}' | jq -r '.is_error // true'  -> true
+```
 
-**Fix.** The shell classifies and prints the finished envelope; the model relays stdout
-verbatim. Nothing is left to fill in. The classification table stays in the prose so it is
-reviewable, marked as implemented in the block rather than applied by the reader.
+**Fix.** Ask whether the field is there, separately from what it says:
 
-**And do not fail closed into the same word.** The capture was `jq -r '.is_error // true'`,
-meant to be safe. Measured: with the file missing, jq errors and the substitution yields an
-EMPTY string, so the `// true` never fires — the guard did not do what it looked like it
-did. It now reports `MISSING`, which is a different status row from `true`, because "the
-provider failed" and "we could not read whether the provider failed" are different faults
-and collapsing them hides which one happened.
+```bash
+IS_ERR=$(jq -r 'if has("is_error") then (.is_error|tostring) else "MISSING" end' "$OUT")
+```
+
+`MISSING` is its own status row. "The provider failed" and "we could not read whether the
+provider failed" are different faults, and a default that collapses them hides which one
+happened — which is what the original `// true` was trying to express and got backwards.
+
+**How it hid, and the lesson that cost the most.** It reproduces on every run through the
+agent path and on none of mine, because my direct tests all ran bare `jq -r .is_error` —
+**I was testing a different expression than the adapter shipped.** On that basis I twice
+called it unreproducible, then diagnosed it as the relaying model inventing a value for a
+placeholder. That diagnosis was wrong and was briefly committed to this file. The model had
+faithfully reported what the shell computed.
+
+Two rules survive it. Copy the exact line under test rather than retyping something
+equivalent — a paraphrase is a different program. And when an adapter and its raw output
+disagree, get both **from the same invocation**; two runs cannot show you a disagreement,
+only a difference.
+
+**Related but separate.** The same commit moved envelope rendering into the shell so the
+model relays stdout verbatim instead of filling fields. That is worth keeping — it removes
+an interpretation step — but it did **not** fix this bug, and should not be credited with
+it. Removing `// true` fixed it.
 
 ### `env` cannot run a shell function
 
