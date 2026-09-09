@@ -115,14 +115,13 @@ RC=$?
 # the reader to skim that field, which is where real failures get reported.
 
 # --- classify and RENDER IN THE SHELL, not in your head -----------------------------------
-# Measured twice, end to end: an agent asked to fill `is_error: <IS_ERR>` from these captures
-# reported `is_error: true` and `status: error` on runs whose raw JSON said `is_error:false`
-# with a correct answer. Re-running the identical command and dumping the JSON showed the
-# call had been fine both times. Nothing was wrong with the provider or the invocation --
-# the ENVELOPE was wrong, because a placeholder is an invitation to supply a plausible value
-# when a capture did not land, and a haiku-class model takes it.
+# The shell computes the status and prints the finished envelope. Relay it verbatim.
 #
-# So the shell computes the status and prints the finished envelope. Relay it verbatim.
+# This block used to capture values and leave the model to render `is_error: <IS_ERR>`.
+# Doing the classification here removes an interpretation step, which is worth having on
+# its own -- but note it is NOT what fixed the bug this section is remembered for. That was
+# `jq -r '.is_error // true'`: jq's `//` fires on `false` as well as `null`, so a successful
+# call's `is_error:false` was rewritten to `true` on every single run. See docs/field-notes.md.
 # Do not recompute any field, and do not "correct" one that looks surprising.
 [ -s "$OUT" ] || { echo "status: error"; echo "provider: claude-alt"; echo "exit_code: $RC"
                    echo; echo "diagnostics:"; echo "no JSON on stdout — see the bad-flag row in Failures"
