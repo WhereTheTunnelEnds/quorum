@@ -76,15 +76,34 @@ if ! command -v perl >/dev/null 2>&1; then
   exit 127
 fi
 
-# -CSD: decode stdin and encode stdout as UTF-8, so character classes mean characters.
-# Invalid UTF-8 is replaced rather than fatal — provider output is untrusted by definition
-# and must not be able to kill the filter. That is why this is not `use strict; die`.
-exec perl -CSD -Mutf8 -e '
-  binmode(STDIN,  ":encoding(UTF-8)");
-  binmode(STDOUT, ":encoding(UTF-8)");
+# Decode EXPLICITLY, not through the PerlIO :encoding() layer.
+#
+# This used to be `perl -CSD` plus binmode ":encoding(UTF-8)". That layer's behaviour on
+# MALFORMED input is not stable across perl versions, and provider output is untrusted by
+# definition, so malformed input is the normal case here, not the edge case. Measured
+# 2026-09-09 on the same commit:
+#
+#   perl 5.34.1 (macOS 26 / Mac Studio)   pass
+#   perl 5.38.2 (ubuntu-latest)           pass
+#   perl 5.44.0 (macos-latest)            FAIL — input truncated at the first bad byte
+#
+# Three gates went red on 5.44 only: non-ASCII no longer survived, text after an invalid
+# byte was truncated away, and multi-byte characters after an invalid byte were lost. The
+# self-hosted Mac had been masking it for as long as it has been the only macOS in CI.
+#
+# Encode::decode with the default CHECK (0, i.e. FB_DEFAULT) has stable documented
+# semantics on every version: a malformed sequence becomes U+FFFD and decoding CONTINUES.
+# It cannot truncate and it cannot die, which is exactly the contract this filter needs --
+# a provider must never be able to kill the filter or silently amputate its own output.
+# U+FFFD is outside the C1 range stripped below, so the replacement survives visibly
+# rather than vanishing into the same hole.
+exec perl -Mutf8 -MEncode -e '
+  binmode(STDIN,  ":raw");
+  binmode(STDOUT, ":raw");
   local $/;                      # slurp: a marker may be split across lines
-  my $t = <STDIN>;
-  exit 0 unless defined $t;
+  my $bytes = <STDIN>;
+  exit 0 unless defined $bytes;
+  my $t = Encode::decode("UTF-8", $bytes);   # CHECK defaults to FB_DEFAULT: replace, never truncate
 
   # 1. invisible formatting characters, removed outright
   $t =~ s/[\x{200B}-\x{200F}\x{2060}-\x{2064}\x{FEFF}]//g;
@@ -114,5 +133,5 @@ exec perl -CSD -Mutf8 -e '
   # 4. C1 controls, in whatever encoding they arrived as
   $t =~ s/[\x{0080}-\x{009F}]//g;
 
-  print $t;
+  print Encode::encode("UTF-8", $t);
 '
