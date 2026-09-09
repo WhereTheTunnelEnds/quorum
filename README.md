@@ -16,6 +16,24 @@ local or hosted, in a way that is *measured* rather than guessed.
 
 ---
 
+## Contents
+
+- [The problem this actually solves](#the-problem-this-actually-solves)
+- [What you get](#what-you-get)
+- [Install](#install)
+- [What it costs you in context](#what-it-costs-you-in-context)
+- [Requirements](#requirements)
+- [Bring your own provider](#bring-your-own-provider)
+- [Safety](#safety)
+- [Why not a router or proxy?](#why-not-a-router-or-proxy)
+- [What makes this different from a prompt collection](#what-makes-this-different-from-a-prompt-collection)
+- [Docs](#docs)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+
 ## The problem this actually solves
 
 Getting another model into Claude Code is easy. Getting one whose failures you can *see* is
@@ -377,6 +395,7 @@ model with nothing to say.
 | [evidence.md](docs/evidence.md) | How to re-check every claim here — and which ones you can't |
 | [probe-checklist.md](skills/build-adapter/reference/probe-checklist.md) | The six probes in detail |
 | [providers.md](docs/providers.md) | Every known provider: binary, install, auth, verified-or-not |
+| [SECURITY.md](SECURITY.md) | What Quorum guarantees about credentials and untrusted output, and how to report a break |
 | [porting/](docs/porting/) | MLX, Ollama, OpenAI-compatible endpoints |
 
 ## Contributing
