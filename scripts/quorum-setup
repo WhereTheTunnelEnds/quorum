@@ -273,7 +273,7 @@ else
 fi
 
 b "Next"
-echo "  /plugin marketplace add kourosh-forti-hands/quorum   install the Claude Code half"
+echo "  /plugin marketplace add WhereTheTunnelEnds/quorum   install the Claude Code half"
 echo "  /quorum:panel <a hard question>                      fan it out to every provider"
 echo "  /quorum:add-provider <name>                          adapt a provider we don't cover"
 echo "  quorum-flags                                         after any provider CLI update"
