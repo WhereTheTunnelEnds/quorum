@@ -369,6 +369,7 @@ model with nothing to say.
 |---|---|
 | [**getting-started.md**](docs/getting-started.md) | **Start here** — zero to a working panel, step by step |
 | [**troubleshooting.md**](docs/troubleshooting.md) | Indexed by what you actually see when it breaks |
+| [**onboarding-a-teammate.md**](docs/onboarding-a-teammate.md) | A second or third person joining — their own accounts, nothing shared |
 | [adapter-contract.md](docs/adapter-contract.md) | What every adapter must guarantee |
 | [safety-model.md](docs/safety-model.md) | The three tiers and what enforces them |
 | [why-delegation-not-proxying.md](docs/why-delegation-not-proxying.md) | The architecture argument |
