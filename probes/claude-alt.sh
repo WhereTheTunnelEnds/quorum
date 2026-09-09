@@ -41,7 +41,12 @@ _ca_call() {  # $1 = prompt file, rest = extra flags
   # emit nothing — an error that vanishes.
   if [ "$_ca_rc" -ne 0 ] && [ ! -s "$_ca_out" ]; then
     printf 'FAILED rc=%s with no JSON on stdout (bad flag shape)\n' "$_ca_rc"
-  elif [ "$(jq -r '.is_error // true' "$_ca_out" 2>/dev/null)" = true ]; then
+  # NOT `.is_error // true`. jq's `//` fires on `false` as well as `null`, so that form
+  # rewrites a successful call's `false` into `true` and reports every good answer as
+  # FAILED -- measured, this probe printed "FAILED is_error=true: PROBE_OK" while
+  # quorum-verify still passed, because its reachability check counts bytes and does not
+  # ask whether the bytes are an answer. See docs/field-notes.md.
+  elif [ "$(jq -r 'if has("is_error") then (.is_error|tostring) else "MISSING" end' "$_ca_out" 2>/dev/null)" != false ]; then
     printf 'FAILED is_error=true: %s\n' "$(jq -r '.result // "no result field"' "$_ca_out" 2>/dev/null)"
   else
     jq -r '.result // ""' "$_ca_out" 2>/dev/null
