@@ -2,11 +2,19 @@
 
 *A quorum is the number of members that must be present for a decision to count.*
 
-Pool the AI subscriptions you already pay for — **inside** Claude Code, with no proxy and
-no API keys — by delegating to other vendors' coding CLIs as subprocesses. Ask three
-independent models a hard question and reconcile where they disagree. Hand mechanical work
-to a cheaper agent in a throwaway git worktree and review the diff. Add your own provider,
-local or hosted, in a way that is *measured* rather than guessed.
+Pool the AI subscriptions you already pay for — **inside** Claude Code, with nothing
+proxying or rebilling in between. Quorum drives each vendor's own coding CLI as a
+subprocess, already logged in as you: Codex spends your ChatGPT plan, Copilot your GitHub
+plan, Antigravity your Google one. No API key is involved for those, because the CLI is
+already authenticated.
+
+Two of the seven adapters are metered rather than subscription-based — GLM and OpenRouter —
+and those do take a key. It stays in your shell environment, never on a command line where
+`ps` can read it.
+
+Ask three independent models a hard question and reconcile where they disagree. Hand
+mechanical work to a cheaper agent in a throwaway git worktree and review the diff. Add your
+own provider, local or hosted, in a way that is *measured* rather than guessed.
 
 ```
 /quorum:panel      is this migration plan safe to run against production?
