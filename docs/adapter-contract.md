@@ -48,6 +48,25 @@ diagnostics:
 --- END UNTRUSTED PROVIDER OUTPUT ---
 ```
 
+### Fields an adapter may add
+
+`status`, `provider` and the untrusted-output fence are required of every adapter. Two
+additions are sanctioned, both for adapters that call an HTTP endpoint rather than spawning
+a subprocess:
+
+| field | who emits it | why |
+|---|---|---|
+| `http_code:` | curl-based adapters, **in place of** `exit_code:` | there is no child process, so there is no exit status. The status code is what the classification table is written in terms of. |
+| `model:` | any adapter whose provider can answer as a model other than the one requested | measured 2026-09-09: Z.AI silently redirects a **retired** model id to a different model and still returns HTTP 200 with a correct answer. Only a wholly unknown id errors. An answer whose model is unrecorded cannot be attributed, and a panel that logs "GLM said X" when a smaller model said X has lost the property the panel exists for. |
+
+`model:` reports **what answered**, never what was asked for. A mismatch is not an error --
+the answer is real and usable -- so the status is unaffected and both ids are named in
+`diagnostics:`. Failing the call would turn a vendor's routing decision into an outage.
+
+Adapters must not invent fields beyond these. A parser anchored on `status:` tolerates extra
+lines, but every field a reader has to learn is a field they can misread, and an envelope
+that varies per provider stops being a contract.
+
 **Emit these lines as plain text. Do not wrap the envelope in a code fence.** The block
 above shows the *shape*; the backticks are this document's formatting, not part of the
 output. Two agents were observed copying the fence into their reply — every field present
