@@ -130,6 +130,8 @@ are for.
 ## If something does not work
 
 Run `quorum-auth` first — it names the provider and prints the exact command that fixes it.
+It makes a real call per provider, so a pass there means the credential actually works, not
+merely that it is set.
 Then [troubleshooting.md](troubleshooting.md).
 
 A provider that is missing is not a broken install. Say which ones are ready before saying
