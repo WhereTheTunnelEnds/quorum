@@ -1,6 +1,6 @@
 {
   "name": "quorum",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "Pool several AI subscriptions inside Claude Code by delegating to vendor CLIs as subprocesses. Ships field-tested adapters for GLM (Z.AI), Codex (ChatGPT), Copilot, Antigravity (Gemini), Ollama (local) OpenRouter (metered, many vendors behind one key) and a second Claude subscription, a multi-model consultation panel, task delegation into throwaway worktrees you review as a diff, and a probe-driven generator that builds and verifies an adapter for any provider you already have.",
   "author": {
     "name": "Kourosh Mobl",
