@@ -27,8 +27,9 @@ mechanism.
 - **Self-hosted parallel inference.** Out of scope. Local models are a privacy/offline
   path, not a breadth path.
 - **A CRUD tool for the registry.** Editing a config file is editing a config file.
-- **Semantic diff understanding.** Agreement mapping is structural (§7), not a model
-  reasoning about whether two diffs "mean" the same thing.
+- **Judging implementations by comparing them to each other.** Measured not to work (§7):
+  four implementations can be maximally divergent structurally and unanimous in the flaw
+  that matters. Reconciliation is by external probe.
 
 ## 1. Stages, roles, providers
 
@@ -204,30 +205,89 @@ Resolution: multi-provider `implementer` requires explicit opt-in per spec
 Codex-only implementation needs no opt-in. This does not make it safe; it makes the
 violation deliberate and visible instead of buried in a design document.
 
-## 7. Reconciliation: the agreement map
+## 7. Reconciliation: probe them, do not compare them
 
-N attempts are only worth running if comparing them is cheaper than reading them. The
-output is not N diffs; it is a map of where they agreed.
+N attempts are only worth running if judging them is cheaper than reading them all.
 
-Structural, not semantic:
+**An earlier draft of this section proposed an "agreement map":** normalise each diff, group
+by touched path, report where N implementations agreed, and tell the reader to skim the
+convergence and read the divergence. That design was tested against a real four-provider run
+and it does not work. The reasons are measured, not argued.
 
-1. Normalise each diff -- strip whitespace, sort hunks by file and anchor.
-2. Group by touched path, then by hunk anchor.
-3. Report per file: how many of N touched it, and whether their hunks are equivalent
-   after normalisation.
+### What was measured
+
+Four vendors implemented an identical brief in separate worktrees with no shared context.
+Every one of them produced a test that exercised a *copy* of the logic instead of the real
+code, and deleting the real line from the subject left all four green at unchanged assertion
+counts.
+
+Running the agreement-map algorithm over those four diffs afterwards:
 
 ```
-sim/pour.gd        4/4 touched   4/4 equivalent    <- converged; skim
-sim/bac.gd         4/4 touched   2/2 split         <- the hard part; read this
-tools/check.py     1/4 touched                     <- one model went somewhere alone
+tests/test-glm-reports-answering-model.sh   4/4 touched   0/4 equivalent   -> "read all of them"
 ```
 
-You read the divergences and the singletons. Convergence is the part you can skim, and it
-is most of a typical change. That inversion -- N attempts costing *less* review than one --
-is the entire justification for running N.
+Four different normalised hashes — and the normalisation used was *more* generous than this
+section originally specified: whitespace collapsed, comment lines dropped, remaining lines
+sorted before hashing. Every one of those biases the result toward finding equivalence. It
+still found none, four times out of four, which is why the conclusion does not depend on how
+the normaliser is tuned.
 
-Deliberately not semantic. A model asked whether two diffs "mean the same thing" is one
-more unverified opinion, and this document exists partly to avoid adding those.
+**The map does not mislead** — an earlier version of this section claimed it would report
+"converged, skim it", and that claim was wrong. What it does
+instead is report maximum divergence and tell you to read all four, which is precisely the
+expensive outcome the map exists to avoid. And reading all four, which was done, did not
+surface the defect.
+
+### Why comparison cannot work here, on any axis
+
+The four were **structurally as divergent as possible and unanimous in the flaw that
+mattered**: 155/85/118/118 lines, different function names, different layouts, identical
+fatal property.
+
+That property was relative to something *outside* the set — the real adapter. Comparing
+implementations to each other cannot detect a defect all of them share, because the defect
+is invisible in every pairwise comparison. Making the comparison semantic rather than
+structural does not help; it changes which axis you measure, and the flaw is on an axis
+outside the set entirely.
+
+### What replaces it: a pre-registered falsification probe
+
+Reconciliation is by **external probe applied identically to every implementation**, not by
+comparing them.
+
+1. **The probe is written before the implementations exist**, from the brief's own
+   "how to verify it is done" clause. Pre-registration matters: a probe authored after the
+   diffs land gets shaped by what they happened to do, which reintroduces the same blind
+   spot.
+2. **No implementer writes the probe.** Same rule as the adversary stage (§1): the party
+   that produced the work does not get to define what passing means.
+3. **The probe must be capable of failing.** A probe never observed to reject anything is a
+   green light asserting a property nobody measured — the failure this repo has shipped
+   more than once.
+4. **Report pass/fail per implementation against the probe**, plus which files each touched
+   as navigation. The structural map survives ONLY as a table of contents, never labelled
+   "converged" or "skim".
+
+```
+                probe: delete GOT_MODEL= from the adapter, expect the test to go red
+codex        FAIL   (11 passed -> 11 passed)
+copilot      FAIL   (10 passed -> 10 passed)
+glm          FAIL   (13 passed -> 13 passed)
+claude-alt   FAIL   (12 passed -> 12 passed)
+```
+
+That table took seconds to produce and answered the question completely. **All N failing is
+a normal, informative outcome** — it is what actually happened — and the run must report it
+as a result rather than as an error, then hand back the probe so a human can see what was
+asked.
+
+### What this costs
+
+Honestly: the probe is work, and it is work someone has to do up front, before any
+implementation exists. That is the price of the only reconciliation method measured to
+function. The agreement map was cheaper because it asked nothing of the person running it,
+which is also why it answered nothing.
 
 ## 7b. Partial failure, and what a stage actually hands on
 
@@ -243,11 +303,10 @@ exhausting quota is normal, not exceptional. The rule:
   implementation and a reconciliation that cannot reconcile anything.
 - Failed roles are **named in the output**, never silently dropped.
 
-**The agreement map must report the denominator it actually had.** If four were dispatched
-and three returned, the map says `3/4 dispatched, 3 compared` -- never `3/3`. A map that
-renormalises silently turns a partial run into what looks like full agreement, which is the
-same shape as this project's `quorum-flags` bug: a tool that checked nothing reporting
-success.
+**The probe report must show the denominator it actually had.** If four were dispatched and
+three returned, it says `3/4 dispatched, 3 probed` -- never `3/3`. Renormalising silently
+turns a partial run into what looks like a complete one, which is the same shape as this
+project's `quorum-flags` bug: a tool that checked nothing reporting success.
 
 **`quorum-auth` readiness is not a dispatch guarantee.** It proves a credential worked at
 generation time. Auth can be revoked, a service can be down, a request can time out. The
@@ -339,7 +398,7 @@ changing its enforcement is the one test that never gates a merge.
 | 9.2 `all` cannot check nothing | yes |
 | 9.3 canary write | **no** -- needs live vendors, credentials and quota |
 | 9.4 concurrency limits | yes, with stub providers |
-| 9.5 agreement mapping deterministic | yes -- fixed inputs |
+| 9.5 the probe can fail | yes -- fixed inputs |
 
 Four of five gate merges. 9.3 is a **manual verification run after any vendor update**, and
 calling it a test alongside the others would repeat this project's own documented mistake of
@@ -347,8 +406,14 @@ letting a check that declines to run report the same green as a check that passe
 
 **9.4 Concurrency limits hold.** Assert two ollama roles never run at once.
 
-**9.5 Agreement mapping is deterministic.** Same N diffs in, same map out. Feed known
-inputs including the degenerate cases: all identical, all different, one empty.
+**9.5 A probe that cannot fail is rejected.** Before any implementation is judged, the probe
+is run against a deliberately broken subject and must reject it. A probe never observed to
+reject anything reports the same green as one that passed, and the whole of §7 rests on the
+probe being able to say no.
+
+Feed the degenerate cases too: all implementations passing, all failing (the measured
+outcome), and a probe that errors rather than returning a verdict -- which must be reported
+as "probe failed", never silently counted as a pass.
 
 ## 10. Open questions
 
