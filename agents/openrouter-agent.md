@@ -117,6 +117,14 @@ TEXT=$(jq -r '.choices[0].message.content // ""' "$BODY" | quorum-sanitize)
 FINISH=$(jq -r '.choices[0].finish_reason // "none"' "$BODY")   # load-bearing — see below
 REASON_LEN=$(jq -r '.choices[0].message.reasoning // "" | length' "$BODY")
 SERVED=$(jq -r '.provider // "unknown"' "$BODY")   # which upstream vendor actually ran it
+# And which MODEL answered. This provider exists to choose a model per question, so an
+# answer whose model is unrecorded cannot be attributed -- the panel would log "openrouter
+# said X" with no way to know which of ~435 models said it.
+# Measured 2026-09-09: OpenRouter honoured the requested id exactly (deepseek and openai
+# both returned .model identical to the request), so this is ATTRIBUTION, not a guard
+# against a substitution anyone has observed here. Z.AI is the one that substitutes
+# silently -- see agents/glm-agent.md.
+SERVED_MODEL=$(jq -r '.model // ""' "$BODY" | quorum-sanitize)   # provider-controlled
 ```
 
 **`max_tokens` is a budget for reasoning *plus* content, and reasoning is spent first.**
