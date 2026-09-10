@@ -73,7 +73,7 @@ referenced as `${VAR}`.
 There are two independent layers, and CI is the only other place they run together.
 
 ```bash
-for t in tests/test-*.sh; do bash "$t"; done      # 258 assertions
+for t in tests/test-*.sh; do bash "$t"; done      # each prints its own N passed, M failed
 ```
 
 The CI gates live inside `.github/workflows/lint.yml` as shell bodies. To run them locally,

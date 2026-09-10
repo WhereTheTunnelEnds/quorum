@@ -93,6 +93,7 @@ built by walking into each of those failures first.
 | **`quorum-claude-on`** | Points Claude Code at a non-Anthropic endpoint, which is how GLM's verify and delegate tiers get a real tool loop |
 | **`prep-image`, `make-probe-image`** | Normalise a photo to something every vision endpoint accepts; generate a known-content probe image |
 | **[Field notes](docs/field-notes.md)** | The failure catalogue, in symptom → cause → fix form |
+| **[Capability spec (design)](docs/superpowers/specs/2026-09-09-capability-spec-design.md)** | Unbuilt design for declaring what a panel may do, rather than fixing it by which command you type. Kept because its centrepiece claim was retracted after review, and the reasoning is worth more than the proposal |
 
 ## Install
 
