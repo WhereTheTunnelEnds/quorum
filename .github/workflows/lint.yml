@@ -347,14 +347,21 @@ jobs:
           fi
           echo "no stray files"
 
-      - name: Every adapter states the no-code-fence rule
+      - name: Every adapter states the full envelope-framing rule
         run: |
           # Two agents were observed wrapping the whole envelope in a code fence, which
           # breaks any parser anchored on `status:` at the start of the response. The rule
           # only helps if every adapter carries it.
+          #
+          # The no-fence sentence alone is NOT enough, measured 2026-09-09: it says nothing
+          # about a PREAMBLE, and a leading "Here's the envelope:" breaks a `status:`-anchored
+          # parser exactly as a fence does. Both a haiku- and a sonnet-class adapter emitted
+          # one. Adding the begin/end rules took haiku from 0 of 2 clean envelopes to 2 of 2,
+          # so this gate requires BOTH halves -- the fence ban and the begin/end constraint.
           fail=0
           for f in agents/*.md; do
             grep -q 'Do not wrap the envelope in a code fence' "$f" || { echo "ERROR: $f missing the no-code-fence rule"; fail=1; }
+            grep -q 'Your reply must BEGIN with' "$f" || { echo "ERROR: $f missing the begin/end framing rule"; fail=1; }
           done
           exit $fail
 
