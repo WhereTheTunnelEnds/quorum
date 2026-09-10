@@ -1984,11 +1984,31 @@ on PATH. `tests/test-lint-gates.sh` already did exactly this for `lint.yml`, wit
 saying why — *"not a paraphrase of it, which would test a copy that can drift"*. That file was
 present in all four worktrees. Four models had the answer in front of them and none used it.
 
-**The part worth keeping.** This is the clearest measured argument in this repo against
-treating convergence as evidence. An agreement map over these four diffs would have scored
-them *converged — skim it*, and pointed a reviewer away from the defect, because **the defect
-was the convergence.** Vendor unanimity locates a shared prior; it does not locate truth. See
-also the 7/7 unanimity entry above, which argues the same thing from the opposite direction.
+**The part worth keeping — and a correction to the first version of this entry.**
+
+This entry originally claimed an agreement map over the four diffs "would have scored them
+*converged — skim it*", steering a reviewer away from the defect. **That was an inference,
+not a measurement, and it is false.** Running the comparison afterwards: the four normalise
+to four different hashes, so the map reports `4/4 touched, 0/4 equivalent` — maximum
+divergence, "read all of them". It would not have misled anyone.
+
+What is actually measured is stronger. The four were **structurally as divergent as possible
+and unanimous in their fatal flaw**: 155/85/118/118 lines, different function names, different
+layouts, every one testing a copy of the adapter instead of the adapter.
+
+So the lesson is not "convergence is dangerous". It is that **inter-implementation comparison
+measures an axis unrelated to correctness.** The map compares implementations to each other;
+the defect was a property they all had relative to something *outside* the set. No amount of
+comparing them could surface it — and "read all four" is the expensive outcome the map exists
+to avoid.
+
+The thing that found it was an external falsification probe: delete `GOT_MODEL=` from the
+real adapter and re-run all four. That took seconds and separated useless from useful
+immediately, where reading all four diffs (which was done) did not.
+
+Vendor unanimity locates a shared prior, not truth — see the 7/7 entry above. This entry adds
+the sharper point: unanimity on the axis that matters can hide inside total disagreement on
+every axis you happen to be measuring.
 
 **Two smaller findings from the same run.** One agent created its worktree as
 `~/.worktrees/quorum/<slug>` instead of `<provider>/<slug>`, so it was not attributable by
