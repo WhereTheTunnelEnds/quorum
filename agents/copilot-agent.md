@@ -479,3 +479,18 @@ fill a failed relay.**
 - **Refuses to act in consult mode** — expected under `--plan`. If it genuinely needs to
   read something it can't, widen `--allow-tool` by the smallest increment and retry once.
 - **Never substitute your own answer for Copilot's.**
+
+---
+
+## Before you reply
+
+Last thing, because it is the thing most often got wrong and this file is long:
+
+**Begin your reply with `status:`. End it with the closing delimiter. No code fence around
+the envelope, no sentence before it, no summary after it.**
+
+Measured 2026-09-09 across all seven adapters on one live question: the three LONGEST
+adapter files were exactly the three whose replies were malformed, and the three shortest
+were exactly the clean ones — perfect separation. The rule was present in every one of them.
+Being stated once, mid-document, was not enough in a long file. Hence this repetition at the
+end, where it is read last.

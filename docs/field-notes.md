@@ -17,6 +17,29 @@ Format for new entries is at the bottom. PRs welcome — see [CONTRIBUTING.md](.
 
 ---
 
+## An `error` that carried a complete, correct answer
+
+`claude-alt` returned an envelope reading `status: error`, `is_error: true`, `exit_code: 0`,
+`permission_denials: 0`, `diagnostics: (clean)` — followed by a full, coherent answer to the
+question asked.
+
+The adapter was **right**. `is_error: true` must classify as `error`; that rule exists because
+a revoked token returns `is_error: true` alongside `subtype: "success"`, so anything keying on
+subtype reports an auth failure as an answer. The defect is that nothing recorded *why*: with
+an empty stderr the envelope says `error` and explains nothing.
+
+It did not reproduce. A direct call with a comparable prompt returned `is_error: false`,
+`subtype: success`, `num_turns: 2`, exit 0. One occurrence, one clean retry.
+
+**The lesson is about method, not about the field.** Re-running an unreproducible fault and
+getting a clean result tells you almost nothing — it is the same mistake as reading a green
+check without asking what would have made it red. So the adapter now captures `subtype`,
+`num_turns` and the answer length into `diagnostics:` at the moment `is_error` is true. An
+"error" carrying 1,400 characters of correct answer is a distinguishable animal from an auth
+failure carrying none, and next time the envelope will say which one it was.
+
+Still open. Recorded here so the next occurrence is recognised rather than rediscovered.
+
 ## A red test that misidentified its own cause
 
 Moving CI to GitHub-hosted runners turned three UTF-8 gates red on `macos-latest` and
