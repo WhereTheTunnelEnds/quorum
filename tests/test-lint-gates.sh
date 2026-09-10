@@ -199,6 +199,13 @@ inject_every_installed_command_has_a_test_that_reaches_it() {
 revert_every_installed_command_has_a_test_that_reaches_it() {
   cp "$REPO/scripts/install.sh" "$SANDBOX/scripts/install.sh"; }
 
+# Removes ONE placement check, leaving the worktree add in place -- the exact shape of the
+# measured incident, where the add happened but somewhere else entirely.
+inject_every_worktree_block_verifies_where_the_worktree_landed() {
+  perl -0pi -e 's/^LANDED=.*\n//m' "$SANDBOX/agents/codex-agent.md"; }
+revert_every_worktree_block_verifies_where_the_worktree_landed() {
+  cp "$REPO/agents/codex-agent.md" "$SANDBOX/agents/codex-agent.md"; }
+
 inject_every_adapter_states_the_full_envelope_framing_rule() {
   perl -0pi -e 's/Your reply must BEGIN with/REMOVED BY TEST/' "$SANDBOX/agents/ollama-agent.md"; }
 revert_every_adapter_states_the_full_envelope_framing_rule() {

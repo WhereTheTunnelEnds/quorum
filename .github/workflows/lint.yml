@@ -276,6 +276,29 @@ jobs:
           [ "$fail" = 0 ] && echo "every installed command is reached by a test"
           exit $fail
 
+      - name: Every worktree block verifies where the worktree landed
+        run: |
+          # Measured 2026-09-10: a delegation created its worktree via the harness's own
+          # EnterWorktree convention instead of the block's recipe -- outside the block's
+          # namespace, and it relocated the DISPATCHING session into itself. Write
+          # containment held; what failed is that the caller lost track of which tree it
+          # was in, and none of the block's protections (mktemp -u uniqueness, the checked
+          # add, per-repo namespacing) applied because the block never ran.
+          #
+          # Two guards, both required at every site that creates a worktree.
+          fail=0
+          for f in agents/*.md skills/build-adapter/templates/adapter.md.template; do
+            [ -e "$f" ] || continue
+            adds=$(grep -c '^if ! git worktree add' "$f" || true)
+            [ "$adds" = 0 ] && continue
+            lands=$(grep -c '^LANDED=' "$f" || true)
+            rules=$(grep -c 'ONLY THIS WAY' "$f" || true)
+            [ "$lands" = "$adds" ] || { echo "ERROR: $f has $adds worktree add(s) but $lands placement check(s)"; fail=1; }
+            [ "$rules" = "$adds" ] || { echo "ERROR: $f has $adds worktree add(s) but $rules harness-tool prohibition(s)"; fail=1; }
+          done
+          [ "$fail" = 0 ] && echo "every worktree block checks placement and forbids harness worktree tools"
+          exit $fail
+
       - name: Shell syntax
         run: |
           for f in scripts/* probes/*.sh; do

@@ -205,6 +205,58 @@ than nothing, because it arrives wearing confidence it hasn't earned.
 
 ---
 
+## The inverse failure: the delegate's worktree capturing the caller
+
+Everything above reasons in one direction — the delegate reaching the user's checkout. There
+is a second direction, and it was not covered until it happened.
+
+**Measured 2026-09-10, `last-call`, first exercise of the codex delegate path.** The
+delegation created its worktree at `<repo>/.claude/worktrees/<name>`, on a `worktree-`
+prefixed branch, based on `origin/main`. None of that is what the adapter block computes:
+it specifies `$(dirname "$REPO")/.worktrees/$(basename "$REPO")/$BRANCH`, a `<provider>/`
+branch prefix, and the current HEAD. It is Claude Code's own `EnterWorktree` convention,
+which appears nowhere in this plugin.
+
+The worktree then **relocated the dispatching session into itself.** The caller's next
+`git -C <main-checkout>` was refused as a cross-worktree redirect. Isolation ran backwards:
+the delegate's container captured the caller, and every subsequent command in that session
+would have silently targeted the wrong checkout.
+
+**Write containment held** — `git status --porcelain` in the real checkout was empty, and
+the delegate's edits stayed in its worktree. The damage was not an escape. It was that the
+caller lost track of which tree it was standing in.
+
+### Why it is worse than it looks
+
+The block never ran, so none of the properties it exists to provide applied:
+
+| property | why it exists |
+|---|---|
+| `mktemp -u` uniqueness | `$$` plus `date +%s` collided for two simultaneous delegations |
+| checked `git worktree add` | an unchecked add put two agents in one tree |
+| `.worktrees/<repo>/` namespacing | a delegate in repoB landed in repoA's worktree and wrote there |
+
+A second concurrent delegation down the bypassed path had protection from none of them.
+
+### Why it happened there
+
+`last-call` had **ten** existing `.claude/worktrees/` directories when this ran. An agent in
+that repo has overwhelming precedent for that path, and the adapter documented *how* to
+create a worktree without ever saying *only this way*. A one-call harness tool next to a
+six-line shell recipe will be reached for.
+
+### The two guards now in every worktree block
+
+1. **An explicit prohibition** on `EnterWorktree` and any other harness-native worktree tool,
+   stated where the path is computed rather than in prose elsewhere.
+2. **A placement assertion** after creation: `git -C "$WT" rev-parse --show-toplevel` must
+   equal the `$WT` the block computed, or it refuses to run the provider. Same shape as the
+   existing checked `git worktree add` — verify the thing happened rather than assume the
+   command implied it.
+
+Neither guard makes a worktree a boundary. They make it *the boundary this document
+describes*, which is the weaker claim actually on offer.
+
 ## What adapters are never allowed to do
 
 **Escalate past a denial.** A sandbox refusal is a finding to report, not an obstacle to
