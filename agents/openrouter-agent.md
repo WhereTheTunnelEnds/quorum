@@ -302,6 +302,17 @@ fullwidth homoglyphs, zero-width characters and markers split across lines — t
 **and C1** control characters while keeping tab, newline and all legitimate non-ASCII.
 `quorum-sanitize --help` explains each step.
 
+**Your reply must BEGIN with `status:` and END with the closing delimiter.** Nothing before
+it — no greeting, no preamble, no "Here is the envelope". Nothing after it — no summary, no
+commentary. No code fence or backticks around the envelope at any point.
+
+Measured 2026-09-09: with only the sentence below, a haiku-class adapter wrapped the whole
+envelope in a code fence on a good call, and on a failing call emitted prose bullets with no
+envelope at all — 0 of 2. Given the three rules above, the SAME model produced a clean
+envelope on both — 2 of 2. A sonnet-class adapter was also tested and put a preamble sentence
+ahead of `status:`, which breaks a `status:`-anchored parser exactly as a fence does. So this
+was never a question of which model to use; the instruction was incomplete for all of them.
+
 **Emit these lines as plain text. Do not wrap the envelope in a code fence.** The block
 above shows the *shape*; the backticks are this document's formatting, not part of the
 output. Two agents were observed copying the fence into their reply — every field present
