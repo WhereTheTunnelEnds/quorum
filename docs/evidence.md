@@ -26,6 +26,12 @@ cited as if it could.
 
 | Claim | Stated in | Re-measure with |
 |---|---|---|
+| Z.AI answers as `glm-5.3-flash` when a **retired** model id is requested, at HTTP 200 with no warning | `field-notes.md`, `agents/glm-agent.md` | `printf '{"model":"glm-4.6","max_tokens":32,"messages":[{"role":"user","content":"hi"}]}' > /tmp/q.json; curl -s https://api.z.ai/api/anthropic/v1/messages -H @<(printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY") -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' -d @/tmp/q.json \| jq -r .model` |
+| OpenRouter, by contrast, honours the requested id exactly | `agents/openrouter-agent.md` | same shape against `https://openrouter.ai/api/v1/chat/completions`, compare `.model` |
+| `gh api` writes its error object to **stdout** and exits **0** on a 403 | `field-notes.md` | `gh api /orgs/<org-you-cannot-admin>/actions/runners -q '.runners[]' 2>/dev/null; echo "rc=$?"` |
+| `command -v claude` returns an alias definition, not a path | `field-notes.md` | `command -v claude` in an interactive shell |
+| All four CLI providers run concurrently; only Ollama is single-slot | `field-notes.md`, capability spec §5 | run any two adapter invocations in parallel and compare both answers |
+| Renaming a lint step orphans its `inject_<slug>` and the gate silently goes unproven | `field-notes.md` | rename a step in `lint.yml`, then `./tests/test-lint-gates.sh` — it reports the gate as unproven |
 | Codex exits 1 with **zero bytes** outside a trusted repo | field-notes | `quorum-verify codex` |
 | Copilot's bad-flag error is **stderr, rc=1, 0 bytes stdout** | field-notes | `quorum-verify copilot` |
 | z.ai reports a bad model id in the **body**, curl exits 0 | field-notes | `quorum-verify glm` |
@@ -84,6 +90,7 @@ cited as if it could.
 
 | Claim | Stated in | Why it cannot be re-run |
 |---|---|---|
+| Seven providers returned **7/7 PARTIAL** on the N-version analogy, unanimously naming shared architecture and overlapping training data | `field-notes.md`, capability spec §6 | Model outputs are not deterministic; a re-run may split. The retraction in §6 rests on the *argument* — that the claim was asserted with no measurement of decorrelation — not on the tally, which is why the tally being unreproducible does not reopen it. The prompt used is in the PR description if you want to re-run it and see what you get. |
 | A session reported GLM missing after `command -v glm` returned nothing | glm-agent, model-panel, getting-started | Happened in a separate session; no transcript is kept here. The *underlying fact* — that no `glm` binary exists — **is** reproducible: `command -v glm` returns nothing while `quorum-verify glm` passes. |
 | Two adapters wrapped their envelope in a code fence | adapter-contract, all adapters | Agent transcripts are not artifacts of this repo. CI now enforces the resulting rule, which is the part that matters. |
 | A panel run was terminated at the 600s background ceiling | model-panel | Depends on the caller's harness settings, not on this repo. |

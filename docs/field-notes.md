@@ -636,6 +636,69 @@ which is why `quorum-status` calls `/api/tags` instead of looking for a command.
 
 ---
 
+### `gh api` prints its error to stdout and exits 0
+
+**Symptom.** A monitor that reads org runner state starts emitting raw JSON as if it were a
+runner event, then goes quiet about real runner changes forever.
+
+**Cause.** On a 403, `gh api` writes the error object to **stdout** and exits **0**. So
+`gh api … 2>/dev/null || true` catches nothing: the error text flows into the variable, gets
+compared against the previous state, is announced as a change, and then **overwrites the
+baseline**. Every later comparison is against garbage, so a runner genuinely going offline
+diffs clean and is never reported.
+
+**Fix.** Shape-check the payload rather than trusting the exit code, and never replace a good
+baseline with something unparseable:
+
+```bash
+RAW=$(gh api /orgs/ORG/actions/runners -q '.runners[]|"\(.name)=\(.status)"' 2>/dev/null || true)
+NEW=$(printf '%s\n' "$RAW" | grep -E '^[A-Za-z0-9._-]+=[a-z_]+$' || true)
+[ -n "$NEW" ] || { report_unreadable_once; }   # keep the old baseline
+```
+
+**Measured** 2026-09-09, after a token lost `admin:org`:
+
+```
+$ gh api /orgs/ORG/actions/runners -q '...' 2>/dev/null ; echo "rc=$?"
+{"message":"You must be an org admin or have the runners and runner groups fine-grained
+permission.", … ,"status":"403"}
+rc=0
+```
+
+**Same family as** `jq '// true'` firing on `false`, and `gh api -f enabled=false` silently
+no-op'ing: in all three the call *succeeded* by the only signal being checked.
+
+### `max_concurrent: 1` for a CLI provider is an assumption, and it was wrong
+
+**Symptom.** None — which is the point. A design document asserted each CLI provider owns
+"one session" and therefore cannot be fanned out. Nothing failed; a fan-out simply would have
+run serially forever.
+
+**Cause.** The claim was reasoned from the phrase "CLI session", never tested. Each adapter
+invocation is a separate subprocess making a separate API call.
+
+**Measured** 2026-09-09 — two concurrent invocations per provider, distinct prompts,
+distinct correct answers:
+
+| provider | result |
+|---|---|
+| codex | both `rc=0`, answered 7 and 9 |
+| copilot | both `rc=0`, different working directories |
+| claude-alt | both `rc=0`, answered 7 and 9 |
+| glm | both HTTP 200, distinct responses |
+| **ollama** | **genuinely 1** — 36 GB unified memory shared with a CI runner |
+
+Only Ollama is single-slot, and for a physical reason rather than a protocol one.
+
+**Two near-misses while measuring it**, both of which would have confirmed the wrong answer:
+`rc=127` from an aliased `claude` (see below), and **HTTP 200 with empty text** from GLM that
+looked like concurrent interference but was `max_tokens: 16` consumed entirely by a
+`thinking` block, leaving no `text` block for the extractor. The second was only caught by
+re-running and reading the raw body — the first attempt deleted the response files before
+inspecting them.
+
+**Re-check:** run any two adapter invocations in parallel and compare both answers.
+
 ## Codex (OpenAI / ChatGPT subscription)
 
 ### Zero bytes and nothing else, outside a trusted git repo
@@ -823,6 +886,47 @@ input converts cleanly, and a 25MB PNG was reduced to 543KB at 1024px by the dow
 (two passes) against a 1MB cap.
 
 ---
+
+### The model that answers is not always the model you asked for
+
+**Symptom.** You request a specific GLM model. HTTP 200, a correct answer, normal response
+shape. A different, smaller model produced it, and nothing anywhere says so.
+
+**Cause.** Z.AI silently redirects retired model ids to a current one. Only a *wholly
+unknown* id is rejected; a *retired* one is quietly rerouted.
+
+**Fix.** Read `.model` back from the response and compare it to what you asked for. Keep the
+requested id in one variable used by both the request and the check — written twice they
+drift, and the check ends up validating a name the request abandoned:
+
+```bash
+WANT_MODEL=glm-5.3
+jq -n --arg m "$WANT_MODEL" '{model:$m, ...}' > "$REQ"
+GOT_MODEL=$(jq -r '.model // ""' "$BODY")
+```
+
+A mismatch is **not** an error — the answer is real and usable — so report it and name both
+ids in `diagnostics:`. Failing the call turns a vendor's routing decision into an outage.
+
+**Measured** 2026-09-09, live endpoint, unpiped:
+
+| requested | HTTP | `.model` in response |
+|---|---|---|
+| `glm-4.6` | 200 | **`glm-5.3-flash`** |
+| `glm-4.5-air` | 200 | **`glm-5.3-flash`** |
+| `glm-5.3` | 200 | `glm-5.3` |
+| `nonexistent-model-xyz` | 400 | `[1211] Unknown Model` |
+
+`glm-5.3` is what the adapter requests and it is honoured, so this is a trap that is armed
+rather than a bug that has fired. The day that id retires, the panel starts recording a
+flash model's opinion as GLM's.
+
+**Why nothing caught it.** `quorum-flags` exists for exactly this class — a vendor renaming
+something out from under an adapter — but it checks **CLI flags**. This substitution happens
+inside a successful HTTP request with an identical response shape and no flag involved. The
+only signal is a field nobody was reading.
+
+**Re-check:** request `glm-4.6` and compare `.model` in the response.
 
 ## Ollama (local model server)
 
@@ -1189,6 +1293,38 @@ claude -p "..." --allowedTools "Read,Glob,Grep,Bash" --disallowedTools "Write,Ed
 access, silently converting a verification into an unreviewed delegation.
 
 ---
+
+### `command -v claude` returns an alias, not a path
+
+**Symptom.** A script resolves the Claude binary with `command -v claude` (or `which`), and
+every invocation exits **127, command not found** — including one that works when typed by
+hand.
+
+**Cause.** There is a shell alias. `command -v` and `which` report the *alias definition*, so
+the variable holds `alias claude='claude --dangerously-skip-permissions ...'` rather than a
+path, and using it as a command fails.
+
+**Fix.** `/usr/bin/which`, which is the external binary and never sees shell aliases:
+
+```bash
+CB=$(/usr/bin/which claude 2>/dev/null || printf '%s' "$HOME/.local/bin/claude")
+```
+
+`agents/claude-alt-agent.md` already does this. The trap is for anything written alongside it.
+
+**Measured** 2026-09-09:
+
+```
+command -v claude -> alias claude='claude --dangerously-skip-permissions …'
+/usr/bin/which claude -> /Users/<you>/.local/bin/claude
+```
+
+**Why it matters beyond the 127.** It was hit while measuring whether two `claude -p`
+sessions can run concurrently. Read at face value, `rc=127` on both looks like the
+concurrency being *refused* — confirming the hypothesis under test with a shell bug. The
+correct answer, once the path was right, was the opposite: both ran fine.
+
+**Re-check:** `command -v claude` in an interactive shell.
 
 ## Deploying the plugin
 
@@ -1765,6 +1901,59 @@ scored, and running it more times does not fix that — it launders the ambiguit
 Check ground truth against the thing that *generates* it, not against prose describing it.
 
 ---
+
+### Unanimity across vendors cannot distinguish "independently right" from "identically biased"
+
+**Symptom.** Seven providers were asked the same question with an identical prompt and no
+shared context. All seven returned the same verdict, with near-identical reasoning and
+overlapping vocabulary. That reads as overwhelming confirmation.
+
+**Cause.** The question was whether four LLM implementers constitute N-version programming —
+whether their bugs decorrelate. Every one answered PARTIAL, naming shared transformer
+architecture and overlapping training data.
+
+The result is self-undermining in both directions at once. If the models are as correlated as
+they say, their unanimity is *expected* and carries little independent weight. If they are
+decorrelated enough for unanimity to be meaningful, their shared claim is weakened. Nothing
+in the run distinguishes "this objection is obvious to any competent reviewer" from "these
+models share a training-derived talking point".
+
+**Fix.** Treat cross-vendor agreement as a *prior*, not a proof, and say which it is. Where a
+claim is checkable, check it instead — this run produced a verdict, but the concurrency claim
+in the same document was settled by *running two processes*, and that settled it completely.
+
+**Measured** 2026-09-09: identical prompt, strict output format, seven providers
+(codex, copilot, glm, antigravity, claude-alt, openrouter, ollama). **7/7 PARTIAL, zero
+dissent.** The verdict was acted on — the analogy was retracted — but on the strength of the
+argument, not the tally.
+
+**Corollary for `model-panel`.** This file already argues that failure modes are weakly
+correlated across vendors, and that premise is doing real work in the panel's design. This
+entry is the measured caveat: weakly is not independently, and a panel that agrees
+unanimously has not necessarily told you more than one panelist would have.
+
+### Renaming a CI gate silently orphaned its negative test
+
+**Symptom.** `tests/test-lint-gates.sh` printed `NO INJECTION DEFINED — this gate is unproven`
+on every run for several commits. CI stayed green throughout. The gate in question enforced a
+rule across all seven adapters and had never been observed to fail.
+
+**Cause.** The harness binds `inject_<slug>` to the workflow step's **name**. Renaming the
+step from "states the no-code-fence rule" to "states the full envelope-framing rule" left
+`inject_every_adapter_states_the_no_code_fence_rule()` matching nothing. The harness reported
+it out loud, in the correct place, and the line was not read.
+
+**Fix.** Rename the injection with the step, and make it the *discriminating* violation —
+inject only the half of the rule the old gate did not check. A gate that regressed to the old
+behaviour then fails to fire, and the harness reports `did NOT fire on an injected violation`.
+Verified by regressing the gate deliberately and watching the test go red.
+
+**Measured** 2026-09-09: `19 passed, 3 gate(s) not exercised` → `22 passed, 2 not exercised`,
+the remaining two being documented skips.
+
+**The lesson is not "rename carefully."** The harness did its job perfectly and the output was
+ignored because everything around it was green. A warning that appears in a passing run is
+seen exactly as often as no warning at all.
 
 ## Adding an entry
 
