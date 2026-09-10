@@ -188,9 +188,31 @@ shares its `.git`. Say that plainly rather than calling it isolated.
 REPO=$(git rev-parse --show-toplevel)
 UNIQ=$(basename "$(mktemp -u)" | tr -cd 'A-Za-z0-9' | tr 'A-Z' 'a-z')
 BRANCH="claude-alt/verify-$(date +%Y%m%d-%H%M%S)-$UNIQ"
+# BUILD THE WORKTREE WITH THESE COMMANDS AND NOTHING ELSE. Do not use EnterWorktree or any
+# other harness-native worktree tool, however convenient it looks. This block documents HOW
+# to make a worktree; it did not previously say ONLY THIS WAY, and measured 2026-09-10 an
+# agent reached for the one-call tool instead -- in a repo with ten pre-existing
+# `.claude/worktrees/` directories, which is a lot of contextual precedent. The result put
+# the worktree outside this block's namespace and relocated the CALLING session into it.
 WT="$(dirname "$REPO")/.worktrees/$(basename "$REPO")/$BRANCH"
 if ! git worktree add -b "$BRANCH" "$WT"; then
   echo "worktree add failed -- stop here and report it. Do NOT run the provider."
+  exit 1
+fi
+
+# WHERE IT LANDED, not where we asked. Measured 2026-09-10 in last-call: a delegation
+# created its worktree at <repo>/.claude/worktrees/<name> on a `worktree-`-prefixed branch
+# from origin/main -- Claude Code's own EnterWorktree convention, none of which this block
+# produces -- and RELOCATED THE DISPATCHING SESSION into it. The caller's next `git -C
+# <main-checkout>` was refused as cross-worktree.
+#
+# Every safety property below is a property of the path THIS block computes: mktemp -u
+# uniqueness, the checked add, the per-repo namespace. A worktree somewhere else has none
+# of them, and the failure is silent -- the provider runs, the diff looks fine.
+LANDED=$(git -C "$WT" rev-parse --show-toplevel 2>/dev/null)
+if [ "$LANDED" != "$(cd "$WT" 2>/dev/null && pwd -P)" ]; then
+  echo "worktree is not where this block put it: expected $WT, got ${LANDED:-nothing}."
+  echo "Do NOT run the provider. Something else created it -- see docs/safety-model.md."
   exit 1
 fi
 
