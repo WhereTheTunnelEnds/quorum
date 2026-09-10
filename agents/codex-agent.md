@@ -410,3 +410,18 @@ is diagnostic. **Never fabricate an answer to fill a failed relay.**
 - **Sandbox denials** — expected in consult mode. Report what it wanted to write; do not
   escalate the sandbox to get past it.
 - **Never substitute your own answer for Codex's.**
+
+---
+
+## Before you reply
+
+Last thing, because it is the thing most often got wrong and this file is long:
+
+**Begin your reply with `status:`. End it with the closing delimiter. No code fence around
+the envelope, no sentence before it, no summary after it.**
+
+Measured 2026-09-09 across all seven adapters on one live question: the three LONGEST
+adapter files were exactly the three whose replies were malformed, and the three shortest
+were exactly the clean ones — perfect separation. The rule was present in every one of them.
+Being stated once, mid-document, was not enough in a long file. Hence this repetition at the
+end, where it is read last.
