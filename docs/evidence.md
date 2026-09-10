@@ -26,6 +26,8 @@ cited as if it could.
 
 | Claim | Stated in | Re-measure with |
 |---|---|---|
+| Deleting `GOT_MODEL=` from the glm adapter leaves four delegated tests green and the real test red | `field-notes.md` | `perl -0pi -e 's/^GOT_MODEL=.*\n//m' agents/glm-agent.md; ./tests/test-glm-reports-answering-model.sh; git checkout agents/glm-agent.md` — expect `5 passed, 6 failed` |
+| `${VAR:-x}` substitutes on empty as well as unset; `${VAR-x}` only on unset | `field-notes.md` | `v=""; echo "${v:-SUBBED}" "${v-SUBBED}"` — prints `SUBBED` then an empty field |
 | Z.AI answers as `glm-5.3-flash` when a **retired** model id is requested, at HTTP 200 with no warning | `field-notes.md`, `agents/glm-agent.md` | `printf '{"model":"glm-4.6","max_tokens":32,"messages":[{"role":"user","content":"hi"}]}' > /tmp/q.json; curl -s https://api.z.ai/api/anthropic/v1/messages -H @<(printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY") -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' -d @/tmp/q.json \| jq -r .model` |
 | OpenRouter, by contrast, honours the requested id exactly | `agents/openrouter-agent.md` | same shape against `https://openrouter.ai/api/v1/chat/completions`, compare `.model` |
 | `gh api` writes its error object to **stdout** and exits **0** on a 403 | `field-notes.md` | `gh api /orgs/<org-you-cannot-admin>/actions/runners -q '.runners[]' 2>/dev/null; echo "rc=$?"` |

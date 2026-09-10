@@ -1955,6 +1955,67 @@ the remaining two being documented skips.
 ignored because everything around it was green. A warning that appears in a passing run is
 seen exactly as often as no warning at all.
 
+### Four vendors, four independent tests, one shared blind spot
+
+**Symptom.** Four coding agents — Codex, Copilot, GLM and a second Claude — were given an
+identical brief in separate worktrees with no shared context: write a test proving the glm
+adapter's model-verification check works. All four succeeded. All four reported the test
+green, and all four reported having *verified it could fail*. **46 assertions, and none of
+them tested the adapter.**
+
+**Cause.** Every one re-implemented the adapter's comparison *inside the test file* and
+asserted against that copy. Codex was explicit about it — `verify_model()`, commented
+"copied from glm-agent.md" — and invented a branch (`"no model in response — could not
+verify"`) that does not exist in the adapter, then tested that its invention worked. Each
+"proved" its test could fail by breaking **its own copy**, which demonstrates nothing.
+
+**Measured.** Deleting the real `GOT_MODEL=` line from `agents/glm-agent.md` — leaving zero
+readback in the adapter — changed no result:
+
+| provider | before | after |
+|---|---|---|
+| codex | 11 passed | 11 passed |
+| copilot | 10 passed | 10 passed |
+| glm | 13 passed | 13 passed |
+| claude-alt | 12 passed | 12 passed |
+
+**Fix.** Extract the adapter's own bash block at run time and execute it with `curl` stubbed
+on PATH. `tests/test-lint-gates.sh` already did exactly this for `lint.yml`, with a comment
+saying why — *"not a paraphrase of it, which would test a copy that can drift"*. That file was
+present in all four worktrees. Four models had the answer in front of them and none used it.
+
+**The part worth keeping.** This is the clearest measured argument in this repo against
+treating convergence as evidence. An agreement map over these four diffs would have scored
+them *converged — skim it*, and pointed a reviewer away from the defect, because **the defect
+was the convergence.** Vendor unanimity locates a shared prior; it does not locate truth. See
+also the 7/7 unanimity entry above, which argues the same thing from the opposite direction.
+
+**Two smaller findings from the same run.** One agent created its worktree as
+`~/.worktrees/quorum/<slug>` instead of `<provider>/<slug>`, so it was not attributable by
+path and its name misleadingly began with another provider's. Two of four left the file
+**untracked**, which renders as an empty diffstat — the review artifact then shows nothing at
+all. The main working tree was untouched in all four cases.
+
+### `${VAR:-default}` fires on empty, not just unset
+
+**Symptom.** A test harness reported `UNSET` for a variable the code had correctly set to the
+empty string, collapsing "the API response had no `.model` field" into "the adapter never ran".
+The assertion then passed against a deliberately gutted adapter.
+
+**Cause.** `${VAR:-default}` substitutes when the variable is unset **or empty**. Only
+`${VAR-default}`, without the colon, means "unset" alone.
+
+**Fix.** Drop the colon whenever the empty string is a meaningful, distinct value.
+
+**Measured** 2026-09-09: with `${GOT_MODEL:-UNSET}` the absent-`.model` case could not be
+distinguished from an adapter with its readback deleted; with `${GOT_MODEL-UNSET}` the same
+test goes `11 passed, 0 failed` against the real adapter and `5 passed, 6 failed` against the
+gutted one.
+
+**Same family as** jq's `//`, which is the *alternative* operator and fires on `false` as well
+as `null` — the bug that made a probe report every success as a failure. Both are operators
+that look like null-coalescing and are not.
+
 ## Adding an entry
 
 ```markdown
