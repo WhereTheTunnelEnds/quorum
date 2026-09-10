@@ -180,9 +180,28 @@ inject_no_stray_files_allowlist() {
 revert_no_stray_files_allowlist() {
   ( cd "$SANDBOX" && git rm -q --cached zz-stray.txt >/dev/null 2>&1; rm -f zz-stray.txt ); }
 
-inject_every_adapter_states_the_no_code_fence_rule() {
-  perl -0pi -e 's/Do not wrap the envelope in a code fence/REMOVED BY TEST/' "$SANDBOX/agents/ollama-agent.md"; }
-revert_every_adapter_states_the_no_code_fence_rule() {
+# The gate this pairs with used to be called "states the no-code-fence rule" and checked one
+# sentence. It now requires TWO -- the fence ban and the begin/end constraint -- and renaming
+# it orphaned the injection below, because the harness binds inject_<slug> to the step NAME.
+# The rename shipped in dc24e44 and the gate spent that whole time unproven while lint stayed
+# green. That is the "silent gap reads as all-gates-verified" case this file exists to make
+# loud; it worked, and nobody read the line.
+#
+# This injection removes ONLY the begin/end half. That is deliberate: it is the DISCRIMINATING
+# violation. A gate that regressed to checking the fence alone would not fire on it, and the
+# harness would report "did NOT fire on an injected violation". An injection that removed both
+# halves could not tell a both-halves gate from an either-half one.
+# The fence half gets its own cycle after the loop -- see "the other half of the AND".
+# Adds a tool to the installed list that no test mentions. Injecting into install.sh rather
+# than deleting a test file keeps the violation to one line and makes the revert exact.
+inject_every_installed_command_has_a_test_that_reaches_it() {
+  perl -0pi -e 's/^(TOOLS=".*)"$/$1 zz-untested-tool"/m' "$SANDBOX/scripts/install.sh"; }
+revert_every_installed_command_has_a_test_that_reaches_it() {
+  cp "$REPO/scripts/install.sh" "$SANDBOX/scripts/install.sh"; }
+
+inject_every_adapter_states_the_full_envelope_framing_rule() {
+  perl -0pi -e 's/Your reply must BEGIN with/REMOVED BY TEST/' "$SANDBOX/agents/ollama-agent.md"; }
+revert_every_adapter_states_the_full_envelope_framing_rule() {
   cp "$REPO/agents/ollama-agent.md" "$SANDBOX/agents/ollama-agent.md"; }
 
 # A username that is NOT one of the allowed placeholders, so the gate must object.
@@ -314,6 +333,30 @@ while IFS=$'\t' read -r slug name; do
     ok "$name — clean 0, violation $during, clean 0"
   fi
 done < "$STEPS/INDEX"
+
+# --- the other half of the AND ---------------------------------------------------------
+# The harness runs exactly one inject/revert cycle per gate, and the envelope-framing gate
+# asserts TWO things. Its loop injection covers the begin/end half (the discriminating one).
+# Run the fence half here by hand, so neither half of the AND is an untested claim -- the
+# gate lost its coverage once already by being renamed, and half-coverage is how it would
+# lose it again without the count of "unproven gates" ever moving off zero.
+FRAMING=every-adapter-states-the-full-envelope-framing-rule
+if [ -f "$STEPS/$FRAMING.sh" ]; then
+  perl -0pi -e 's/Do not wrap the envelope in a code fence/REMOVED BY TEST/' \
+    "$SANDBOX/agents/ollama-agent.md"
+  during=$(run_gate "$FRAMING")
+  cp "$REPO/agents/ollama-agent.md" "$SANDBOX/agents/ollama-agent.md"
+  after=$(run_gate "$FRAMING")
+  if [ "$during" = 0 ]; then
+    bad "Envelope-framing gate — did NOT fire on a missing no-code-fence rule"
+  elif [ "$after" != 0 ]; then
+    bad "Envelope-framing gate — still fails after the revert (rc=$after)"
+  else
+    ok "Envelope-framing gate — fence half too (clean 0, violation $during, clean 0)"
+  fi
+else
+  bad "Envelope-framing gate absent from lint.yml under slug '$FRAMING' — did it get renamed again?"
+fi
 
 echo
 printf '%d passed, %d failed, %d gate(s) not exercised\n' "$pass" "$fail" "$uncovered"
