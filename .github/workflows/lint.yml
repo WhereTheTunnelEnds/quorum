@@ -273,7 +273,13 @@ jobs:
             grep -rq -- "scripts/$t" tests/ \
               || { echo "ERROR: install.sh installs '$t' and no test in tests/ reaches it"; fail=1; }
           done
-          [ "$fail" = 0 ] && echo "every installed command is reached by a test"
+          # Say what this proved and what it did not. The previous wording -- "every
+          # installed command is reached by a test" -- was true and got quoted as 9/9
+          # coverage in a release note and a PR. Measured, the suite EXECUTES six of the
+          # nine; quorum-setup, quorum-auth and quorum-verify make live network calls and
+          # are only read. tests/test-tools-are-executed.sh measures that by shimming each
+          # tool, and fails if the set changes in either direction.
+          [ "$fail" = 0 ] && echo "every installed command is reached by a test (reached != executed: see tests/test-tools-are-executed.sh, 6 of 9 run)"
           exit $fail
 
       - name: Every worktree block verifies where the worktree landed

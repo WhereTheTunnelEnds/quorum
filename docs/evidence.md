@@ -26,6 +26,7 @@ cited as if it could.
 
 | Claim | Stated in | Re-measure with |
 |---|---|---|
+| The offline suite EXECUTES 6 of the 9 installed commands; `quorum-setup`, `quorum-auth` and `quorum-verify` are reached but never run | `field-notes.md`, lint.yml gate output | `./tests/test-tools-are-executed.sh` — shims every tool, runs the suite, prints the call count per tool |
 | Deleting `GOT_MODEL=` from the glm adapter leaves four delegated tests green and the real test red | `field-notes.md` | `perl -0pi -e 's/^GOT_MODEL=.*\n//m' agents/glm-agent.md; ./tests/test-glm-reports-answering-model.sh; git checkout agents/glm-agent.md` — expect `5 passed, 6 failed` |
 | `${VAR:-x}` substitutes on empty as well as unset; `${VAR-x}` only on unset | `field-notes.md` | `v=""; echo "${v:-SUBBED}" "${v-SUBBED}"` — prints `SUBBED` then an empty field |
 | Z.AI answers as `glm-5.3-flash` when a **retired** model id is requested, at HTTP 200 with no warning | `field-notes.md`, `agents/glm-agent.md` | `printf '{"model":"glm-4.6","max_tokens":32,"messages":[{"role":"user","content":"hi"}]}' > /tmp/q.json; curl -s https://api.z.ai/api/anthropic/v1/messages -H @<(printf 'Authorization: Bearer %s\n' "$Z_AI_API_KEY") -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' -d @/tmp/q.json \| jq -r .model` |

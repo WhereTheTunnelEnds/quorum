@@ -2036,6 +2036,52 @@ gutted one.
 as `null` — the bug that made a probe report every success as a failure. Both are operators
 that look like null-coalescing and are not.
 
+### "Reached by a test" is not "executed by a test", and the gap was six of nine
+
+**Symptom.** A lint gate reported every installed command as covered. The number was quoted
+as 9/9 in a release note and a pull request. Three of those nine had never been run by
+anything in the offline suite.
+
+**Cause.** The gate greps for `scripts/<tool>` in `tests/`. That proves a test holds a *path*
+to the tool, not that it executes it. Its own comment says so. The output sentence --
+"every installed command is reached by a test" -- did not, and that is the sentence people
+read.
+
+**Measured** 2026-09-11, by replacing each tool with a logging shim and running the suite:
+
+| executed | | not executed |
+|---|---|---|
+| `quorum-sanitize` 212 · `quorum-status` 9 | | `quorum-setup` 0 |
+| `quorum-claude-on` 8 · `quorum-flags` 4 | | `quorum-auth` 0 |
+| `prep-image` 2 · `make-probe-image` 1 | | `quorum-verify` 0 |
+
+Six of nine. All three zeros make live network calls, so they cannot run offline -- a real
+constraint rather than neglect. `quorum-setup` *is* driven by `tests/drive-setup.exp` under a
+pty, which the `.sh` loop excludes and which costs quota. `quorum-verify` is copied into a
+sandbox by `test-diagnostics-sanitized.sh` and read, never executed.
+
+**Fix.** `tests/test-tools-are-executed.sh` re-runs that experiment and fails if the set
+changes in **either** direction -- a tool dropping out means coverage regressed, a tool
+appearing means the recorded list is stale. The gate's output now states "reached != executed"
+and points at it.
+
+**The bug in the fix, found by mutating it.** The per-tool rows were written as:
+
+```bash
+was_run "$t"
+check "$t is executed ($(grep -cx "$t" "$LOG"))" $?
+```
+
+`$?` there is the status of the grep inside the *description*, not of `was_run`. Every row
+passed unconditionally. Forcing `quorum-flags` to zero calls still printed
+`ok ... (0 calls)`; only the aggregate count caught it. Capturing `rc=$?` on its own line
+before building the string fixes it, and both now go red.
+
+**Why it matters.** This is the same shape as the four-vendor test entry above: a check that
+cannot fail reports identically to one that passed. There it was four models testing a copy
+of the subject. Here it was my own assertion reading the wrong exit status. Neither was
+visible without deliberately breaking the thing under test and watching.
+
 ## Adding an entry
 
 ```markdown
