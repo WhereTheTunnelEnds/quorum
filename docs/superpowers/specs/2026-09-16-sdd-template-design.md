@@ -402,6 +402,28 @@ that a payload change carries a version bump.
    Note this does **not** subsume question 4: self-hashing would not have
    caught a shrunken manifest.
 
+8. **A spec can go stale by a route the freshness gate cannot see, and one
+   did, within an hour of the gate shipping.** The gate's premise is "a
+   non-terminal spec whose *header* names an issue GitHub has closed". On
+   2026-09-17 the darts spec sat at `accepted` with every deliverable built —
+   `spread_deg()` and `throw_error()` in `sim/darts.gd`, dispersion wired into
+   `world_sim.gd`, tracking issue #204 closed by PR #209. Both gates passed.
+   `check_spec_status` passed because `accepted` is a valid word;
+   `check_spec_freshness` examined the spec and found nothing, because its
+   header cites only #66 — the issue that tracked the remaining work never
+   appeared in the field the gate reads.
+
+   This is not a bug. The gate never claimed to read spec bodies, and
+   widening it to every `#N` anywhere in a spec would fire constantly on
+   background references. It is a **boundary**, and Stage 2 should decide
+   deliberately rather than discover it again: either accept that the header
+   is the contract and say so in the template's own docs, or have
+   `/sdd-init`'s spec template require a "tracking issues" field that the
+   gate reads, so the evidence of completion lands somewhere a machine looks.
+   The second is more work and is probably right, because the failure here
+   was not that anyone forgot — it was that there was nowhere correct to put
+   the information.
+
 7. **A comment describes a generator that does not exist.**
    `check_drift.py` calls the manifest "generated JSON"; no generator is in
    the repo — the script lives only in the Stage 1 plan. Either ship the
