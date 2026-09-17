@@ -1,6 +1,8 @@
 # A spec-driven development template, and why a gate has to travel with it
 
-**Status:** design, not implemented. 2026-09-16.
+**Status:** in progress. 2026-09-16. Stage 1 shipped to last-call on
+2026-09-17 as `451b563` (#207) and is green on Linux, macOS and Windows.
+Stages 2 and 3 are unbuilt.
 
 ## The problem
 
@@ -272,7 +274,7 @@ This is too large for one implementation plan. Three stages, each of which
 lands something usable on its own and can be abandoned without stranding the
 one before it:
 
-**Stage 1 — make the checkers portable.** No plugin, no commands. Parameterise
+**Stage 1 — make the checkers portable. SHIPPED 2026-09-17, `451b563`.** No plugin, no commands. Parameterise
 `check_agent_entrypoints.py` (remove the three hardcoded `last-call` sites,
 add the three entry-point strategies, read `.sdd-config.json`), teach
 `check_spec_status.py` to read its allowed vocabulary from config, and write
@@ -293,6 +295,26 @@ Stage 1 is the real work and the only stage whose value does not depend on
 the others: portable checkers can be copied by hand into any repo, which is
 what happens today anyway.
 
+### What Stage 1 actually cost, recorded for Stage 2's estimate
+
+Seven tasks, fifteen commits, eight defects found in review. Every one was
+either in the plan's own reference code or emergent between two individually
+correct changes — none came from an implementer misreading a brief. Two are
+worth carrying forward as warnings:
+
+- **`blob()` substituting U+FFFD for undecodable bytes** (correct) fed **a
+  size check that re-encodes the decoded string** (correct), and together
+  they failed a conforming 1024-byte file as "1026 bytes". Neither task's
+  review could see it; only the whole-branch pass could.
+- **An empty manifest made `check_drift.py` print "0 vendored file(s) …
+  pass" and exit 0** — a gate that cannot fail, inside the one file whose
+  docstring names silent success as its reason for existing.
+
+The acceptance run also found that quorum passed **vacuously**: its specs are
+all at status `design`, so zero were in scope, and the banner was
+byte-identical to a run that examined two. That is why the freshness banner
+now reports a count.
+
 ## Open questions
 
 1. Where does the plugin repo live, and is it public? Quorum is public and
@@ -302,3 +324,107 @@ what happens today anyway.
    its self-test, or is it too tied to `docs/milestones.yml`?
 3. Should `/sdd-enable` ever flip to enforcing automatically once green, or
    always require a human to make that call?
+
+## A Stage 2 blocker found before Stage 2 started
+
+**The plugin may not be able to find its own files.** `CLAUDE_PLUGIN_ROOT` is
+the documented way for a plugin to reference its bundled content. It is
+**unset**. Measured again on 2026-09-17 in a live session: `printenv
+CLAUDE_PLUGIN_ROOT` returns nothing, while 419 files across the plugins
+installed on this machine depend on it, and the official `plugin-dev`
+validator checks for it. Quorum's own `docs/field-notes.md:499` records the
+same measurement.
+
+Quorum was right to call this low severity *for quorum*: its adapters inline
+everything they need, so an unresolvable path costs a wasted turn and nothing
+more. **It is not low severity here.** This template's entire purpose is to
+put real Python files into someone else's `tools/sdd/`. A command that cannot
+locate the bytes it is meant to copy does not degrade — it has no function.
+Section 1 lists `tools/sdd/` as plugin payload and never says how those bytes
+reach the target repo.
+
+Three routes, to be decided before Stage 2 locks:
+
+1. **Fetch pinned raw GitHub URLs.** Matches quorum's existing workaround and
+   resolves from anywhere. Costs a network dependency in `/sdd-init`, and the
+   pin has to be the released tag, not `main`, or the vendored copy and the
+   manifest that describes it can disagree.
+2. **Inline the checker source in the command body** and have it written out
+   verbatim. No network, no path resolution — but the command files become
+   enormous and the canonical source of a checker becomes prompt text, which
+   is exactly the second-source-of-truth problem `check_agent_entrypoints.py`
+   exists to prevent.
+3. **Use `CLAUDE_PLUGIN_ROOT` with a fallback and a loud self-check.** Follows
+   Section 2's note-and-pass contract: say out loud that the path could not be
+   resolved rather than silently writing nothing. Note the fallback
+   `planning-with-files` uses does not match the real cache layout
+   (`cache/<marketplace>/<plugin>/<version>/`), so a wrong fallback is worse
+   than none.
+
+Route 1 is the current recommendation, because it is the only one where the
+bytes that land in a repo are the bytes a released tag contains, and that is
+what `check_drift.py` will hash.
+
+**Related, and the same failure class this project keeps finding:** the
+version appears in both `.claude-plugin/plugin.json` and `marketplace.json`
+and must be bumped in lockstep. `claude plugin update` decides whether to
+re-sync by comparing version **strings, not contents**, so a content change
+shipped under an unchanged version is silently undeployable — it looks
+updated and is not. Stage 2 needs a gate asserting the two versions match and
+that a payload change carries a version bump.
+
+## Carried into Stage 2 from Stage 1's reviews
+
+4. **`REQUIRED` in `check_drift.py` is a lower bound only.** It names the
+   four files that must be in the manifest, so shrinking coverage below them
+   fails. Nothing makes it *grow*: a fifth checker vendored after that commit
+   can still be dropped from the manifest silently, which is the same failure
+   class the `REQUIRED` tuple was added to close. The symmetric assertion —
+   `set(files) == set(required)` when run against the repo — would close it,
+   and Stage 2 is where the vendored set stops being hardcoded anyway.
+
+5. **The vendoring contract lives in a docstring.** `check_drift.py` decides
+   a checker passed by looking for the literal string `"assertions passed"`
+   in its stdout. Every current checker follows that convention and none
+   reuses the phrase in a failure path — verified — but nothing enforces it,
+   and a future checker that words success differently gets a false FAIL.
+   If the template is going to vendor third-party checkers, this is a
+   contract and belongs in the spec, not in a comment.
+
+6. **Should `check_drift.py` cover itself?** It guards four files and is
+   guarded by none, so a silent edit to the gate is the one change nothing
+   notices. Not circular — you store its digest and any later edit fails
+   until someone regenerates deliberately — but it costs a manifest
+   regeneration in every commit that touches the gate, and there is a
+   bootstrapping wrinkle: the regeneration script and the file being
+   regenerated are the same file, so it needs a documented
+   edit-then-regenerate-then-verify order rather than one atomic step.
+   Note this does **not** subsume question 4: self-hashing would not have
+   caught a shrunken manifest.
+
+8. **A spec can go stale by a route the freshness gate cannot see, and one
+   did, within an hour of the gate shipping.** The gate's premise is "a
+   non-terminal spec whose *header* names an issue GitHub has closed". On
+   2026-09-17 the darts spec sat at `accepted` with every deliverable built —
+   `spread_deg()` and `throw_error()` in `sim/darts.gd`, dispersion wired into
+   `world_sim.gd`, tracking issue #204 closed by PR #209. Both gates passed.
+   `check_spec_status` passed because `accepted` is a valid word;
+   `check_spec_freshness` examined the spec and found nothing, because its
+   header cites only #66 — the issue that tracked the remaining work never
+   appeared in the field the gate reads.
+
+   This is not a bug. The gate never claimed to read spec bodies, and
+   widening it to every `#N` anywhere in a spec would fire constantly on
+   background references. It is a **boundary**, and Stage 2 should decide
+   deliberately rather than discover it again: either accept that the header
+   is the contract and say so in the template's own docs, or have
+   `/sdd-init`'s spec template require a "tracking issues" field that the
+   gate reads, so the evidence of completion lands somewhere a machine looks.
+   The second is more work and is probably right, because the failure here
+   was not that anyone forgot — it was that there was nowhere correct to put
+   the information.
+
+7. **A comment describes a generator that does not exist.**
+   `check_drift.py` calls the manifest "generated JSON"; no generator is in
+   the repo — the script lives only in the Stage 1 plan. Either ship the
+   generator in Stage 2 or correct the comment.
