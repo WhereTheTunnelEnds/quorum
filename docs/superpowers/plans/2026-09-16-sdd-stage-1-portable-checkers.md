@@ -787,10 +787,15 @@ def evaluate(status, citations, state_by_number, spec_touch_iso,
              spec_touch_sha, closers_fn=None, non_terminal=None):
 ```
 
-and replace its guard:
+and replace its guard. Note `is None`, **not** `or`: an empty set is a repo
+saying "we have no concept of unfinished work, do not run this gate", and a
+truthiness test would discard that and silently substitute last-call's words
+— the same silent override this task exists to close.
 
 ```python
-    if status not in (non_terminal or NON_TERMINAL_STATUSES):
+    if non_terminal is None:
+        non_terminal = NON_TERMINAL_STATUSES
+    if status not in non_terminal:
         return problems, unconfirmed
 ```
 
@@ -798,9 +803,14 @@ In `check_spec`, add `non_terminal=None` to the signature, replace the
 guard at line 257:
 
 ```python
-    if status not in (non_terminal or NON_TERMINAL_STATUSES) or not citations:
+    if non_terminal is None:
+        non_terminal = NON_TERMINAL_STATUSES
+    if status not in non_terminal or not citations:
         return [], []
 ```
+
+Same `is None` reasoning as above. Put the default at the top of each
+function rather than inline in the condition, so the two sites cannot drift.
 
 and forward it at the `evaluate(...)` call:
 
