@@ -325,6 +325,54 @@ now reports a count.
 3. Should `/sdd-enable` ever flip to enforcing automatically once green, or
    always require a human to make that call?
 
+## A Stage 2 blocker found before Stage 2 started
+
+**The plugin may not be able to find its own files.** `CLAUDE_PLUGIN_ROOT` is
+the documented way for a plugin to reference its bundled content. It is
+**unset**. Measured again on 2026-09-17 in a live session: `printenv
+CLAUDE_PLUGIN_ROOT` returns nothing, while 419 files across the plugins
+installed on this machine depend on it, and the official `plugin-dev`
+validator checks for it. Quorum's own `docs/field-notes.md:499` records the
+same measurement.
+
+Quorum was right to call this low severity *for quorum*: its adapters inline
+everything they need, so an unresolvable path costs a wasted turn and nothing
+more. **It is not low severity here.** This template's entire purpose is to
+put real Python files into someone else's `tools/sdd/`. A command that cannot
+locate the bytes it is meant to copy does not degrade — it has no function.
+Section 1 lists `tools/sdd/` as plugin payload and never says how those bytes
+reach the target repo.
+
+Three routes, to be decided before Stage 2 locks:
+
+1. **Fetch pinned raw GitHub URLs.** Matches quorum's existing workaround and
+   resolves from anywhere. Costs a network dependency in `/sdd-init`, and the
+   pin has to be the released tag, not `main`, or the vendored copy and the
+   manifest that describes it can disagree.
+2. **Inline the checker source in the command body** and have it written out
+   verbatim. No network, no path resolution — but the command files become
+   enormous and the canonical source of a checker becomes prompt text, which
+   is exactly the second-source-of-truth problem `check_agent_entrypoints.py`
+   exists to prevent.
+3. **Use `CLAUDE_PLUGIN_ROOT` with a fallback and a loud self-check.** Follows
+   Section 2's note-and-pass contract: say out loud that the path could not be
+   resolved rather than silently writing nothing. Note the fallback
+   `planning-with-files` uses does not match the real cache layout
+   (`cache/<marketplace>/<plugin>/<version>/`), so a wrong fallback is worse
+   than none.
+
+Route 1 is the current recommendation, because it is the only one where the
+bytes that land in a repo are the bytes a released tag contains, and that is
+what `check_drift.py` will hash.
+
+**Related, and the same failure class this project keeps finding:** the
+version appears in both `.claude-plugin/plugin.json` and `marketplace.json`
+and must be bumped in lockstep. `claude plugin update` decides whether to
+re-sync by comparing version **strings, not contents**, so a content change
+shipped under an unchanged version is silently undeployable — it looks
+updated and is not. Stage 2 needs a gate asserting the two versions match and
+that a payload change carries a version bump.
+
 ## Carried into Stage 2 from Stage 1's reviews
 
 4. **`REQUIRED` in `check_drift.py` is a lower bound only.** It names the
