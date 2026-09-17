@@ -89,6 +89,11 @@ DEFAULTS = {
     "spec_statuses": [
         "proposed", "accepted", "in progress", "shipped", "superseded",
     ],
+    # Which of those mean "work is still open". check_spec_freshness.py only
+    # examines specs in this set, so a repo whose vocabulary is ["design"]
+    # would have every spec silently skipped if this stayed hardcoded --
+    # the precise failure that gate exists to prevent.
+    "non_terminal_statuses": ["proposed", "accepted", "in progress"],
 }
 
 STRATEGIES = ("symlink", "pointer", "independent")
@@ -158,6 +163,8 @@ def load(root="."):
         cfg["canonical"] = raw["canonical"]
     if "spec_statuses" in raw:
         cfg["spec_statuses"] = list(raw["spec_statuses"])
+    if "non_terminal_statuses" in raw:
+        cfg["non_terminal_statuses"] = list(raw["non_terminal_statuses"])
     if "entrypoints" in raw:
         eps = raw["entrypoints"]
         if not isinstance(eps, dict):
@@ -204,9 +211,14 @@ Insert these before the `for f in failures:` loop:
            "a repo that wants ONE entry point must not inherit five: %r"
            % (cfg["entrypoints"],))
 
-    cfg, err = load(with_config({"spec_statuses": ["design"]}))
+    cfg, err = load(with_config({"spec_statuses": ["design"],
+                                 "non_terminal_statuses": ["design"]}))
     expect("spec-statuses-override",
            err is None and cfg["spec_statuses"] == ["design"])
+    expect("non-terminal-statuses-override",
+           err is None and cfg["non_terminal_statuses"] == ["design"],
+           "a repo whose only status is 'design' must not have every spec "
+           "skipped by the freshness gate")
     expect("unspecified-keys-keep-defaults",
            cfg["canonical"] == "AGENTS.md")
 
@@ -227,7 +239,7 @@ Insert these before the `for f in failures:` loop:
 - [ ] **Step 6: Run to verify all pass**
 
 Run: `python3 tools/sdd_config.py --self-test`
-Expected: `self-test: 7/7 assertions passed`
+Expected: `self-test: 8/8 assertions passed`
 
 - [ ] **Step 7: Wire into the Makefile and commit**
 
@@ -667,6 +679,123 @@ git commit -m "The status vocabulary belongs to the repo, not the checker"
 
 ---
 
+### Task 4b: The freshness gate's non-terminal set
+
+Found by the pre-flight scan, not present in the first draft of this plan.
+`check_spec_freshness.py` hardcodes `NON_TERMINAL_STATUSES` at line 23 and
+tests against it at lines 72 and 257. A repo whose vocabulary is `["design"]`
+has every spec fall outside that set, so the gate skips them all and prints
+its all-clear. That is the same silent-skip failure the gate was built to
+stop, one level up.
+
+**Files:**
+- Modify: `tools/check_spec_freshness.py:23` (constant), `:72`
+  (`evaluate`), `:257` (`check_spec`), and the `main()` entry block
+
+**Interfaces:**
+- Consumes: `sdd_config.load` from Task 1, key `non_terminal_statuses`.
+- Produces: `evaluate(..., non_terminal=None)` and
+  `check_spec(path, lines, slug, shallow=False, non_terminal=None)`, both
+  defaulting to the module constant so existing callers are unaffected.
+
+- [ ] **Step 1: Write the failing self-test**
+
+Add to `_self_test()`:
+
+```python
+    # A repo whose vocabulary is ["design"] must still be checked. Before
+    # this, "design" was outside NON_TERMINAL_STATUSES and every such spec
+    # was skipped in silence.
+    problems, unconfirmed = evaluate(
+        "design", [52], {52: ("2026-09-14T02:28:19Z", "completed")},
+        "2026-09-11T00:00:00+00:00", CHAT_SHA, closers({52: {OTHER_SHA}}),
+        non_terminal={"design"})
+    expect(
+        "a-repos-own-non-terminal-vocabulary-is-honoured",
+        len(problems) == 1 and "#52" in problems[0],
+        "got %r" % (problems,),
+    )
+    problems, _ = evaluate(
+        "design", [52], {52: ("2026-09-14T02:28:19Z", "completed")},
+        "2026-09-11T00:00:00+00:00", CHAT_SHA, closers({52: {OTHER_SHA}}))
+    expect(
+        "the-default-set-is-unchanged-for-last-call",
+        problems == [],
+        "'design' is not one of last-call's non-terminal words",
+    )
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `python3 tools/check_spec_freshness.py --self-test`
+Expected: FAIL — `evaluate()` got an unexpected keyword argument
+`non_terminal`.
+
+- [ ] **Step 3: Thread the set through**
+
+In `evaluate`, add the parameter and use it:
+
+```python
+def evaluate(status, citations, state_by_number, spec_touch_iso,
+             spec_touch_sha, closers_fn=None, non_terminal=None):
+```
+
+and replace its guard:
+
+```python
+    if status not in (non_terminal or NON_TERMINAL_STATUSES):
+        return problems, unconfirmed
+```
+
+In `check_spec`, add `non_terminal=None` to the signature, replace the
+guard at line 257:
+
+```python
+    if status not in (non_terminal or NON_TERMINAL_STATUSES) or not citations:
+        return [], []
+```
+
+and forward it at the `evaluate(...)` call:
+
+```python
+    problems, unconfirmed = evaluate(
+        status, citations, state_by_number, touch, touch_sha, closers_fn,
+        non_terminal)
+```
+
+- [ ] **Step 4: Load it in `main`**
+
+In `main(argv)`, beside the existing shallow check:
+
+```python
+    import sdd_config
+    _cfg, _cfg_err = sdd_config.load(".")
+    if _cfg_err is not None:
+        print("FAIL: %s" % _cfg_err, file=sys.stderr)
+        return 1
+    non_terminal = set(_cfg["non_terminal_statuses"])
+```
+
+and pass `non_terminal` at the `check_spec(path, lines, slug, shallow)` call
+site, making it `check_spec(path, lines, slug, shallow, non_terminal)`.
+
+- [ ] **Step 5: Run to verify all pass**
+
+Run: `python3 tools/check_spec_freshness.py --self-test`
+Expected: `self-test: 28/28 assertions passed`
+
+Run: `python3 tools/check_spec_freshness.py docs/superpowers/specs/*.md`
+Expected: exit 0, unqualified banner.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add tools/check_spec_freshness.py
+git commit -m "A repo's own idea of unfinished work is the repo's to declare"
+```
+
+---
+
 ### Task 5: check_drift.py and the self-test requirement
 
 **Files:**
@@ -991,9 +1120,11 @@ separately from the last-call commits.
 `check_agent_entrypoints.py` (Tasks 2-3), config-driven status vocabulary
 (Task 4), `check_drift.py` with the self-test requirement (Task 5), and
 proof against three repos (Task 6). The config file the first three depend on
-is Task 1. `check_spec_freshness.py` needs no change in Stage 1 — it already
-takes its paths as arguments and hardcodes nothing repo-specific; it appears
-in the manifest only as a drift subject.
+is Task 1. `check_spec_freshness.py` was originally listed as needing no
+change, on the grounds that it hardcodes nothing repo-specific. That was
+false and the pre-flight scan caught it: `NON_TERMINAL_STATUSES` at line 23
+is a third hardcoded vocabulary, and a repo that does not use last-call's
+words has every spec silently skipped. Task 4b closes it.
 
 **Not covered here, deliberately:** the plugin skeleton, `sdd.yml`, and every
 `/sdd-*` command are Stage 2 and 3.
