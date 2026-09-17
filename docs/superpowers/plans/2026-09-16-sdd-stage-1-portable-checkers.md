@@ -71,6 +71,7 @@ nothing until a repo opts in.
 
 Run: sdd_config.py --self-test
 """
+import copy
 import json
 import os
 import sys
@@ -149,16 +150,21 @@ def load(root="."):
         with open(path, encoding="utf-8") as fh:
             raw = json.load(fh)
     except FileNotFoundError:
-        return dict(DEFAULTS), None
+        # deepcopy, not dict(): a shallow copy shares the nested entrypoints
+        # dict and both status lists with the module-level constant, so one
+        # caller doing cfg["entrypoints"]["X"] = ... would corrupt DEFAULTS
+        # for every later load() in the process. Later tasks pass this config
+        # around freely, which puts that trap directly in their path.
+        return copy.deepcopy(DEFAULTS), None
     except (OSError, ValueError) as exc:
         # A broken config must not be read as "no config". Silently falling
         # back to defaults would make a typo look like a passing repo.
-        return dict(DEFAULTS), "%s is unreadable (%s)" % (path, exc)
+        return copy.deepcopy(DEFAULTS), "%s is unreadable (%s)" % (path, exc)
 
     if not isinstance(raw, dict):
-        return dict(DEFAULTS), "%s must contain a JSON object" % path
+        return copy.deepcopy(DEFAULTS), "%s must contain a JSON object" % path
 
-    cfg = dict(DEFAULTS)
+    cfg = copy.deepcopy(DEFAULTS)
     if "canonical" in raw:
         cfg["canonical"] = raw["canonical"]
     if "spec_statuses" in raw:
@@ -168,13 +174,13 @@ def load(root="."):
     if "entrypoints" in raw:
         eps = raw["entrypoints"]
         if not isinstance(eps, dict):
-            return dict(DEFAULTS), "%s: entrypoints must be an object" % path
+            return copy.deepcopy(DEFAULTS), "%s: entrypoints must be an object" % path
         # Name the offending VALUE, not just the key. A message that says
         # "CLAUDE.md has a bad strategy" without quoting the typo makes the
         # reader go and look; quoting it makes the fix obvious.
         bad = {k: v for k, v in eps.items() if v not in STRATEGIES}
         if bad:
-            return dict(DEFAULTS), (
+            return copy.deepcopy(DEFAULTS), (
                 "%s: %s -- not one of %s"
                 % (path,
                    "; ".join("%s declares strategy %r" % (k, v)
@@ -234,12 +240,27 @@ Insert these before the `for f in failures:` loop:
     cfg, err = load(with_config({"canonical": None, "entrypoints": {}}))
     expect("a-repo-may-declare-it-has-no-entry-points",
            err is None and cfg["canonical"] is None and cfg["entrypoints"] == {})
+
+    # The returned config must be the caller's to mutate. None of the
+    # assertions above touch a nested structure, which is exactly how a
+    # shallow copy survived the first round of this task.
+    before = copy.deepcopy(DEFAULTS)
+    cfg, _ = load("/nonexistent-repo-path-for-self-test")
+    cfg["entrypoints"]["CLAUDE.md"] = "MUTATED"
+    cfg["spec_statuses"].append("MUTATED")
+    expect("mutating-a-returned-config-does-not-corrupt-DEFAULTS",
+           DEFAULTS == before,
+           "load() handed out a reference into a process-wide singleton")
+    again, _ = load("/nonexistent-repo-path-for-self-test")
+    expect("a-later-load-is-unaffected-by-an-earlier-caller",
+           again["entrypoints"]["CLAUDE.md"] == "symlink"
+           and "MUTATED" not in again["spec_statuses"])
 ```
 
 - [ ] **Step 6: Run to verify all pass**
 
 Run: `python3 tools/sdd_config.py --self-test`
-Expected: `self-test: 8/8 assertions passed`
+Expected: `self-test: 10/10 assertions passed`
 
 - [ ] **Step 7: Wire into the Makefile and commit**
 
