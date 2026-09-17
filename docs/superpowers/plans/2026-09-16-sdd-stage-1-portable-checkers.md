@@ -430,6 +430,32 @@ def check(root="."):
 Note `blob()` is now called for every present entry point, not only symlinks —
 Task 3 needs the content of regular files to tell a pointer from a copy.
 
+**That widening makes `blob()` unsafe as written, so fix it in the same
+step.** It runs `subprocess.run(..., text=True)`, which decodes UTF-8 with
+strict errors. Until now it only ever saw symlink targets: short relative
+paths, always decodable. Pointed at arbitrary file content, one bad byte
+raises `UnicodeDecodeError` and the checker dies with a traceback instead of
+a clean `FAIL:` line — on precisely the repos this stage exists to serve,
+since a pointer file is a regular file. Add `errors="replace"` to that call:
+
+```python
+def blob(root, sha):
+    # errors="replace" because this is no longer only called on symlink
+    # targets. A replacement character cannot forge a valid target or the
+    # canonical filename, so nothing downstream is weakened by it -- whereas
+    # an undecodable byte would otherwise crash the run.
+    out = subprocess.run(
+        ["git", "-C", root, "cat-file", "blob", sha], capture_output=True,
+        text=True, errors="replace"
+    )
+    return out.stdout if out.returncode == 0 else ""
+```
+
+Keep the existing comment above the `posixpath.normpath(posixpath.join(...))`
+line in `evaluate()` — `# A symlink blob is its target, resolved relative to
+the link's dir.` Task 3 edits that line, and the relative resolution is not
+obvious cold.
+
 - [ ] **Step 5: Fix the remaining self-test cases**
 
 Every existing `evaluate(x, y)` call in `self_test()` becomes
