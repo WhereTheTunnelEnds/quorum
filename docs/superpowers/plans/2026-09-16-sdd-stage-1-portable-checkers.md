@@ -440,9 +440,14 @@ Add to `cases` in `self_test()`:
     ptr_cfg = {"canonical": "AGENTS.md",
                "entrypoints": {"CLAUDE.md": "pointer"},
                "spec_statuses": []}
+    # The real file writes "AGENTS.md" as a markdown link. It is spelled
+    # plainly here because quorum's own "Links to local files resolve" gate
+    # scans inside fenced code blocks and would resolve it against this
+    # plan's directory. The check is a substring test for the canonical
+    # name, so both spellings exercise it identically.
     pointer = {"CLAUDE.md": ("100644",
                              "# Working on Quorum\n\n"
-                             "See [AGENTS.md](AGENTS.md). One copy, so the "
+                             "See AGENTS.md. One copy, so the "
                              "two cannot drift.\n")}
     cases.append(("a-pointer-file-is-not-a-copy",
                   evaluate(pointer, True, ptr_cfg), False))
