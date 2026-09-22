@@ -7,15 +7,15 @@
 > unchanged — only the names are.
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make last-call's four SDD checkers repo-agnostic, so they pass or
+**Goal:** Make game-repo's four SDD checkers repo-agnostic, so they pass or
 truly-fail against quorum, tracker-repo and third-repo instead of failing for
-last-call-specific reasons.
+game-repo-specific reasons.
 
 **Architecture:** A single optional `.sdd-config.json` at repo root supplies
 the three things currently hardcoded: the canonical rules filename, the map of
 agent entry points to their strategy, and the allowed spec-status vocabulary.
-When the file is absent every default equals last-call's behaviour today, so
-this change is invisible to last-call until someone writes a config.
+When the file is absent every default equals game-repo's behaviour today, so
+this change is invisible to game-repo until someone writes a config.
 
 **Tech Stack:** Python 3 standard library only. No pytest — this repo's
 checkers carry built-in `--self-test`, and the plan follows that convention.
@@ -25,16 +25,16 @@ quorum)
 
 ## Global Constraints
 
-- **The code changes land in last-call**, at
+- **The code changes land in game-repo**, at
   `~/projects/game-repo`, not in quorum. Only this plan and its
   spec live in quorum. Check `git remote get-url origin` before your first
-  commit; it must end in `last-call.git`.
+  commit; it must end in `game-repo.git`.
 - **Standard library only.** No new dependencies. These run on three
   platforms including a Windows runner.
 - **Every checker keeps a passing `--self-test`.** It is the template's
   entry requirement and `check_drift.py` will enforce it in Task 5.
 - **Defaults must preserve today's behaviour exactly.** `make workflows` in
-  last-call must stay green at every commit, with no `.sdd-config.json`
+  game-repo must stay green at every commit, with no `.sdd-config.json`
   present in that repo.
 - **Never create a symlink in a test.** Windows runners lack the privilege
   (WinError 1314); this is why `evaluate()` is pure and takes an index dict.
@@ -61,17 +61,17 @@ Create `tools/sdd_config.py` containing only this:
 
 ```python
 #!/usr/bin/env python3
-"""Per-repo settings for the SDD checkers, with last-call's values as defaults.
+"""Per-repo settings for the SDD checkers, with game-repo's values as defaults.
 
 Three things were hardcoded across two checkers: the canonical rules
 filename, which agent entry points a repo wants, and which status words a
 spec may use. None of them are universal -- quorum uses a pointer file rather
 than symlinks, tracker-repo's CLAUDE.md is independent content, third-repo has no
-AGENTS.md at all, and quorum's specs say "design" where last-call's say
+AGENTS.md at all, and quorum's specs say "design" where game-repo's say
 "proposed".
 
 The file is optional. With no .sdd-config.json every value below equals
-last-call's behaviour before this existed, so adding this module changes
+game-repo's behaviour before this existed, so adding this module changes
 nothing until a repo opts in.
 
 Run: sdd_config.py --self-test
@@ -90,7 +90,7 @@ DEFAULTS = {
         "GEMINI.md": "symlink",
         "AGENT.md": "symlink",
         ".cursorrules": "symlink",
-        ".cursor/rules/last-call.mdc": "symlink",
+        ".cursor/rules/game-repo.mdc": "symlink",
     },
     "spec_statuses": [
         "proposed", "accepted", "in progress", "shipped", "superseded",
@@ -303,7 +303,7 @@ In `self_test()`, replace the line building `good` with:
 ```python
     cfg = dict(sdd_config.DEFAULTS)
     good = {name: (SYMLINK_MODE, "AGENTS.md") for name in cfg["entrypoints"]}
-    good[".cursor/rules/last-call.mdc"] = (SYMLINK_MODE, "../../AGENTS.md")
+    good[".cursor/rules/game-repo.mdc"] = (SYMLINK_MODE, "../../AGENTS.md")
 ```
 
 and add this case to `cases`:
@@ -381,7 +381,7 @@ AGENT_FOR = {
 ```
 
 Delete the `CANONICAL = "AGENTS.md"` constant and the
-`".cursor/rules/last-call.mdc"` key. That is the first of the three
+`".cursor/rules/game-repo.mdc"` key. That is the first of the three
 hardcoded sites.
 
 - [ ] **Step 4: Update `check()` to load config**
@@ -609,7 +609,7 @@ Run: `python3 tools/check_agent_entrypoints.py --self-test`
 Expected: `self-test: 12/12 assertions passed`
 
 Run: `python3 tools/check_agent_entrypoints.py .`
-Expected: exit 0 — last-call still uses all-symlinks and has no config.
+Expected: exit 0 — game-repo still uses all-symlinks and has no config.
 
 - [ ] **Step 5: Commit**
 
@@ -771,9 +771,9 @@ Add to `_self_test()`:
         "design", [52], {52: ("2026-09-14T02:28:19Z", "completed")},
         "2026-09-11T00:00:00+00:00", CHAT_SHA, closers({52: {OTHER_SHA}}))
     expect(
-        "the-default-set-is-unchanged-for-last-call",
+        "the-default-set-is-unchanged-for-game-repo",
         problems == [],
-        "'design' is not one of last-call's non-terminal words",
+        "'design' is not one of game-repo's non-terminal words",
     )
 ```
 
@@ -794,7 +794,7 @@ def evaluate(status, citations, state_by_number, spec_touch_iso,
 
 and replace its guard. Note `is None`, **not** `or`: an empty set is a repo
 saying "we have no concept of unfinished work, do not run this gate", and a
-truthiness test would discard that and silently substitute last-call's words
+truthiness test would discard that and silently substitute game-repo's words
 — the same silent override this task exists to close.
 
 ```python
@@ -1074,14 +1074,14 @@ spec, and it is where a false failure would still be hiding.
 
 **Files:**
 - Create: `/tmp/sdd-stage1/quorum.sdd-config.json` (scratch, not committed)
-- Create: `/tmp/sdd-stage1/2atracker.sdd-config.json` (scratch)
+- Create: `/tmp/sdd-stage1/tracker-repo.sdd-config.json` (scratch)
 
-- [ ] **Step 1: Confirm last-call is unchanged with no config**
+- [ ] **Step 1: Confirm game-repo is unchanged with no config**
 
 ```bash
 cd ~/projects/game-repo
 test ! -e .sdd-config.json && echo "no config present, as intended"
-make workflows && echo "LAST-CALL STILL GREEN"
+make workflows && echo "GAME-REPO STILL GREEN"
 ```
 
 Expected: exit 0. If this fails the defaults are wrong, not the other repos.
@@ -1105,16 +1105,16 @@ python3 ~/projects/game-repo/tools/check_spec_status.py docs/superpowers/specs/*
 ```
 
 Expected: both exit 0. Specifically, **neither** of these may appear:
-- any mention of `last-call` in quorum's output
+- any mention of `game-repo` in quorum's output
 - `CLAUDE.md is committed as a regular file`
 
 - [ ] **Step 3: tracker-repo — the one true failure must remain expressible**
 
 ```bash
-cat > /tmp/sdd-stage1/2atracker.sdd-config.json <<'JSON'
+cat > /tmp/sdd-stage1/tracker-repo.sdd-config.json <<'JSON'
 { "canonical": "AGENTS.md", "entrypoints": { "CLAUDE.md": "independent" } }
 JSON
-cp /tmp/sdd-stage1/2atracker.sdd-config.json ~/projects/tracker-repo/.sdd-config.json
+cp /tmp/sdd-stage1/tracker-repo.sdd-config.json ~/projects/tracker-repo/.sdd-config.json
 cd ~/projects/tracker-repo
 python3 ~/projects/game-repo/tools/check_agent_entrypoints.py .
 ```
@@ -1172,7 +1172,7 @@ In quorum, append to
 `docs/superpowers/specs/2026-09-16-sdd-template-design.md` under
 `## Implementation order`, inside the Stage 1 paragraph, a line stating the
 date Stage 1 was proven and against which repos. Commit that to quorum
-separately from the last-call commits.
+separately from the game-repo commits.
 
 ---
 
@@ -1185,7 +1185,7 @@ proof against three repos (Task 6). The config file the first three depend on
 is Task 1. `check_spec_freshness.py` was originally listed as needing no
 change, on the grounds that it hardcodes nothing repo-specific. That was
 false and the pre-flight scan caught it: `NON_TERMINAL_STATUSES` at line 23
-is a third hardcoded vocabulary, and a repo that does not use last-call's
+is a third hardcoded vocabulary, and a repo that does not use game-repo's
 words has every spec silently skipped. Task 4b closes it.
 
 **Not covered here, deliberately:** the plugin skeleton, `sdd.yml`, and every
