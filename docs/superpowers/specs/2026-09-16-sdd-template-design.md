@@ -1,6 +1,11 @@
 # A spec-driven development template, and why a gate has to travel with it
 
-**Status:** in progress. 2026-09-16. Stage 1 shipped to last-call on
+> **Private repo names are elided.** Stage 1 was validated against three
+> repositories besides quorum. Quorum is public; those three are not, so they
+> appear here as `game-repo`, `tracker-repo` and `third-repo`, and local paths
+> as `~/projects/`. The substitution is mechanical and the measurements are
+> unchanged — only the names are.
+**Status:** in progress. 2026-09-16. Stage 1 shipped to game-repo on
 2026-09-17 as `451b563` (#207) and is green on Linux, macOS and Windows.
 Stages 2 and 3 are unbuilt.
 
@@ -9,7 +14,7 @@ Stages 2 and 3 are unbuilt.
 Spec-driven development lapses silently. Not through carelessness — because
 nothing checks it, and the things that look like they check it don't.
 
-Measured in last-call on 2026-09-15:
+Measured in game-repo on 2026-09-15:
 
 ```
 last spec written:      2026-09-10  (chat-dialogue)
@@ -42,7 +47,7 @@ because nothing fails when it stops.
 ## What already exists
 
 `tools/check_spec_freshness.py` was built, adversarially reviewed by three
-models, and merged to last-call's `main` on 2026-09-16 (#192). It asks GitHub,
+models, and merged to game-repo's `main` on 2026-09-16 (#192). It asks GitHub,
 per header citation in a non-terminal spec, whether that issue closed as
 completed after anyone last revisited the status claim. It runs in `make test`
 on three platforms and is green.
@@ -97,7 +102,7 @@ reads as a gate that passed.
 ### What earns a place
 
 A checker ships only if it reads spec-driven *artifacts* rather than the
-project's subject matter. Measured against last-call's nine:
+project's subject matter. Measured against game-repo's nine:
 
 | ships | reads | state |
 |---|---|---|
@@ -108,11 +113,11 @@ project's subject matter. Measured against last-call's nine:
 
 Staying behind: the balance gate (reads `balance_gate.gd`), the test-count
 floor and release gate (read that repo's `ci.yml`), export and artifact
-tooling. Those are last-call's subject matter wearing a checker's clothes.
+tooling. Those are game-repo's subject matter wearing a checker's clothes.
 
 ### Every vendored checker must answer `--self-test`
 
-Four of last-call's nine checkers have none — `check_milestone_criteria.py`
+Four of game-repo's nine checkers have none — `check_milestone_criteria.py`
 (1,238 lines, the largest, and it touches the network),
 `check_test_count_floor.py`, `check_tree_untouched.py` and
 `check_workflow_step_order.py`. This is in a repo whose Makefile states the
@@ -181,13 +186,13 @@ Surveyed 2026-09-16, four repos, four different shapes:
 
 | repo | `specs/` | agent entry points |
 |---|---|---|
-| dive-bar-sim | 6 | `AGENTS.md` 26KB + 4 symlinks to it |
+| game-repo | 6 | `AGENTS.md` 26KB + 4 symlinks to it |
 | quorum | 1 | `AGENTS.md` 9KB + `CLAUDE.md` an 84-byte pointer |
-| 2ATracker | 3 | `AGENTS.md` 1.7KB + `CLAUDE.md` 3.9KB, both real |
-| halves | 3 | none |
+| tracker-repo | 3 | `AGENTS.md` 1.7KB + `CLAUDE.md` 3.9KB, both real |
+| third-repo | 3 | none |
 
 **Adopt, never scaffold.** All four already have `docs/superpowers/specs/`.
-That path is the superpowers convention, not last-call's invention, which
+That path is the superpowers convention, not game-repo's invention, which
 means this template standardises something four repos already do by accident.
 Retrofit records what exists. It must never write a `TEMPLATE.md` over a
 directory holding three real specs.
@@ -199,7 +204,7 @@ One failure is correct; two are the checker's own fault.
 Against quorum it prints:
 
 ```
-FAIL: .cursor/rules/last-call.mdc is missing.
+FAIL: .cursor/rules/game-repo.mdc is missing.
 ```
 
 Another project's name, asserted inside quorum. The string is hardcoded at
@@ -212,23 +217,23 @@ FAIL: CLAUDE.md is committed as a regular file, not a symlink to AGENTS.md.
       A copy is a second source of truth and will drift.
 ```
 
-For 2ATracker that is true — 3,958 bytes of independent architecture notes,
+For tracker-repo that is true — 3,958 bytes of independent architecture notes,
 and creating a symlink would destroy them. For quorum it is false. Quorum's
 `CLAUDE.md` reads *"See AGENTS.md. One copy, so the two cannot drift."* It is
 not a copy; it is a pointer that exists to prevent the very drift the message
 accuses it of. The checker cannot tell a pointer from a copy, so it
 misdiagnoses a correct repo.
 
-For halves it fails at the first hurdle: no `AGENTS.md` at all.
+For third-repo it fails at the first hurdle: no `AGENTS.md` at all.
 
 So the template recognises three legitimate strategies, declared in
 `.sdd-config.json` rather than assumed:
 
 | strategy | example | verified by |
 |---|---|---|
-| `symlink` | dive-bar-sim | file mode + link target |
+| `symlink` | game-repo | file mode + link target |
 | `pointer` | quorum | content references `AGENTS.md` |
-| `independent` | 2ATracker | opt out; drift risk recorded |
+| `independent` | tracker-repo | opt out; drift risk recorded |
 
 and `<repo>.mdc` is parameterised from config.
 
@@ -248,7 +253,7 @@ freshness gate and the spec fix that makes it pass in a single commit.
 ### The status vocabulary is not shared
 
 This spec is itself an instance of the problem. Quorum's specs use
-`**Status:** design, not implemented.` Last-call's `check_spec_status.py`
+`**Status:** design, not implemented.` Game-repo's `check_spec_status.py`
 allows exactly five values — `proposed`, `accepted`, `in progress`,
 `shipped`, `superseded` — and would reject quorum's on sight.
 
@@ -275,11 +280,11 @@ lands something usable on its own and can be abandoned without stranding the
 one before it:
 
 **Stage 1 — make the checkers portable. SHIPPED 2026-09-17, `451b563`.** No plugin, no commands. Parameterise
-`check_agent_entrypoints.py` (remove the three hardcoded `last-call` sites,
+`check_agent_entrypoints.py` (remove the three hardcoded `game-repo` sites,
 add the three entry-point strategies, read `.sdd-config.json`), teach
 `check_spec_status.py` to read its allowed vocabulary from config, and write
 `check_drift.py` with the self-test requirement. Prove it by running all four
-against quorum, 2ATracker and halves until each either passes or fails for a
+against quorum, tracker-repo and third-repo until each either passes or fails for a
 true reason. Stage 1 is done when the two false failures documented above are
 gone.
 
@@ -364,6 +369,39 @@ Three routes, to be decided before Stage 2 locks:
 Route 1 is the current recommendation, because it is the only one where the
 bytes that land in a repo are the bytes a released tag contains, and that is
 what `check_drift.py` will hash.
+
+**Resolved 2026-09-22: take Route 1.** The question that held it open was
+where the plugin lives and whether raw URLs would resolve for anyone but the
+author. Quorum is **public** — `gh repo view` reports `visibility=PUBLIC` —
+so `raw.githubusercontent.com/WhereTheTunnelEnds/quorum/<tag>/tools/sdd/<file>`
+resolves unauthenticated, for anybody, today. The blocker was never a missing
+capability; it was a fact nobody had checked.
+
+Two constraints come with taking it, both already stated above and neither
+optional:
+
+- **Pin the released tag, never `main`.** A raw URL on `main` returns
+  whatever landed most recently, so the vendored copy and the manifest that
+  describes it can disagree the moment anything merges — precisely the drift
+  `check_drift.py` exists to catch, arriving through the door the fix walked
+  in by.
+- **The version-lockstep gate is a prerequisite, not a follow-up.**
+  `.claude-plugin/plugin.json` and `marketplace.json` must agree, and a
+  payload change must carry a bump, because `claude plugin update` compares
+  version strings and not contents. Without that gate a payload change ships
+  under an unchanged version and is silently undeployable. Route 1 makes this
+  worse, not better: the URL is pinned to the tag, so a stale tag serves stale
+  bytes forever and nothing says so.
+
+**What Stage 2 is actually for, stated plainly because it was drifting.** All
+eleven checkers still live in one private game repo. (The nine counted at
+lines 105 and 120 was correct on 2026-09-16; `check_drift.py` and
+`check_transcript_dump_path.py` landed after, and `sdd_config.py` is config
+rather than a checker. Re-measure with `ls tools/check_*.py | wc -l`.) Quorum ships zero of
+them. Stage 1 made them *portable* — config-driven, no hardcoded repo
+assumptions — and portable is not the same as *distributed*. Until the bytes
+can reach a repo that is not the one they were written in, SDD is a practice
+this project follows rather than a capability it provides.
 
 **Related, and the same failure class this project keeps finding:** the
 version appears in both `.claude-plugin/plugin.json` and `marketplace.json`

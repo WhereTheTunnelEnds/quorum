@@ -6,7 +6,7 @@
 # CLAUDE_ALT_OAUTH_TOKEN were never looked at — so a teammate following the documented
 # onboarding path got a green all-clear over two providers that were not configured at all.
 #
-# That is the failure last-call's AGENTS.md calls "a guard that declines to run reports the
+# That is the failure game-repo's AGENTS.md calls "a guard that declines to run reports the
 # same green as a guard that passed", inside quorum's own onboarding tool. A doc that points
 # at a tool which lies is worse than no doc. The fix for the instance was two blocks; the fix
 # for the CLASS is this test, which fails the moment an eighth adapter lands without one.

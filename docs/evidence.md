@@ -26,6 +26,7 @@ cited as if it could.
 
 | Claim | Stated in | Re-measure with |
 |---|---|---|
+| A pinned raw GitHub URL for this repo resolves unauthenticated, so Stage 2 can fetch plugin payload by tag | `docs/superpowers/specs/2026-09-16-sdd-template-design.md` ("Resolved 2026-09-22: take Route 1") | `curl -s -o /dev/null -w '%{http_code}' https://raw.githubusercontent.com/WhereTheTunnelEnds/quorum/v0.6.0/README.md` → `200`. Control, to prove the 200 is visibility and not ambient auth: the same request against a private repo → `404`. |
 | The offline suite EXECUTES 6 of the 9 installed commands; `quorum-setup`, `quorum-auth` and `quorum-verify` are reached but never run | `field-notes.md`, lint.yml gate output | `./tests/test-tools-are-executed.sh` — shims every tool, runs the suite, prints the call count per tool |
 | Deleting `GOT_MODEL=` from the glm adapter leaves four delegated tests green and the real test red | `field-notes.md` | `perl -0pi -e 's/^GOT_MODEL=.*\n//m' agents/glm-agent.md; ./tests/test-glm-reports-answering-model.sh; git checkout agents/glm-agent.md` — expect `5 passed, 6 failed` |
 | `${VAR:-x}` substitutes on empty as well as unset; `${VAR-x}` only on unset | `field-notes.md` | `v=""; echo "${v:-SUBBED}" "${v-SUBBED}"` — prints `SUBBED` then an empty field |

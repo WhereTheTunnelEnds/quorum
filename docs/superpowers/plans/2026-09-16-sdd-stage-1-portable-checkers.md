@@ -1,16 +1,21 @@
 # SDD Stage 1 — Portable Checkers Implementation Plan
 
+> **Private repo names are elided.** Stage 1 was validated against three
+> repositories besides quorum. Quorum is public; those three are not, so they
+> appear here as `game-repo`, `tracker-repo` and `third-repo`, and local paths
+> as `~/projects/`. The substitution is mechanical and the measurements are
+> unchanged — only the names are.
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make last-call's four SDD checkers repo-agnostic, so they pass or
-truly-fail against quorum, 2ATracker and halves instead of failing for
-last-call-specific reasons.
+**Goal:** Make game-repo's four SDD checkers repo-agnostic, so they pass or
+truly-fail against quorum, tracker-repo and third-repo instead of failing for
+game-repo-specific reasons.
 
 **Architecture:** A single optional `.sdd-config.json` at repo root supplies
 the three things currently hardcoded: the canonical rules filename, the map of
 agent entry points to their strategy, and the allowed spec-status vocabulary.
-When the file is absent every default equals last-call's behaviour today, so
-this change is invisible to last-call until someone writes a config.
+When the file is absent every default equals game-repo's behaviour today, so
+this change is invisible to game-repo until someone writes a config.
 
 **Tech Stack:** Python 3 standard library only. No pytest — this repo's
 checkers carry built-in `--self-test`, and the plan follows that convention.
@@ -20,16 +25,16 @@ quorum)
 
 ## Global Constraints
 
-- **The code changes land in last-call**, at
-  `~/PycharmProjects/dive-bar-sim`, not in quorum. Only this plan and its
+- **The code changes land in game-repo**, at
+  `~/projects/game-repo`, not in quorum. Only this plan and its
   spec live in quorum. Check `git remote get-url origin` before your first
-  commit; it must end in `last-call.git`.
+  commit; it must end in `game-repo.git`.
 - **Standard library only.** No new dependencies. These run on three
   platforms including a Windows runner.
 - **Every checker keeps a passing `--self-test`.** It is the template's
   entry requirement and `check_drift.py` will enforce it in Task 5.
 - **Defaults must preserve today's behaviour exactly.** `make workflows` in
-  last-call must stay green at every commit, with no `.sdd-config.json`
+  game-repo must stay green at every commit, with no `.sdd-config.json`
   present in that repo.
 - **Never create a symlink in a test.** Windows runners lack the privilege
   (WinError 1314); this is why `evaluate()` is pure and takes an index dict.
@@ -56,17 +61,17 @@ Create `tools/sdd_config.py` containing only this:
 
 ```python
 #!/usr/bin/env python3
-"""Per-repo settings for the SDD checkers, with last-call's values as defaults.
+"""Per-repo settings for the SDD checkers, with game-repo's values as defaults.
 
 Three things were hardcoded across two checkers: the canonical rules
 filename, which agent entry points a repo wants, and which status words a
 spec may use. None of them are universal -- quorum uses a pointer file rather
-than symlinks, 2ATracker's CLAUDE.md is independent content, halves has no
-AGENTS.md at all, and quorum's specs say "design" where last-call's say
+than symlinks, tracker-repo's CLAUDE.md is independent content, third-repo has no
+AGENTS.md at all, and quorum's specs say "design" where game-repo's say
 "proposed".
 
 The file is optional. With no .sdd-config.json every value below equals
-last-call's behaviour before this existed, so adding this module changes
+game-repo's behaviour before this existed, so adding this module changes
 nothing until a repo opts in.
 
 Run: sdd_config.py --self-test
@@ -85,7 +90,7 @@ DEFAULTS = {
         "GEMINI.md": "symlink",
         "AGENT.md": "symlink",
         ".cursorrules": "symlink",
-        ".cursor/rules/last-call.mdc": "symlink",
+        ".cursor/rules/game-repo.mdc": "symlink",
     },
     "spec_statuses": [
         "proposed", "accepted", "in progress", "shipped", "superseded",
@@ -298,7 +303,7 @@ In `self_test()`, replace the line building `good` with:
 ```python
     cfg = dict(sdd_config.DEFAULTS)
     good = {name: (SYMLINK_MODE, "AGENTS.md") for name in cfg["entrypoints"]}
-    good[".cursor/rules/last-call.mdc"] = (SYMLINK_MODE, "../../AGENTS.md")
+    good[".cursor/rules/game-repo.mdc"] = (SYMLINK_MODE, "../../AGENTS.md")
 ```
 
 and add this case to `cases`:
@@ -376,7 +381,7 @@ AGENT_FOR = {
 ```
 
 Delete the `CANONICAL = "AGENTS.md"` constant and the
-`".cursor/rules/last-call.mdc"` key. That is the first of the three
+`".cursor/rules/game-repo.mdc"` key. That is the first of the three
 hardcoded sites.
 
 - [ ] **Step 4: Update `check()` to load config**
@@ -511,9 +516,9 @@ Add to `cases` in `self_test()`:
     cases.append(("a-pointer-file-is-not-a-copy",
                   evaluate(pointer, True, ptr_cfg), False))
 
-    # 2ATracker: 3958 bytes of independent architecture notes that never
+    # tracker-repo: 3958 bytes of independent architecture notes that never
     # mention AGENTS.md. Declared "pointer" by mistake, this must fail.
-    fat = {"CLAUDE.md": ("100644", "# 2ATracker\n" + ("x" * 4000))}
+    fat = {"CLAUDE.md": ("100644", "# tracker-repo\n" + ("x" * 4000))}
     cases.append(("a-copy-declared-as-a-pointer-still-fails",
                   evaluate(fat, True, ptr_cfg), True))
 
@@ -551,7 +556,7 @@ Add the constant near `SYMLINK_MODE`:
 # A pointer refers the reader to the canonical file. A copy reproduces it.
 # The discriminator is both signals together: it must name the canonical
 # file AND be too small to be a second rulebook. Measured: quorum's pointer
-# is 84 bytes and names AGENTS.md once; 2ATracker's independent CLAUDE.md is
+# is 84 bytes and names AGENTS.md once; tracker-repo's independent CLAUDE.md is
 # 3958 bytes and names it zero times.
 POINTER_MAX_BYTES = 1024
 ```
@@ -604,7 +609,7 @@ Run: `python3 tools/check_agent_entrypoints.py --self-test`
 Expected: `self-test: 12/12 assertions passed`
 
 Run: `python3 tools/check_agent_entrypoints.py .`
-Expected: exit 0 — last-call still uses all-symlinks and has no config.
+Expected: exit 0 — game-repo still uses all-symlinks and has no config.
 
 - [ ] **Step 5: Commit**
 
@@ -766,9 +771,9 @@ Add to `_self_test()`:
         "design", [52], {52: ("2026-09-14T02:28:19Z", "completed")},
         "2026-09-11T00:00:00+00:00", CHAT_SHA, closers({52: {OTHER_SHA}}))
     expect(
-        "the-default-set-is-unchanged-for-last-call",
+        "the-default-set-is-unchanged-for-game-repo",
         problems == [],
-        "'design' is not one of last-call's non-terminal words",
+        "'design' is not one of game-repo's non-terminal words",
     )
 ```
 
@@ -789,7 +794,7 @@ def evaluate(status, citations, state_by_number, spec_touch_iso,
 
 and replace its guard. Note `is None`, **not** `or`: an empty set is a repo
 saying "we have no concept of unfinished work, do not run this gate", and a
-truthiness test would discard that and silently substitute last-call's words
+truthiness test would discard that and silently substitute game-repo's words
 — the same silent override this task exists to close.
 
 ```python
@@ -871,7 +876,7 @@ Create `tools/.sdd-manifest.json`. Generate the hashes rather than typing
 them:
 
 ```bash
-cd ~/PycharmProjects/dive-bar-sim
+cd ~/projects/game-repo
 python3 - <<'PY'
 import hashlib, json
 files = ["tools/sdd_config.py", "tools/check_spec_status.py",
@@ -1069,14 +1074,14 @@ spec, and it is where a false failure would still be hiding.
 
 **Files:**
 - Create: `/tmp/sdd-stage1/quorum.sdd-config.json` (scratch, not committed)
-- Create: `/tmp/sdd-stage1/2atracker.sdd-config.json` (scratch)
+- Create: `/tmp/sdd-stage1/tracker-repo.sdd-config.json` (scratch)
 
-- [ ] **Step 1: Confirm last-call is unchanged with no config**
+- [ ] **Step 1: Confirm game-repo is unchanged with no config**
 
 ```bash
-cd ~/PycharmProjects/dive-bar-sim
+cd ~/projects/game-repo
 test ! -e .sdd-config.json && echo "no config present, as intended"
-make workflows && echo "LAST-CALL STILL GREEN"
+make workflows && echo "GAME-REPO STILL GREEN"
 ```
 
 Expected: exit 0. If this fails the defaults are wrong, not the other repos.
@@ -1095,23 +1100,23 @@ cat > /tmp/sdd-stage1/quorum.sdd-config.json <<'JSON'
 JSON
 cp /tmp/sdd-stage1/quorum.sdd-config.json ~/quorum/.sdd-config.json
 cd ~/quorum
-python3 ~/PycharmProjects/dive-bar-sim/tools/check_agent_entrypoints.py .
-python3 ~/PycharmProjects/dive-bar-sim/tools/check_spec_status.py docs/superpowers/specs/*.md
+python3 ~/projects/game-repo/tools/check_agent_entrypoints.py .
+python3 ~/projects/game-repo/tools/check_spec_status.py docs/superpowers/specs/*.md
 ```
 
 Expected: both exit 0. Specifically, **neither** of these may appear:
-- any mention of `last-call` in quorum's output
+- any mention of `game-repo` in quorum's output
 - `CLAUDE.md is committed as a regular file`
 
-- [ ] **Step 3: 2ATracker — the one true failure must remain expressible**
+- [ ] **Step 3: tracker-repo — the one true failure must remain expressible**
 
 ```bash
-cat > /tmp/sdd-stage1/2atracker.sdd-config.json <<'JSON'
+cat > /tmp/sdd-stage1/tracker-repo.sdd-config.json <<'JSON'
 { "canonical": "AGENTS.md", "entrypoints": { "CLAUDE.md": "independent" } }
 JSON
-cp /tmp/sdd-stage1/2atracker.sdd-config.json ~/PycharmProjects/2ATracker/.sdd-config.json
-cd ~/PycharmProjects/2ATracker
-python3 ~/PycharmProjects/dive-bar-sim/tools/check_agent_entrypoints.py .
+cp /tmp/sdd-stage1/tracker-repo.sdd-config.json ~/projects/tracker-repo/.sdd-config.json
+cd ~/projects/tracker-repo
+python3 ~/projects/game-repo/tools/check_agent_entrypoints.py .
 ```
 
 Expected: exit 0 — `independent` is a declared opt-out.
@@ -1122,11 +1127,11 @@ Now prove the checker still objects when the claim is false:
 cat > .sdd-config.json <<'JSON'
 { "canonical": "AGENTS.md", "entrypoints": { "CLAUDE.md": "pointer" } }
 JSON
-python3 ~/PycharmProjects/dive-bar-sim/tools/check_agent_entrypoints.py .
+python3 ~/projects/game-repo/tools/check_agent_entrypoints.py .
 ```
 
 Expected: exit 1, with the reason **"never names it"** — not the size
-reason. 2ATracker's `CLAUDE.md` mentions `AGENTS.md` zero times, so the
+reason. tracker-repo's `CLAUDE.md` mentions `AGENTS.md` zero times, so the
 content check rejects it before the byte-count check is ever reached.
 Verified against the real file while writing this plan.
 
@@ -1135,12 +1140,12 @@ exits 1 citing the byte limit instead, either the two checks are in the wrong
 order or that file has been rewritten since 2026-09-16 — see the Known gap
 below.
 
-- [ ] **Step 4: halves — no entry points at all**
+- [ ] **Step 4: third-repo — no entry points at all**
 
 ```bash
-cd ~/PycharmProjects/halves
+cd ~/projects/third-repo
 printf '{ "canonical": null, "entrypoints": {} }\n' > .sdd-config.json
-python3 ~/PycharmProjects/dive-bar-sim/tools/check_agent_entrypoints.py .
+python3 ~/projects/game-repo/tools/check_agent_entrypoints.py .
 ```
 
 Expected: exit 0 and the words `NOT checked` in the output. A silent exit 0
@@ -1151,9 +1156,9 @@ checked, per the spec's hard/soft contract.
 
 ```bash
 rm -f ~/quorum/.sdd-config.json \
-      ~/PycharmProjects/2ATracker/.sdd-config.json \
-      ~/PycharmProjects/halves/.sdd-config.json
-for d in ~/quorum ~/PycharmProjects/2ATracker ~/PycharmProjects/halves; do
+      ~/projects/tracker-repo/.sdd-config.json \
+      ~/projects/third-repo/.sdd-config.json
+for d in ~/quorum ~/projects/tracker-repo ~/projects/third-repo; do
   git -C "$d" status --short | grep -q . && echo "DIRTY: $d" || echo "clean: $d"
 done
 ```
@@ -1167,7 +1172,7 @@ In quorum, append to
 `docs/superpowers/specs/2026-09-16-sdd-template-design.md` under
 `## Implementation order`, inside the Stage 1 paragraph, a line stating the
 date Stage 1 was proven and against which repos. Commit that to quorum
-separately from the last-call commits.
+separately from the game-repo commits.
 
 ---
 
@@ -1180,13 +1185,13 @@ proof against three repos (Task 6). The config file the first three depend on
 is Task 1. `check_spec_freshness.py` was originally listed as needing no
 change, on the grounds that it hardcodes nothing repo-specific. That was
 false and the pre-flight scan caught it: `NON_TERMINAL_STATUSES` at line 23
-is a third hardcoded vocabulary, and a repo that does not use last-call's
+is a third hardcoded vocabulary, and a repo that does not use game-repo's
 words has every spec silently skipped. Task 4b closes it.
 
 **Not covered here, deliberately:** the plugin skeleton, `sdd.yml`, and every
 `/sdd-*` command are Stage 2 and 3.
 
 **Known gap.** Task 6 uses three real repos as fixtures and depends on their
-current contents. If 2ATracker's `CLAUDE.md` is rewritten to be under 1024
+current contents. If tracker-repo's `CLAUDE.md` is rewritten to be under 1024
 bytes and to mention `AGENTS.md`, Step 3's negative case stops proving
 anything. It would then need a synthetic fixture instead.
