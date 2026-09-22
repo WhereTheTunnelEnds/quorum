@@ -1,5 +1,10 @@
 # A spec-driven development template, and why a gate has to travel with it
 
+> **Private repo names are elided.** Stage 1 was validated against three
+> repositories besides quorum. Quorum is public; those three are not, so they
+> appear here as `game-repo`, `tracker-repo` and `third-repo`, and local paths
+> as `~/projects/`. The substitution is mechanical and the measurements are
+> unchanged — only the names are.
 **Status:** in progress. 2026-09-16. Stage 1 shipped to last-call on
 2026-09-17 as `451b563` (#207) and is green on Linux, macOS and Windows.
 Stages 2 and 3 are unbuilt.
@@ -181,10 +186,10 @@ Surveyed 2026-09-16, four repos, four different shapes:
 
 | repo | `specs/` | agent entry points |
 |---|---|---|
-| dive-bar-sim | 6 | `AGENTS.md` 26KB + 4 symlinks to it |
+| game-repo | 6 | `AGENTS.md` 26KB + 4 symlinks to it |
 | quorum | 1 | `AGENTS.md` 9KB + `CLAUDE.md` an 84-byte pointer |
-| 2ATracker | 3 | `AGENTS.md` 1.7KB + `CLAUDE.md` 3.9KB, both real |
-| halves | 3 | none |
+| tracker-repo | 3 | `AGENTS.md` 1.7KB + `CLAUDE.md` 3.9KB, both real |
+| third-repo | 3 | none |
 
 **Adopt, never scaffold.** All four already have `docs/superpowers/specs/`.
 That path is the superpowers convention, not last-call's invention, which
@@ -212,23 +217,23 @@ FAIL: CLAUDE.md is committed as a regular file, not a symlink to AGENTS.md.
       A copy is a second source of truth and will drift.
 ```
 
-For 2ATracker that is true — 3,958 bytes of independent architecture notes,
+For tracker-repo that is true — 3,958 bytes of independent architecture notes,
 and creating a symlink would destroy them. For quorum it is false. Quorum's
 `CLAUDE.md` reads *"See AGENTS.md. One copy, so the two cannot drift."* It is
 not a copy; it is a pointer that exists to prevent the very drift the message
 accuses it of. The checker cannot tell a pointer from a copy, so it
 misdiagnoses a correct repo.
 
-For halves it fails at the first hurdle: no `AGENTS.md` at all.
+For third-repo it fails at the first hurdle: no `AGENTS.md` at all.
 
 So the template recognises three legitimate strategies, declared in
 `.sdd-config.json` rather than assumed:
 
 | strategy | example | verified by |
 |---|---|---|
-| `symlink` | dive-bar-sim | file mode + link target |
+| `symlink` | game-repo | file mode + link target |
 | `pointer` | quorum | content references `AGENTS.md` |
-| `independent` | 2ATracker | opt out; drift risk recorded |
+| `independent` | tracker-repo | opt out; drift risk recorded |
 
 and `<repo>.mdc` is parameterised from config.
 
@@ -279,7 +284,7 @@ one before it:
 add the three entry-point strategies, read `.sdd-config.json`), teach
 `check_spec_status.py` to read its allowed vocabulary from config, and write
 `check_drift.py` with the self-test requirement. Prove it by running all four
-against quorum, 2ATracker and halves until each either passes or fails for a
+against quorum, tracker-repo and third-repo until each either passes or fails for a
 true reason. Stage 1 is done when the two false failures documented above are
 gone.
 
