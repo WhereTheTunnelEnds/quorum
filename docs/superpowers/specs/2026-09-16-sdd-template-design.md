@@ -370,6 +370,36 @@ Route 1 is the current recommendation, because it is the only one where the
 bytes that land in a repo are the bytes a released tag contains, and that is
 what `check_drift.py` will hash.
 
+**Resolved 2026-09-22: take Route 1.** The question that held it open was
+where the plugin lives and whether raw URLs would resolve for anyone but the
+author. Quorum is **public** — `gh repo view` reports `visibility=PUBLIC` —
+so `raw.githubusercontent.com/WhereTheTunnelEnds/quorum/<tag>/tools/sdd/<file>`
+resolves unauthenticated, for anybody, today. The blocker was never a missing
+capability; it was a fact nobody had checked.
+
+Two constraints come with taking it, both already stated above and neither
+optional:
+
+- **Pin the released tag, never `main`.** A raw URL on `main` returns
+  whatever landed most recently, so the vendored copy and the manifest that
+  describes it can disagree the moment anything merges — precisely the drift
+  `check_drift.py` exists to catch, arriving through the door the fix walked
+  in by.
+- **The version-lockstep gate is a prerequisite, not a follow-up.**
+  `.claude-plugin/plugin.json` and `marketplace.json` must agree, and a
+  payload change must carry a bump, because `claude plugin update` compares
+  version strings and not contents. Without that gate a payload change ships
+  under an unchanged version and is silently undeployable. Route 1 makes this
+  worse, not better: the URL is pinned to the tag, so a stale tag serves stale
+  bytes forever and nothing says so.
+
+**What Stage 2 is actually for, stated plainly because it was drifting.** All
+twelve checkers still live in one private game repo. Quorum ships zero of
+them. Stage 1 made them *portable* — config-driven, no hardcoded repo
+assumptions — and portable is not the same as *distributed*. Until the bytes
+can reach a repo that is not the one they were written in, SDD is a practice
+this project follows rather than a capability it provides.
+
 **Related, and the same failure class this project keeps finding:** the
 version appears in both `.claude-plugin/plugin.json` and `marketplace.json`
 and must be bumped in lockstep. `claude plugin update` decides whether to
