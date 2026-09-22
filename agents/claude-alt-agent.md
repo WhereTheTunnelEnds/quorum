@@ -200,7 +200,7 @@ if ! git worktree add -b "$BRANCH" "$WT"; then
   exit 1
 fi
 
-# WHERE IT LANDED, not where we asked. Measured 2026-09-10 in last-call: a delegation
+# WHERE IT LANDED, not where we asked. Measured 2026-09-10 in game-repo: a delegation
 # created its worktree at <repo>/.claude/worktrees/<name> on a `worktree-`-prefixed branch
 # from origin/main -- Claude Code's own EnterWorktree convention, none of which this block
 # produces -- and RELOCATED THE DISPATCHING SESSION into it. The caller's next `git -C

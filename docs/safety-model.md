@@ -210,7 +210,7 @@ than nothing, because it arrives wearing confidence it hasn't earned.
 Everything above reasons in one direction — the delegate reaching the user's checkout. There
 is a second direction, and it was not covered until it happened.
 
-**Measured 2026-09-10, `last-call`, first exercise of the codex delegate path.** The
+**Measured 2026-09-10, `game-repo`, first exercise of the codex delegate path.** The
 delegation created its worktree at `<repo>/.claude/worktrees/<name>`, on a `worktree-`
 prefixed branch, based on `origin/main`. None of that is what the adapter block computes:
 it specifies `$(dirname "$REPO")/.worktrees/$(basename "$REPO")/$BRANCH`, a `<provider>/`
@@ -240,7 +240,7 @@ A second concurrent delegation down the bypassed path had protection from none o
 
 ### Why it happened there
 
-`last-call` had **ten** existing `.claude/worktrees/` directories when this ran. An agent in
+`game-repo` had **ten** existing `.claude/worktrees/` directories when this ran. An agent in
 that repo has overwhelming precedent for that path, and the adapter documented *how* to
 create a worktree without ever saying *only this way*. A one-call harness tool next to a
 six-line shell recipe will be reached for.
